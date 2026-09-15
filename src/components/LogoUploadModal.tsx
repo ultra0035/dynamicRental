@@ -7,8 +7,10 @@ import {
   RotateCcw, 
   Sparkles,
   Link2,
-  Trash2
+  Trash2,
+  Loader2
 } from 'lucide-react';
+import { compressImageFile } from '../lib/imageUtils';
 
 interface LogoUploadModalProps {
   isOpen: boolean;
@@ -25,27 +27,43 @@ export const LogoUploadModal: React.FC<LogoUploadModalProps> = ({
 }) => {
   const [logoInput, setLogoInput] = useState<string>(currentLogoUrl);
   const [urlInput, setUrlInput] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (typeof event.target?.result === 'string') {
-        setLogoInput(event.target.result);
+    setIsProcessing(true);
+    setErrorMessage('');
+    try {
+      // Compress & optimize logo to prevent storage quota issues
+      const optimizedDataUrl = await compressImageFile(file, {
+        maxWidth: 600,
+        maxHeight: 240,
+        quality: 0.9,
+      });
+      setLogoInput(optimizedDataUrl);
+    } catch (err: any) {
+      console.error('Logo upload error:', err);
+      setErrorMessage(err?.message || 'Could not process image. Please try another file.');
+    } finally {
+      setIsProcessing(false);
+      // Reset input value so same file can be re-uploaded if desired
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   const handleApplyUrl = () => {
     if (urlInput.trim()) {
       setLogoInput(urlInput.trim());
       setUrlInput('');
+      setErrorMessage('');
     }
   };
 
@@ -121,12 +139,25 @@ export const LogoUploadModal: React.FC<LogoUploadModalProps> = ({
             />
             <button
               type="button"
+              disabled={isProcessing}
               onClick={() => fileInputRef.current?.click()}
-              className="w-full p-3.5 rounded-xl border border-dashed border-slate-600 hover:border-cyan-400 bg-slate-800/60 hover:bg-slate-800 text-xs text-slate-300 hover:text-white flex items-center justify-center gap-2 transition-all"
+              className="w-full p-3.5 rounded-xl border border-dashed border-slate-600 hover:border-cyan-400 bg-slate-800/60 hover:bg-slate-800 text-xs text-slate-300 hover:text-white flex items-center justify-center gap-2 transition-all disabled:opacity-50"
             >
-              <Upload className="w-4 h-4 text-cyan-400" />
-              <span className="font-bold">Choose logo image from your device</span>
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 text-cyan-400 animate-spin" />
+                  <span className="font-bold">Optimizing & loading logo...</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 text-cyan-400" />
+                  <span className="font-bold">Choose logo image from your device</span>
+                </>
+              )}
             </button>
+            {errorMessage && (
+              <p className="text-rose-400 text-[11px] mt-1.5">{errorMessage}</p>
+            )}
           </div>
 
           {/* Option 2: Image URL */}

@@ -9,6 +9,7 @@ import { COMPANY_DETAILS, BIKES } from '../data/bikes';
 import { ContractModal } from './ContractModal';
 import { isSupabaseConfigured, SUPABASE_SQL_SCHEMA, saveCustomizationToDb } from '../lib/supabase';
 import { PRESET_HERO_IMAGES, saveStoredCustomization } from '../lib/customizationStore';
+import { compressImageFile } from '../lib/imageUtils';
 import { 
   ShieldCheck, 
   Search, 
@@ -27,33 +28,34 @@ import {
   Bike as BikeIcon, 
   DollarSign, 
   Check, 
-  Plus,
-  Trash2,
-  Edit,
-  Database,
-  Copy,
-  ExternalLink,
-  ZoomIn,
-  X,
-  Sparkles,
-  Layers,
-  LayoutGrid,
-  ListFilter,
-  ArrowRight,
-  Upload,
-  Image as ImageIcon,
-  CheckCircle,
-  HelpCircle,
-  RefreshCw,
-  Send,
-  SlidersHorizontal,
-  ChevronRight,
-  BarChart3,
-  Users,
-  LogOut,
-  Palette,
-  Menu,
-  CheckCheck
+  Plus, 
+  Trash2, 
+  Edit, 
+  Database, 
+  Copy, 
+  ExternalLink, 
+  ZoomIn, 
+  X, 
+  Sparkles, 
+  Layers, 
+  LayoutGrid, 
+  ListFilter, 
+  ArrowRight, 
+  Upload, 
+  Image as ImageIcon, 
+  CheckCircle, 
+  HelpCircle, 
+  RefreshCw, 
+  Send, 
+  SlidersHorizontal, 
+  ChevronRight, 
+  BarChart3, 
+  Users, 
+  LogOut, 
+  Palette, 
+  Menu, 
+  CheckCheck,
+  Loader2
 } from 'lucide-react';
 
 interface AdminPortalProps {
@@ -190,6 +192,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [logoInput, setLogoInput] = useState<string>(customLogoUrl || '');
   const [heroInput, setHeroInput] = useState<string>(customHeroUrl || '');
   const [brandingSuccessMessage, setBrandingSuccessMessage] = useState<string>('');
+  const [isUploadingLogo, setIsUploadingLogo] = useState<boolean>(false);
+  const [isUploadingHero, setIsUploadingHero] = useState<boolean>(false);
+  const [isUploadingBikeImg, setIsUploadingBikeImg] = useState<boolean>(false);
   const logoFileInputRef = useRef<HTMLInputElement>(null);
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -364,66 +369,84 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
   };
 
   // Handle Bike Image Upload from Device
-  const handleDeviceImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDeviceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !editingBike) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size exceeds 5MB limit. Please upload a smaller image.');
-      return;
+    setIsUploadingBikeImg(true);
+    try {
+      const dataUrl = await compressImageFile(file, {
+        maxWidth: 1200,
+        maxHeight: 800,
+        quality: 0.85,
+        mimeType: 'image/jpeg',
+      });
+      setEditingBike({
+        ...editingBike,
+        image: dataUrl,
+      });
+    } catch (err: any) {
+      console.error('Bike image upload error:', err);
+      alert(err?.message || 'Could not process bike photo. Please try a different image.');
+    } finally {
+      setIsUploadingBikeImg(false);
+      if (bikeFileInputRef.current) bikeFileInputRef.current.value = '';
     }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        setEditingBike({
-          ...editingBike,
-          image: dataUrl,
-        });
-      }
-    };
-    reader.readAsDataURL(file);
   };
 
   // Handle Direct Logo Upload from Device
-  const handleLogoDeviceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoDeviceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        setLogoInput(dataUrl);
-        if (onSaveLogo) onSaveLogo(dataUrl);
-        saveStoredCustomization({ logoUrl: dataUrl });
-        saveCustomizationToDb({ logoUrl: dataUrl });
-        setBrandingSuccessMessage('Logo updated and synced to cloud!');
-        setTimeout(() => setBrandingSuccessMessage(''), 3000);
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsUploadingLogo(true);
+    try {
+      const dataUrl = await compressImageFile(file, {
+        maxWidth: 600,
+        maxHeight: 240,
+        quality: 0.9,
+      });
+      setLogoInput(dataUrl);
+      if (onSaveLogo) onSaveLogo(dataUrl);
+      saveStoredCustomization({ logoUrl: dataUrl });
+      saveCustomizationToDb({ logoUrl: dataUrl });
+      setBrandingSuccessMessage('Logo updated and synced to cloud!');
+      setTimeout(() => setBrandingSuccessMessage(''), 4000);
+    } catch (err: any) {
+      console.error('Logo upload error:', err);
+      alert(err?.message || 'Could not process logo. Please select a valid image file.');
+    } finally {
+      setIsUploadingLogo(false);
+      if (logoFileInputRef.current) logoFileInputRef.current.value = '';
+    }
   };
 
   // Handle Direct Hero Upload from Device
-  const handleHeroDeviceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleHeroDeviceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        setHeroInput(dataUrl);
-        if (onSaveHeroImage) onSaveHeroImage(dataUrl);
-        saveStoredCustomization({ heroImageUrl: dataUrl });
-        saveCustomizationToDb({ heroImageUrl: dataUrl });
-        setBrandingSuccessMessage('Hero banner updated and synced to cloud!');
-        setTimeout(() => setBrandingSuccessMessage(''), 3000);
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsUploadingHero(true);
+    try {
+      const dataUrl = await compressImageFile(file, {
+        maxWidth: 1600,
+        maxHeight: 900,
+        quality: 0.84,
+        mimeType: 'image/jpeg',
+      });
+      setHeroInput(dataUrl);
+      if (onSaveHeroImage) onSaveHeroImage(dataUrl);
+      saveStoredCustomization({ heroImageUrl: dataUrl });
+      saveCustomizationToDb({ heroImageUrl: dataUrl });
+      setBrandingSuccessMessage('Hero banner updated and synced to cloud!');
+      setTimeout(() => setBrandingSuccessMessage(''), 4000);
+    } catch (err: any) {
+      console.error('Hero upload error:', err);
+      alert(err?.message || 'Could not process hero image. Please select a valid photo.');
+    } finally {
+      setIsUploadingHero(false);
+      if (heroFileInputRef.current) heroFileInputRef.current.value = '';
+    }
   };
 
   const handleSaveBrandingUrls = (e: React.FormEvent) => {
@@ -433,7 +456,7 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
     saveStoredCustomization({ logoUrl: logoInput, heroImageUrl: heroInput });
     saveCustomizationToDb({ logoUrl: logoInput, heroImageUrl: heroInput });
     setBrandingSuccessMessage('Branding changes saved and synced across all devices!');
-    setTimeout(() => setBrandingSuccessMessage(''), 3000);
+    setTimeout(() => setBrandingSuccessMessage(''), 4000);
   };
 
   // Bike Management Save Handler
@@ -943,7 +966,7 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
 
             {/* VIEW MODE 1: KANBAN STAGE PIPELINE BOARD */}
             {pipelineViewMode === 'board' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-start overflow-x-auto pb-4">
+              <div className="flex gap-4 items-start overflow-x-auto pb-4 pt-1 w-full min-w-0">
                 {PIPELINE_STAGES.map((stage) => {
                   const stageApps = filteredApps.filter((a) => a.status === stage.id);
                   const StageIcon = stage.icon;
@@ -951,7 +974,7 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                   return (
                     <div
                       key={stage.id}
-                      className={`rounded-2xl border ${stage.borderClass} ${stage.bgClass} flex flex-col p-3 gap-3 min-w-[240px] shadow-xs`}
+                      className={`rounded-2xl border ${stage.borderClass} ${stage.bgClass} flex flex-col p-3.5 gap-3 min-w-[280px] w-[280px] sm:w-[290px] flex-shrink-0 shadow-xs`}
                     >
                       {/* Column Header */}
                       <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
@@ -1649,11 +1672,21 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      disabled={isUploadingLogo}
                       onClick={() => logoFileInputRef.current?.click()}
-                      className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-colors shadow-xs"
+                      className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-colors shadow-xs"
                     >
-                      <Upload className="w-4 h-4" />
-                      <span>Upload Logo from Device</span>
+                      {isUploadingLogo ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Optimizing Logo...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>Upload Logo from Device</span>
+                        </>
+                      )}
                     </button>
 
                     {logoInput && (
@@ -1724,11 +1757,21 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      disabled={isUploadingHero}
                       onClick={() => heroFileInputRef.current?.click()}
-                      className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-colors shadow-xs"
+                      className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-colors shadow-xs"
                     >
-                      <Upload className="w-4 h-4" />
-                      <span>Upload Hero Image from Device</span>
+                      {isUploadingHero ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Optimizing Hero Banner...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>Upload Hero Image from Device</span>
+                        </>
+                      )}
                     </button>
                   </div>
 
@@ -2000,11 +2043,21 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
 
                     <button
                       type="button"
+                      disabled={isUploadingBikeImg}
                       onClick={() => bikeFileInputRef.current?.click()}
-                      className="w-full sm:w-auto px-5 py-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border-2 border-dashed border-blue-300 font-bold flex items-center justify-center gap-2 transition-colors"
+                      className="w-full sm:w-auto px-5 py-3 rounded-xl bg-blue-50 hover:bg-blue-100 disabled:opacity-50 text-blue-700 border-2 border-dashed border-blue-300 font-bold flex items-center justify-center gap-2 transition-colors"
                     >
-                      <Upload className="w-4 h-4" />
-                      <span>Choose Photo from Device</span>
+                      {isUploadingBikeImg ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-blue-700" />
+                          <span>Optimizing Photo...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>Choose Photo from Device</span>
+                        </>
+                      )}
                     </button>
 
                     <span className="text-[11px] text-slate-500">

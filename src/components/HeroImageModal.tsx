@@ -6,9 +6,11 @@ import {
   Check, 
   RotateCcw, 
   Link2,
-  Sparkles
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 import { PRESET_HERO_IMAGES, DEFAULT_HERO_IMAGE } from '../lib/customizationStore';
+import { compressImageFile } from '../lib/imageUtils';
 
 interface HeroImageModalProps {
   isOpen: boolean;
@@ -25,27 +27,43 @@ export const HeroImageModal: React.FC<HeroImageModalProps> = ({
 }) => {
   const [selectedUrl, setSelectedUrl] = useState<string>(currentHeroUrl || DEFAULT_HERO_IMAGE);
   const [urlInput, setUrlInput] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (typeof event.target?.result === 'string') {
-        setSelectedUrl(event.target.result);
+    setIsProcessing(true);
+    setErrorMessage('');
+    try {
+      // Compress & optimize hero image for fast loading & reliable local/cloud persistence
+      const optimizedDataUrl = await compressImageFile(file, {
+        maxWidth: 1600,
+        maxHeight: 900,
+        quality: 0.84,
+        mimeType: 'image/jpeg',
+      });
+      setSelectedUrl(optimizedDataUrl);
+    } catch (err: any) {
+      console.error('Hero upload error:', err);
+      setErrorMessage(err?.message || 'Failed to process image. Please try another file.');
+    } finally {
+      setIsProcessing(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   const handleApplyUrl = () => {
     if (urlInput.trim()) {
       setSelectedUrl(urlInput.trim());
       setUrlInput('');
+      setErrorMessage('');
     }
   };
 
@@ -157,12 +175,25 @@ export const HeroImageModal: React.FC<HeroImageModalProps> = ({
             />
             <button
               type="button"
+              disabled={isProcessing}
               onClick={() => fileInputRef.current?.click()}
-              className="w-full p-3 rounded-xl border border-dashed border-slate-600 hover:border-cyan-400 bg-slate-800 hover:bg-slate-750 text-xs text-slate-300 hover:text-white flex items-center justify-center gap-2 transition-colors"
+              className="w-full p-3 rounded-xl border border-dashed border-slate-600 hover:border-cyan-400 bg-slate-800 hover:bg-slate-750 text-xs text-slate-300 hover:text-white flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
             >
-              <Upload className="w-4 h-4 text-cyan-400" />
-              <span>Upload Photo</span>
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 text-cyan-400 animate-spin" />
+                  <span>Optimizing photo...</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 text-cyan-400" />
+                  <span>Upload Photo</span>
+                </>
+              )}
             </button>
+            {errorMessage && (
+              <p className="text-rose-400 text-[11px] mt-1.5">{errorMessage}</p>
+            )}
           </div>
 
           <div>
