@@ -370,8 +370,10 @@ export const deleteBikeFromDb = deleteBike;
 // SITE SETTINGS & BRANDING REPOSITORY API
 // -------------------------------------------------------------
 
-const LOCAL_CUSTOMIZATION_KEY = 'dynamic_rental_customization_v1';
-const DEFAULT_HERO_IMAGE = 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1600&q=85';
+import { STATIC_BRANDING } from '../config/branding';
+
+const LOCAL_CUSTOMIZATION_KEY = 'dynamic_rental_customization_v2';
+const DEFAULT_HERO_IMAGE = STATIC_BRANDING.heroImageUrl || '';
 
 export interface SiteCustomizationData {
   logoUrl: string;
@@ -392,10 +394,10 @@ export async function fetchCustomizationFromDb(): Promise<SiteCustomizationData>
 
       if (!error && data) {
         const result: SiteCustomizationData = {
-          logoUrl: data.logo_url || '',
-          heroImageUrl: data.hero_image_url || DEFAULT_HERO_IMAGE,
-          heroTitle: data.hero_title || 'DYNAMIC RENTAL',
-          heroSubtitle: data.hero_subtitle || 'Ride Today. Own Tomorrow.',
+          logoUrl: data.logo_url !== undefined && data.logo_url !== '' ? data.logo_url : STATIC_BRANDING.logoUrl,
+          heroImageUrl: data.hero_image_url || STATIC_BRANDING.heroImageUrl,
+          heroTitle: data.hero_title || STATIC_BRANDING.companyName,
+          heroSubtitle: data.hero_subtitle || STATIC_BRANDING.heroTagline,
         };
         try {
           localStorage.setItem(LOCAL_CUSTOMIZATION_KEY, JSON.stringify(result));
@@ -415,10 +417,10 @@ export async function fetchCustomizationFromDb(): Promise<SiteCustomizationData>
     if (cached) {
       const parsed = JSON.parse(cached);
       return {
-        logoUrl: parsed.logoUrl || '',
-        heroImageUrl: parsed.heroImageUrl || DEFAULT_HERO_IMAGE,
-        heroTitle: parsed.heroTitle || 'DYNAMIC RENTAL',
-        heroSubtitle: parsed.heroSubtitle || 'Ride Today. Own Tomorrow.',
+        logoUrl: parsed.logoUrl !== undefined && parsed.logoUrl !== '' ? parsed.logoUrl : STATIC_BRANDING.logoUrl,
+        heroImageUrl: parsed.heroImageUrl || STATIC_BRANDING.heroImageUrl,
+        heroTitle: parsed.heroTitle || STATIC_BRANDING.companyName,
+        heroSubtitle: parsed.heroSubtitle || STATIC_BRANDING.heroTagline,
       };
     }
   } catch (e) {
@@ -426,10 +428,10 @@ export async function fetchCustomizationFromDb(): Promise<SiteCustomizationData>
   }
 
   return {
-    logoUrl: '',
-    heroImageUrl: DEFAULT_HERO_IMAGE,
-    heroTitle: 'DYNAMIC RENTAL',
-    heroSubtitle: 'Ride Today. Own Tomorrow.',
+    logoUrl: STATIC_BRANDING.logoUrl,
+    heroImageUrl: STATIC_BRANDING.heroImageUrl,
+    heroTitle: STATIC_BRANDING.companyName,
+    heroSubtitle: STATIC_BRANDING.heroTagline,
   };
 }
 
@@ -438,10 +440,10 @@ export async function saveCustomizationToDb(
 ): Promise<SiteCustomizationData> {
   // 1. Update localStorage
   let current: SiteCustomizationData = {
-    logoUrl: '',
-    heroImageUrl: DEFAULT_HERO_IMAGE,
-    heroTitle: 'DYNAMIC RENTAL',
-    heroSubtitle: 'Ride Today. Own Tomorrow.',
+    logoUrl: STATIC_BRANDING.logoUrl,
+    heroImageUrl: STATIC_BRANDING.heroImageUrl,
+    heroTitle: STATIC_BRANDING.companyName,
+    heroSubtitle: STATIC_BRANDING.heroTagline,
   };
 
   try {

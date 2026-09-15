@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <rect width="100%" height="100%" fill="#000000"/>
+  <g transform="translate(40, 60)">
+    <!-- Top Cyan Flowing Wings -->
+    <path d="M120 100 C 180 50, 310 40, 420 70 C 360 85, 260 90, 160 125 C 135 133, 122 120, 120 100 Z" fill="#00c0d8"/>
+    <path d="M120 128 C 190 85, 310 75, 415 110 C 350 125, 250 135, 150 165 C 130 170, 120 150, 120 128 Z" fill="#0088a8"/>
+    <path d="M120 156 C 180 120, 290 115, 385 145 C 320 160, 230 172, 140 198 C 125 202, 118 180, 120 156 Z" fill="#00bcd4"/>
+
+    <!-- Bottom R Cyan Tail Accent -->
+    <path d="M100 280 C 135 320, 145 370, 115 420 C 105 390, 110 345, 80 310 Z" fill="#00c0d8"/>
+
+    <!-- Letter D (White) -->
+    <path d="M30 40 L105 40 C 150 40, 185 75, 185 125 C 185 175, 150 210, 105 210 L30 210 Z" fill="#ffffff"/>
+    <path d="M68 76 L100 76 C 124 76, 144 96, 144 125 C 144 154, 124 174, 100 174 L68 174 Z" fill="#000000"/>
+
+    <!-- Letter R (White) -->
+    <path d="M30 215 L108 215 C 145 215, 172 240, 172 278 C 172 305, 152 328, 126 336 L182 410 L134 410 L84 345 L68 345 L68 410 L30 410 Z" fill="#ffffff"/>
+    <path d="M68 250 L104 250 C 120 250, 134 262, 134 278 C 134 294, 120 306, 104 306 L68 306 Z" fill="#000000"/>
+
+    <!-- Text: YNAMIC -->
+    <text x="195" y="195" fill="#ffffff" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="52" letter-spacing="4">YNAMIC</text>
+
+    <!-- Text: ENTAL -->
+    <text x="185" y="380" fill="#ffffff" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="62" letter-spacing="4">ENTAL</text>
+  </g>
+</svg>

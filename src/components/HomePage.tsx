@@ -37,6 +37,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   onApplyNow,
   onLearnMore,
 }) => {
+  const [heroImgError, setHeroImgError] = useState(false);
   const [selectedCondition, setSelectedCondition] = useState<BikeCondition>('new');
   const [selectedBikeForCalc, setSelectedBikeForCalc] = useState<string>(bikes[0]?.id || 'bajaj-boxer-150');
   const [estWeeklyGross, setEstWeeklyGross] = useState<number>(4500);
@@ -48,6 +49,8 @@ export const HomePage: React.FC<HomePageProps> = ({
   const estFuelCost = isElectric ? 120 : 380;
   const netWeeklyEarnings = Math.max(0, estWeeklyGross - bikeWeeklyCost - estFuelCost);
   const netMonthlyEarnings = netWeeklyEarnings * 4.33;
+
+  const fallbackHero = 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1600&q=85';
 
   return (
     <div className="flex flex-col gap-12 sm:gap-16 pb-12" id="home-bike-pricing-page">
@@ -134,8 +137,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                 {/* Hero Image */}
                 <div className="aspect-4/3 w-full overflow-hidden bg-slate-950">
                   <img
-                    src={heroImageUrl}
+                    src={!heroImgError && heroImageUrl ? heroImageUrl : fallbackHero}
                     alt="Dynamic Rental Delivery Motorbike"
+                    onError={() => setHeroImgError(true)}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                     referrerPolicy="no-referrer"
                   />
@@ -148,13 +152,13 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <div className="absolute bottom-0 inset-x-0 p-5 flex items-end justify-between gap-3">
                   <div>
                     <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider block">
-                      Johannesburg Fleet Ready
+                      Johannesburg Logistics &amp; Showroom Hub
                     </span>
                     <span className="text-base font-black text-white">
-                      Bajaj Boxer 150 HD &amp; Big Boy Delivery
+                      Dynamic Rental Randburg Team &amp; Fleet
                     </span>
                     <p className="text-xs text-slate-300 mt-0.5">
-                      Fitted with heavy-duty carrier for insulated delivery boxes
+                      304 Tungsten Rd, Strydompark · Courier Collection &amp; Handover Hub
                     </p>
                   </div>
                 </div>

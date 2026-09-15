@@ -3,13 +3,19 @@ import {
   fetchCustomizationFromDb, 
   saveCustomizationToDb 
 } from './supabase';
+import { STATIC_BRANDING } from '../config/branding';
 
 // Customization store for dynamic logo, hero image, and branding
 export type SiteCustomization = SiteCustomizationData;
 
-export const DEFAULT_HERO_IMAGE = 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1600&q=85';
+export const DEFAULT_HERO_IMAGE = STATIC_BRANDING.heroImageUrl || '';
 
 export const PRESET_HERO_IMAGES = [
+  {
+    id: 'custom-hero',
+    title: 'Static Project Hero (/hero.jpg)',
+    url: '/hero.jpg',
+  },
   {
     id: 'boxer-hero',
     title: 'Bajaj Boxer 150 Fleet on Road',
@@ -37,7 +43,7 @@ export const PRESET_HERO_IMAGES = [
   }
 ];
 
-const STORAGE_KEY_CUSTOMIZATION = 'dynamic_rental_customization_v1';
+const STORAGE_KEY_CUSTOMIZATION = 'dynamic_rental_customization_v2';
 
 export function getStoredCustomization(): SiteCustomization {
   try {
@@ -45,10 +51,10 @@ export function getStoredCustomization(): SiteCustomization {
     if (raw) {
       const parsed = JSON.parse(raw);
       return {
-        logoUrl: parsed.logoUrl || '',
-        heroImageUrl: parsed.heroImageUrl || DEFAULT_HERO_IMAGE,
-        heroTitle: parsed.heroTitle || 'DYNAMIC RENTAL',
-        heroSubtitle: parsed.heroSubtitle || 'Ride Today. Own Tomorrow.',
+        logoUrl: parsed.logoUrl !== undefined && parsed.logoUrl !== '' ? parsed.logoUrl : STATIC_BRANDING.logoUrl,
+        heroImageUrl: parsed.heroImageUrl || STATIC_BRANDING.heroImageUrl,
+        heroTitle: parsed.heroTitle || STATIC_BRANDING.companyName,
+        heroSubtitle: parsed.heroSubtitle || STATIC_BRANDING.heroTagline,
       };
     }
   } catch {
@@ -56,10 +62,10 @@ export function getStoredCustomization(): SiteCustomization {
   }
 
   return {
-    logoUrl: '',
-    heroImageUrl: DEFAULT_HERO_IMAGE,
-    heroTitle: 'DYNAMIC RENTAL',
-    heroSubtitle: 'Ride Today. Own Tomorrow.',
+    logoUrl: STATIC_BRANDING.logoUrl,
+    heroImageUrl: STATIC_BRANDING.heroImageUrl,
+    heroTitle: STATIC_BRANDING.companyName,
+    heroSubtitle: STATIC_BRANDING.heroTagline,
   };
 }
 

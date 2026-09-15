@@ -60,12 +60,22 @@
   - **Upload Bike Photos from Device**: Choose image files (PNG, JPG, WEBP) directly from your computer or phone with instant live preview.
   - Configure weekly rates, deposits, engine capacities, and stock availability (`In Stock`, `Out of Stock`).
 
-- **Persistent Branding & Asset Management**:
-  - **Upload Logo & Hero from Device or URL**: Choose image files directly from device storage or provide image URLs.
-  - **Persistent Cloud Sync**: Saves branding assets to both localStorage and the Supabase `site_settings` cloud table so custom logos and hero banners remain persistent across all visitors on your Vercel deployment.
+### 6. 🖼️ Custom Logo & Hero Image Setup (3 Easy Ways)
 
-- **Supabase Cloud Sync & Local Storage Fallback**:
-  - Connects to Supabase PostgreSQL when credentials are provided, with zero-crash local storage persistence by default.
+You can provide your logo and hero banner using any of these methods without any default images overriding them:
+
+- **Method 1: Add to GitHub `/public/` Folder (Recommended for Permanent Deployment)**:
+  - Place your official logo file as `public/logo.png`
+  - Place your hero banner photo as `public/hero.jpg`
+  - When deployed to Vercel or run locally, the website will automatically display your static images across all devices and visitors.
+
+- **Method 2: Upload via Admin Portal (`Branding & Assets` Tab)**:
+  - Open the Staff Portal (PIN: `dynamic2026`) and click **Branding & Assets**.
+  - Click **Upload Logo from Device** or **Upload Hero Image from Device**.
+  - Images are automatically optimized and saved to both local storage and your connected Supabase database.
+
+- **Method 3: Configure via Code (`/src/config/branding.ts`)**:
+  - Open `/src/config/branding.ts` to set direct URLs or paths for `logoUrl` and `heroImageUrl`.
 
 ---
 

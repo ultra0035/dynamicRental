@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface DynamicRentalLogoProps {
   customLogoUrl?: string;
@@ -9,12 +9,15 @@ export const DynamicRentalLogo: React.FC<DynamicRentalLogoProps> = ({
   customLogoUrl,
   size = 'md',
 }) => {
-  if (customLogoUrl) {
+  const [imgError, setImgError] = useState(false);
+
+  if (customLogoUrl && !imgError) {
     return (
       <div className="flex items-center gap-3" id="custom-brand-logo">
         <img
           src={customLogoUrl}
           alt="Dynamic Rental Logo"
+          onError={() => setImgError(true)}
           className={`${
             size === 'sm' ? 'h-8' : size === 'lg' ? 'h-14' : 'h-10 sm:h-11'
           } w-auto object-contain`}
@@ -85,3 +88,4 @@ export const DynamicRentalLogo: React.FC<DynamicRentalLogoProps> = ({
     </div>
   );
 };
+
