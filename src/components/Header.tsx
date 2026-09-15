@@ -3,14 +3,11 @@ import { ActiveTab } from '../types';
 import { COMPANY_DETAILS } from '../data/bikes';
 import { DynamicRentalLogo } from './DynamicRentalLogo';
 import { 
-  PhoneCall, 
-  MessageSquare, 
   Sparkles, 
   Search, 
   Menu, 
   X,
   Image as ImageIcon,
-  ShieldCheck,
   MapPin
 } from 'lucide-react';
 
@@ -157,17 +154,6 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </nav>
 
-        {/* Right Phone Number Matching Screenshot (071 054 2015) */}
-        <div className="hidden sm:flex items-center gap-3">
-          <a
-            href={`tel:${COMPANY_DETAILS.phone}`}
-            className="flex items-center gap-2 text-white hover:text-cyan-400 font-mono font-black text-sm lg:text-base tracking-tight transition-colors py-1.5 px-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-cyan-500/40"
-          >
-            <PhoneCall className="w-4 h-4 text-cyan-400" />
-            <span>{COMPANY_DETAILS.phoneDisplay}</span>
-          </a>
-        </div>
-
         {/* Mobile Menu Toggle Button */}
         <div className="flex items-center gap-2 lg:hidden">
           <button
@@ -243,15 +229,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
-            <a
-              href={`tel:${COMPANY_DETAILS.phone}`}
-              className="text-cyan-400 font-bold font-mono text-sm flex items-center gap-1.5"
-            >
-              <PhoneCall className="w-4 h-4" />
-              <span>{COMPANY_DETAILS.phoneDisplay}</span>
-            </a>
-            {onOpenLogoModal && (
+          {onOpenLogoModal && (
+            <div className="pt-2 border-t border-slate-800 flex justify-end">
               <button
                 type="button"
                 onClick={onOpenLogoModal}
@@ -260,8 +239,8 @@ export const Header: React.FC<HeaderProps> = ({
                 <ImageIcon className="w-3.5 h-3.5 text-cyan-400" />
                 <span>Customize Logo</span>
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
     </header>
