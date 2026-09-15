@@ -188,6 +188,34 @@ CREATE POLICY "Allow public write on bikes" ON public.bikes FOR ALL USING (true)
 
 To push this codebase to your own GitHub account:
 
+## 🚀 Deploying to Vercel
+
+Dynamic Rental is optimized for instant deployment to [Vercel](https://vercel.com):
+
+### Method 1: Deploy via GitHub (Recommended)
+1. Push your code to GitHub (see the GitHub instructions below).
+2. Open **[vercel.com/new](https://vercel.com/new)** and connect your GitHub account.
+3. Select your `dynamic-rental-bikes` repository.
+4. Vercel automatically detects the Vite configuration:
+   - **Framework Preset**: `Vite`
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+5. *(Optional)* Add Supabase environment variables if using remote cloud storage:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+6. Click **Deploy**. Your live site will be ready in under 1 minute!
+
+### Method 2: Instant Deploy via Vercel CLI
+```bash
+# Install Vercel CLI (or run with npx)
+npx vercel
+
+# Deploy directly to production
+npx vercel --prod
+```
+
+---
+
 ### Option A: Export via AI Studio / Download ZIP
 1. In Google AI Studio, click the **Settings / Export** icon in the top navigation bar.
 2. Select **Export to GitHub** or **Download ZIP**.

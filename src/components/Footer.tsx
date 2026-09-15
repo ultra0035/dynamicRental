@@ -119,15 +119,15 @@ export const Footer: React.FC<FooterProps> = ({
             <span>{isAdminLoggedIn ? 'Staff Portal (Unlocked)' : 'Admin Portal Login'}</span>
           </button>
 
-          {/* GitHub Loader Helper */}
+          {/* Vercel & GitHub Deploy Helper */}
           <button
             type="button"
             onClick={onOpenGitHubModal}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 flex items-center gap-2 transition-all shadow-xs"
+            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 flex items-center gap-2 transition-all shadow-xs"
             id="footer-github-btn"
           >
             <Github className="w-3.5 h-3.5" />
-            <span>Load on GitHub Guide</span>
+            <span>Deploy to Vercel / GitHub</span>
           </button>
 
           <a
