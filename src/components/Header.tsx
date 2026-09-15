@@ -7,7 +7,6 @@ import {
   Search, 
   Menu, 
   X,
-  Image as ImageIcon,
   MapPin
 } from 'lucide-react';
 
@@ -15,7 +14,6 @@ interface HeaderProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   customLogoUrl?: string;
-  onOpenLogoModal?: () => void;
   pendingCount?: number;
 }
 
@@ -23,7 +21,6 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
   customLogoUrl,
-  onOpenLogoModal,
   pendingCount = 0,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -83,7 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Main Navigation Bar Matching dynamicrental.info Screenshot */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between gap-4">
-        {/* Brand Logo with Custom Logo Upload Option */}
+        {/* Brand Logo */}
         <div 
           onClick={() => handleNavClick('home')}
           className="flex items-center gap-2 cursor-pointer group"
@@ -92,8 +89,6 @@ export const Header: React.FC<HeaderProps> = ({
           <DynamicRentalLogo
             customLogoUrl={customLogoUrl}
             size="md"
-            onEditLogo={onOpenLogoModal}
-            showEditHint={true}
           />
         </div>
 
@@ -228,19 +223,6 @@ export const Header: React.FC<HeaderProps> = ({
               <span>-- APPLY NOW &lt;2MIN --</span>
             </button>
           </div>
-
-          {onOpenLogoModal && (
-            <div className="pt-2 border-t border-slate-800 flex justify-end">
-              <button
-                type="button"
-                onClick={onOpenLogoModal}
-                className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1"
-              >
-                <ImageIcon className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Customize Logo</span>
-              </button>
-            </div>
-          )}
         </div>
       )}
     </header>

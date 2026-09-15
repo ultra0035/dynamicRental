@@ -24,7 +24,7 @@ import {
 interface HomePageProps {
   bikes: Bike[];
   heroImageUrl: string;
-  onOpenHeroModal: () => void;
+  onOpenHeroModal?: () => void;
   onSelectBikeForApplication: (bikeId: string, condition: BikeCondition, termMonths: number) => void;
   onApplyNow: () => void;
   onLearnMore: () => void;
@@ -33,7 +33,6 @@ interface HomePageProps {
 export const HomePage: React.FC<HomePageProps> = ({
   bikes,
   heroImageUrl,
-  onOpenHeroModal,
   onSelectBikeForApplication,
   onApplyNow,
   onLearnMore,
@@ -152,23 +151,12 @@ export const HomePage: React.FC<HomePageProps> = ({
                       Johannesburg Fleet Ready
                     </span>
                     <span className="text-base font-black text-white">
-                      Bajaj Boxer 150 HD & Big Boy Delivery
+                      Bajaj Boxer 150 HD &amp; Big Boy Delivery
                     </span>
                     <p className="text-xs text-slate-300 mt-0.5">
                       Fitted with heavy-duty carrier for insulated delivery boxes
                     </p>
                   </div>
-
-                  {/* "Insert / Change Hero Image" Trigger */}
-                  <button
-                    type="button"
-                    onClick={onOpenHeroModal}
-                    className="flex-shrink-0 px-3 py-2 rounded-xl bg-slate-900/90 hover:bg-black text-cyan-300 hover:text-white text-xs font-bold flex items-center gap-1.5 border border-cyan-500/40 backdrop-blur-md shadow-lg transition-all"
-                    title="Insert or change hero image"
-                  >
-                    <ImageIcon className="w-4 h-4 text-cyan-400" />
-                    <span className="hidden sm:inline">Change Image</span>
-                  </button>
                 </div>
               </div>
 

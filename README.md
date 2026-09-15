@@ -2,113 +2,78 @@
 **Randburg Showroom & Logistics Hub (304 Tungsten Road, Strijdom Park, Gauteng)**
 
 > **"Ride Today. Own Tomorrow."**  
-> Fast 2-minute rent-to-own motorbike applications for delivery riders (Checkers Sixty60, Uber Eats, Takealot, Mr D, Bolt) in Johannesburg & Gauteng. Eliminating WhatsApp paperwork chasing with instant digital verification.
+> Fast 2-minute rent-to-own motorbike applications for delivery riders (Checkers Sixty60, Uber Eats, Takealot, Mr D, Bolt) in Johannesburg & Gauteng. Eliminating WhatsApp paperwork chasing with instant digital verification and seamless underwriting pipeline management.
 
 ---
 
-## 🌟 Vision & Mission
-Delivery drivers in Gauteng often face significant friction trying to acquire reliable motorbikes—getting lost in unstructured WhatsApp chats, manual paper forms, delayed document verification, and unclear deposit requirements.
+## 🌟 What's New & Core Platform Features
 
-**Dynamic Rental** digitizes the entire rent-to-own onboarding pipeline:
-1. **Riders** select their bike (Brand New vs Pre-Owned, flexible 15/18/20-month terms), fill out their delivery profile, upload required verification documents (with built-in validation for South African ID vs Foreign Driver License & Traffic Register Number / TRN), sign digitally, and receive an instant reference code with a direct 1-click WhatsApp approval link.
-2. **Dealership Managers** manage incoming applications from a single dashboard ("sorted and ready to approve"), inspect high-resolution documents in a zoomable lightbox, verify checklists, dispatch 1-click WhatsApp approvals or missing document notices, print legally formatted rent-to-own contracts, and manage bike inventory/stock in real time.
-3. **Seamless Cloud & Local Architecture**: Powered by Supabase for real-time cloud data with automatic local persistence fallback.
+### 1. 🏁 Clean High-Impact Navigation Header
+- **Streamlined Navigation Tabs**: `HOME`, `HOW DYNAMIC RENTAL WORKS` (About), `CONTACT US TODAY`, and the focused call-to-action **`-- APPLY NOW <2MIN --`**.
+- **Static & Tamper-Proof Branding**: Clean, permanent brand logo and hero presentation for public visitors. All branding adjustments are safeguarded inside the staff portal.
 
----
+### 2. 🏍️ Home Page Fleet & Pricing Showcase
+- **Hero Showcase**: Displays Johannesburg's leading commercial delivery bikes (Bajaj Boxer 150 HD, Big Boy Velocity 150 Delivery, Dynamic E-Moto Pro, and Hero Eco Hunter 150).
+- **Weekly Rent-to-Own Rates**: Transparent terms for **Brand New** (R750/wk, R1,000 deposit, 15/18 months) and **Pre-Owned** (R650/wk, R650 deposit, 20 months).
+- **Courier Take-Home Profit Calculator**: Live interactive sliders for gross courier earnings vs weekly bike cost and fuel/battery, calculating true net weekly income.
 
-## 📱 Page & Feature Guide
+### 3. ⚡ 2-Minute Digital Application Flow (`/apply`)
+- **Rider Profile**: Personal details, Gauteng suburb, and delivery platform selection.
+- **Underwriting & Document Upload**:
+  - 🇿🇦 **South African Citizens**: Smart ID Card or Green ID Book + Motorcycle Driver's License (Code A/A1).
+  - 🌍 **Foreign Nationals**: Passport + Work Permit / Asylum / Visa + Foreign Driver's License + **Mandatory Traffic Register Number (TRN Certificate)**.
+- **Digital Touch Signature**: Draw signature directly on mobile/desktop touchpads before submitting.
+- **Instant Reference Code & WhatsApp Handshake**: Generates an application code (e.g. `DR-6967-JHB`) with a 1-click WhatsApp message to the dealership.
 
-### 1. 🏍️ Bikes & Pricing (`/fleet` tab)
-- **Fleet Showcase**: Browse the most popular commercial delivery bikes in Johannesburg:
-  - **Bajaj Boxer 150 HD**: The #1 delivery workhorse (150cc, 550km fuel range, heavy-duty suspension).
-  - **Big Boy Velocity 150 Delivery**: High agility, USB phone charger, commercial rack.
-  - **Dynamic E-Delivery Moto Pro**: 100% electric with 60s battery swapping, saving couriers ~R1,800/month on petrol.
-  - **Hero Eco Hunter 150**: Ultra-durable African road cruiser (Waitlist).
-- **Interactive Courier Profitability Calculator**:
-  - Sliders for gross weekly delivery earnings (e.g. R3,500 – R6,000/wk).
-  - Calculates weekly bike installment (R650 or R750), estimated fuel/battery costs, and displays **Net Weekly Take-Home Earnings**.
-- **1-Click "Apply for this Bike"**: Prefills the chosen model, condition (New vs Pre-Owned), and lease duration into the application form.
-
-### 2. ⚡ Fast-Track 2-Minute Application (`/apply` tab)
-- **Step 1: Bike & Lease Configuration**:
-  - Switch between **Brand New** (R750/wk, R1,000 contract deposit, 15 or 18 month terms) and **Pre-Owned** (R650/wk, R650 deposit, 20 month term).
-  - Live summary of weekly obligation, deposit due at contract signing, and path to 100% full ownership.
-- **Step 2: Rider Details & Delivery Experience**:
-  - Full Name, Phone, WhatsApp, Email, Suburb in Gauteng, Primary Delivery Platform (Checkers Sixty60, Uber Eats, Takealot, Mr D, Bolt), and approximate weekly earnings.
-- **Step 3: Document Verification Checklist**:
-  - **Nationality Selection**:
-    - 🇿🇦 **South African Citizens**: Requires Smart ID Card (Front/Back) or Green ID Book + Motorcycle Driver's License (Code A / A1).
-    - 🌍 **Foreign Nationals**: Requires Passport info page, Valid Work Permit / Asylum / Visa, Foreign Driver's License, and **Mandatory Traffic Register Number (TRN Certificate)** issued by the traffic department. Clear on-screen policy explanation prevents delays.
-  - **Proof of Earnings**: Optional upload of delivery app payout screenshot for 1-hour expedited approval.
-  - Interactive file dropzone and camera capture with live thumbnail preview.
-- **Step 4: Agreement & Digital Touch Signature**:
-  - Clear deposit policy reminder (deposit due upon contract signing at showroom before bike handover).
-  - Interactive canvas touch signature pad (Draw, Clear, Undo).
-- **Submission Confirmation**:
-  - Unique reference number (e.g., `DR-9482-JHB`).
-  - **1-Click WhatsApp Button** to send the dealership a pre-formatted message.
-  - Direct links to track status or print agreement.
-
-### 3. 🔍 Application Status Tracker (`/status` tab)
-- Search by Application Reference Number or Phone Number.
-- **Visual Progress Stepper**:
+### 4. 🔍 Live Application Status Tracker (`/status`)
+- Drivers can track their progress through 4 visual stages:
   1. Application Submitted
   2. Document Vetting & Background Check
   3. Approved for Collection & Contract Signing
   4. Handover & Key Collection
-- Shows assigned showroom pickup location (**304 Tungsten Rd, Strijdom Park**), deposit amount payable at signing, and exact checklist of what original documents to bring on collection day.
+- Outlines collection requirements, deposit payable, and the exact showroom address.
 
-### 4. 📍 Randburg Showroom & Collection Hub (`/location` tab)
-- Full physical dealership details:
-  - **Address**: 304 Tungsten Road, Strijdom Park, Randburg, 2169.
-  - **Operating Hours**: Monday–Friday 08:00–17:00, Saturday 08:30–13:00.
-  - **Google Maps Navigation**: 1-click link to route to the showroom.
-  - **Direct Hotline**: +27 71 054 2015 / WhatsApp.
-  - Collection Day Checklist for riders.
+### 5. 🔐 Dealership Staff Portal (`PIN: dynamic2026`)
+- **5-Stage Driver Pipeline Tracking**:
+  - **Dual View Modes**: Switch between **Pipeline Kanban Board** and **Master List & Inspector**.
+  - **Pipeline Stages**:
+    1. ⏳ `Pending Review` (Awaiting background vetting)
+    2. ⚠️ `Needs Info / Missing TRN` (Foreign license holders missing TRN certificate)
+    3. ✅ `Approved for Collection` (Ready for showroom signing & bike pickup)
+    4. 🤝 `Contract Signed & Delivered` (Handover completed and active)
+    5. ❌ `Declined`
+  - **1-Click Quick Move**: Move drivers instantly between stages with dedicated buttons on Kanban cards and inspector steppers.
+  - **Automated WhatsApp Dispatches**:
+    - 📲 *WhatsApp Approval & Collection Notice*: Sends pickup address, deposit amount, and hours to driver.
+    - ⚠️ *WhatsApp Missing TRN Notice*: Direct message explaining the Traffic Register Number requirement.
+    - 🤝 *WhatsApp Handover Confirmation*: Sends welcome and weekly payment schedule.
+  - **Zoomable Document Lightbox**: High-resolution viewer for inspecting IDs, passports, work permits, and TRN certificates.
+  - **Printable Rent-to-Own Legal Agreement**: Generates formal contract schedules with lessor/lessee details and signatures.
+  - **CSV Export**: 1-click export of the entire database.
 
-### 5. 🔐 Dealership Staff Portal (Admin & Stock Manager)
-*Accessible from the footer login ("Dealership Staff Portal") using PIN: `dynamic2026`.*
-- **Applications Pipeline**:
-  - Filter by status (`Pending Review`, `Ready for Collection`, `Needs Info / Missing TRN`, `Contract Signed`).
-  - Search by applicant name, reference code, phone number, or bike model.
-  - Document Lightbox: Click any uploaded ID, TRN certificate, or work permit to inspect in full-resolution zoom.
-  - Interactive verification checklist toggles.
-  - **1-Click WhatsApp Actions**:
-    - 📲 *Send Approval & Pickup Notice*: Pre-fills instant WhatsApp message with collection address and deposit terms.
-    - ⚠️ *Request Missing TRN Notice*: Prompts foreign license holders to submit their official Traffic Register certificate.
-  - **Printable Rent-to-Own Legal Agreement**: Formats a formal contract schedule with lessor/lessee details, payment schedule, and digital signatures for printing.
-  - **Export to CSV**: 1-click download of all pipeline data.
-- **Bike Inventory & Stock Manager**:
-  - Add new motorbike models to the catalog.
-  - Edit pricing (weekly rates, deposits, term options), specs (engine, fuel range), badges, and image URLs.
-  - Toggle stock availability (`In Stock`, `Out of Stock`, `Coming Soon`).
-  - Delete or archive discontinued bikes.
-- **Supabase Cloud Sync Status & SQL Runner**:
-  - Live indicator of Supabase database connection.
-  - 1-Click "Copy SQL Schema" to initialize your Supabase PostgreSQL tables instantly.
+- **Motorbike Inventory & Device File Upload**:
+  - Add or edit motorbikes in the catalog.
+  - **Upload Bike Photos from Device**: Choose image files (PNG, JPG, WEBP) directly from your computer or phone with instant live preview.
+  - Configure weekly rates, deposits, engine capacities, and stock availability (`In Stock`, `Out of Stock`).
+
+- **Branding & Asset Management**:
+  - Upload custom dealership logos or change hero showcase banners safely from within staff mode.
+
+- **Supabase Cloud Sync & Local Storage Fallback**:
+  - Connects to Supabase PostgreSQL when credentials are provided, with zero-crash local storage persistence by default.
 
 ---
 
-## 🗄️ Backend & Supabase Database Setup
+## 🗄️ Supabase Cloud Database Setup
 
-This app includes built-in support for **Supabase**. It automatically falls back to persistent local storage so the application works 100% out of the box, and syncs to Supabase as soon as credentials are provided!
-
-### Step 1: Create a Free Supabase Project
-1. Go to [https://supabase.com](https://supabase.com) and create a new project.
-2. Navigate to **Project Settings -> API** and copy:
-   - **Project URL**
-   - **anon / public key**
-
-### Step 2: Set Environment Variables
-In your project's `.env` file (or Google AI Studio settings):
+### Step 1: Set Environment Variables
+In your `.env` file or deployment settings:
 ```env
 VITE_SUPABASE_URL=https://your-project-id.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-public-key
 ```
 
-### Step 3: Run Database Migration in Supabase SQL Editor
-Navigate to the **SQL Editor** in your Supabase dashboard, paste the following SQL, and click **Run**:
-
+### Step 2: Run Database Migration in Supabase SQL Editor
 ```sql
 -- 1. Create applications table
 CREATE TABLE IF NOT EXISTS public.applications (
@@ -184,71 +149,15 @@ CREATE POLICY "Allow public write on bikes" ON public.bikes FOR ALL USING (true)
 
 ---
 
-## 🚀 How to Load & Push to GitHub
-
-To push this codebase to your own GitHub account:
-
 ## 🚀 Deploying to Vercel
 
-Dynamic Rental is optimized for instant deployment to [Vercel](https://vercel.com):
-
-### Method 1: Deploy via GitHub (Recommended)
-1. Push your code to GitHub (see the GitHub instructions below).
-2. Open **[vercel.com/new](https://vercel.com/new)** and connect your GitHub account.
-3. Select your `dynamic-rental-bikes` repository.
-4. Vercel automatically detects the Vite configuration:
-   - **Framework Preset**: `Vite`
+1. Push your code to GitHub.
+2. Open **[vercel.com/new](https://vercel.com/new)** and import your repository.
+3. Framework preset is automatically detected as **Vite**:
    - **Build Command**: `npm run build`
    - **Output Directory**: `dist`
-5. *(Optional)* Add Supabase environment variables if using remote cloud storage:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-6. Click **Deploy**. Your live site will be ready in under 1 minute!
-
-### Method 2: Instant Deploy via Vercel CLI
-```bash
-# Install Vercel CLI (or run with npx)
-npx vercel
-
-# Deploy directly to production
-npx vercel --prod
-```
-
----
-
-### Option A: Export via AI Studio / Download ZIP
-1. In Google AI Studio, click the **Settings / Export** icon in the top navigation bar.
-2. Select **Export to GitHub** or **Download ZIP**.
-3. If downloading ZIP:
-   ```bash
-   unzip dynamic-rental.zip
-   cd dynamic-rental
-   git init
-   git add .
-   git commit -m "Initial commit: Dynamic Rental Rent-to-Own Web App"
-   git branch -M main
-   git remote add origin https://github.com/YOUR_USERNAME/dynamic-rental.git
-   git push -u origin main
-   ```
-
-### Option B: Push directly using Git CLI
-```bash
-# Verify status
-git status
-
-# Add all files
-git add .
-
-# Commit changes
-git commit -m "feat: Dynamic Rental Web App with Supabase backend and inventory management"
-
-# Add your GitHub repository remote
-git remote add origin https://github.com/YOUR_USERNAME/dynamic-rental.git
-
-# Push to GitHub
-git branch -M main
-git push -u origin main
-```
+4. *(Optional)* Add Supabase environment variables `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+5. Click **Deploy** to go live in under 1 minute.
 
 ---
 
@@ -258,10 +167,10 @@ git push -u origin main
 # Install dependencies
 npm install
 
-# Start local development server (binds to http://localhost:3000)
+# Start development server
 npm run dev
 
-# Lint & type check
+# Lint codebase
 npm run lint
 
 # Production build
@@ -270,9 +179,10 @@ npm run build
 
 ---
 
-## 🏢 Dealership Contact & Details
+## 🏢 Dealership Details & Physical Showroom
 - **Company**: Dynamic Rental (Pty) Ltd
 - **Showroom Address**: 304 Tungsten Road, Strijdom Park, Randburg, South Africa, 2169
-- **Phone / WhatsApp**: +27 71 054 2015 (`071 054 2015`)
-- **Hours**: Mon – Fri (08:00 – 17:00), Sat (08:30 – 13:00)
+- **Direct Phone / WhatsApp**: +27 71 054 2015 (`071 054 2015`)
+- **Operating Hours**: Mon – Fri (08:00 – 17:00), Sat (08:30 – 13:00)
+- **Staff Access PIN**: `dynamic2026`
 - **Tagline**: *Ride Today. Own Tomorrow.*

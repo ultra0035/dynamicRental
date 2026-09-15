@@ -179,18 +179,16 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         customLogoUrl={customization.logoUrl}
-        onOpenLogoModal={() => setShowLogoModal(true)}
         pendingCount={pendingCount}
       />
 
       {/* 2. Main Content View Switcher */}
       <main className="flex-1">
-        {/* HOME VIEW: Bike Catalog + Pricing + Hero Section with Customizable Image */}
+        {/* HOME VIEW: Bike Catalog + Pricing + Static Hero Section */}
         {(activeTab === 'home' || activeTab === 'fleet') && (
           <HomePage
             bikes={bikes}
             heroImageUrl={customization.heroImageUrl}
-            onOpenHeroModal={() => setShowHeroModal(true)}
             onSelectBikeForApplication={handleSelectBikeForApplication}
             onApplyNow={() => {
               setActiveTab('apply');
@@ -269,6 +267,10 @@ export default function App() {
               onSaveBike={handleSaveBike}
               onDeleteBike={handleDeleteBike}
               onAddNewWalkin={handleAddNewWalkin}
+              onOpenLogoModal={() => setShowLogoModal(true)}
+              onOpenHeroModal={() => setShowHeroModal(true)}
+              customLogoUrl={customization.logoUrl}
+              customHeroUrl={customization.heroImageUrl}
               onCloseAdmin={() => {
                 setActiveTab('home');
                 window.scrollTo({ top: 0, behavior: 'smooth' });

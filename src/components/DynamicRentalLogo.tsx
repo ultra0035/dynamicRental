@@ -1,22 +1,17 @@
 import React from 'react';
-import { Sparkles, Image as ImageIcon } from 'lucide-react';
 
 interface DynamicRentalLogoProps {
   customLogoUrl?: string;
   size?: 'sm' | 'md' | 'lg';
-  onEditLogo?: () => void;
-  showEditHint?: boolean;
 }
 
 export const DynamicRentalLogo: React.FC<DynamicRentalLogoProps> = ({
   customLogoUrl,
   size = 'md',
-  onEditLogo,
-  showEditHint = true,
 }) => {
   if (customLogoUrl) {
     return (
-      <div className="relative group flex items-center gap-3" id="custom-brand-logo">
+      <div className="flex items-center gap-3" id="custom-brand-logo">
         <img
           src={customLogoUrl}
           alt="Dynamic Rental Logo"
@@ -25,27 +20,13 @@ export const DynamicRentalLogo: React.FC<DynamicRentalLogoProps> = ({
           } w-auto object-contain`}
           referrerPolicy="no-referrer"
         />
-        {onEditLogo && showEditHint && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEditLogo();
-            }}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 bg-slate-800/90 text-cyan-300 hover:text-white rounded text-[10px] flex items-center gap-1 border border-slate-700"
-            title="Change Logo"
-          >
-            <ImageIcon className="w-3 h-3" />
-            <span className="hidden sm:inline">Change</span>
-          </button>
-        )}
       </div>
     );
   }
 
   // Official Vector Reproduction of dynamicrental.info Logo
   return (
-    <div className="relative group flex items-center gap-2.5 sm:gap-3 select-none" id="vector-brand-logo">
+    <div className="flex items-center gap-2.5 sm:gap-3 select-none" id="vector-brand-logo">
       {/* DR Emblem Icon */}
       <div className="relative flex items-center justify-center">
         <svg
@@ -101,22 +82,6 @@ export const DynamicRentalLogo: React.FC<DynamicRentalLogoProps> = ({
           RENTAL
         </span>
       </div>
-
-      {/* Optional Upload / Change Logo Trigger */}
-      {onEditLogo && showEditHint && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEditLogo();
-          }}
-          className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 p-1 bg-slate-800 text-cyan-300 hover:text-white rounded text-[10px] flex items-center gap-1 border border-slate-700"
-          title="Insert / Change Custom Logo"
-        >
-          <ImageIcon className="w-3 h-3" />
-          <span className="hidden sm:inline">Change Logo</span>
-        </button>
-      )}
     </div>
   );
 };
