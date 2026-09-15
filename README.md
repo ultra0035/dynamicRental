@@ -34,6 +34,10 @@
 - Outlines collection requirements, deposit payable, and the exact showroom address.
 
 ### 5. 🔐 Dealership Staff Portal (`PIN: dynamic2026`)
+- **Modern Left Sidebar Navigation**:
+  - Dedicated pages: **Dashboard** (KPI stats & stage breakdown), **Applicants** (5-Stage Kanban & Inspector), **Bikes & Stock** (Inventory manager with device upload), **Branding & Assets** (Logo & Hero live upload), **Supabase Cloud** (DB connection & SQL runner), and **Exit Staff Mode**.
+  - Top website header and public widgets are automatically hidden in admin mode for a distraction-free back-office experience.
+
 - **5-Stage Driver Pipeline Tracking**:
   - **Dual View Modes**: Switch between **Pipeline Kanban Board** and **Master List & Inspector**.
   - **Pipeline Stages**:
@@ -56,8 +60,9 @@
   - **Upload Bike Photos from Device**: Choose image files (PNG, JPG, WEBP) directly from your computer or phone with instant live preview.
   - Configure weekly rates, deposits, engine capacities, and stock availability (`In Stock`, `Out of Stock`).
 
-- **Branding & Asset Management**:
-  - Upload custom dealership logos or change hero showcase banners safely from within staff mode.
+- **Persistent Branding & Asset Management**:
+  - **Upload Logo & Hero from Device or URL**: Choose image files directly from device storage or provide image URLs.
+  - **Persistent Cloud Sync**: Saves branding assets to both localStorage and the Supabase `site_settings` cloud table so custom logos and hero banners remain persistent across all visitors on your Vercel deployment.
 
 - **Supabase Cloud Sync & Local Storage Fallback**:
   - Connects to Supabase PostgreSQL when credentials are provided, with zero-crash local storage persistence by default.

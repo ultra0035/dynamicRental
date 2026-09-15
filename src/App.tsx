@@ -18,6 +18,7 @@ import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { 
   getStoredCustomization, 
   saveStoredCustomization, 
+  fetchCustomization,
   SiteCustomization 
 } from './lib/customizationStore';
 import {
@@ -64,15 +65,19 @@ export default function App() {
     async function loadInitialData() {
       setIsLoading(true);
       try {
-        const [loadedApps, loadedBikes] = await Promise.all([
+        const [loadedApps, loadedBikes, loadedCustomization] = await Promise.all([
           fetchApplications(),
           fetchBikes(),
+          fetchCustomization(),
         ]);
         if (loadedApps && loadedApps.length > 0) {
           setApplications(loadedApps);
         }
         if (loadedBikes && loadedBikes.length > 0) {
           setBikes(loadedBikes);
+        }
+        if (loadedCustomization) {
+          setCustomization(loadedCustomization);
         }
       } catch (err) {
         console.warn('Could not load from remote database, using cached data:', err);
@@ -143,14 +148,60 @@ export default function App() {
     }
   };
 
-  const handleViewStatus = (refNumber: string) => {
-    setStatusSearchQuery(refNumber);
-    setActiveTab('status');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  const handleAddNewWalkin = () => {
+    const walkinRef = `DR-WLK-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newWalkin: RiderApplication = {
+      id: `walkin-${Date.now()}`,
+      refNumber: walkinRef,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'pending_review',
+      bikeId: 'bajaj-boxer-150',
+      bikeName: 'Bajaj Boxer 150 HD',
+      bikeCondition: 'new',
+      termMonths: 18,
+      weeklyRate: 750,
+      depositAmount: 1000,
+      fullName: 'Walk-in Showroom Applicant',
+      phone: '071 000 0000',
+      whatsappNumber: '0710000000',
+      email: 'showroom@dynamicrental.info',
+      citizenship: 'south_african',
+      idOrPassportNumber: '0000000000000',
+      address: COMPANY_DETAILS.address,
+      suburb: 'Randburg',
+      city: 'Johannesburg',
+      primaryPlatform: 'Takealot',
+      deliveryExperience: '1-2 years',
+      approxWeeklyEarnings: 3800,
+      documents: {},
+      verification: {
+        idVerified: false,
+        licenseVerified: false,
+        workPermitVerified: false,
+        trafficRegisterVerified: false,
+      },
+      depositAcknowledged: true,
+      termsAgreed: true,
+      adminNotes: 'Walk-in registered by showroom receptionist.',
+      timeline: [
+        {
+          timestamp: new Date().toISOString(),
+          status: 'pending_review',
+          title: 'Walk-in Registered',
+          description: 'Rider visited showroom at 304 Tungsten Rd, Randburg.',
+        },
+      ],
+    };
+
+    setApplications((prev) => [newWalkin, ...prev]);
+    saveApplicationToDb(newWalkin);
   };
 
-  const handleAddNewWalkin = () => {
-    setActiveTab('apply');
+  const handleAdminLoginSuccess = () => {
+    setIsAdminLoggedIn(true);
+    setActiveTab('admin');
+    setShowAdminLoginModal(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -163,24 +214,26 @@ export default function App() {
     }
   };
 
-  const handleAdminLoginSuccess = () => {
-    setIsAdminLoggedIn(true);
-    setShowAdminLoginModal(false);
-    setActiveTab('admin');
+  const handleViewStatus = (refNumber: string) => {
+    setStatusSearchQuery(refNumber);
+    setActiveTab('status');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const pendingCount = applications.filter((a) => a.status === 'pending_review').length;
+  const isAdminView = activeTab === 'admin';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-cyan-500 selection:text-slate-950">
-      {/* 1. Global Navigation Header: HOME, HOW DYNAMIC RENTAL WORKS, CONTACT US TODAY, -- APPLY NOW <2MIN -- */}
-      <Header
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        customLogoUrl={customization.logoUrl}
-        pendingCount={pendingCount}
-      />
+      {/* 1. Global Navigation Header (Hidden when inside Admin portal as requested) */}
+      {!isAdminView && (
+        <Header
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          customLogoUrl={customization.logoUrl}
+          pendingCount={pendingCount}
+        />
+      )}
 
       {/* 2. Main Content View Switcher */}
       <main className="flex-1">
@@ -257,38 +310,38 @@ export default function App() {
           </div>
         )}
 
-        {/* ADMIN PORTAL VIEW */}
+        {/* ADMIN PORTAL VIEW (Standalone full workspace with dedicated Sidebar & no top header) */}
         {activeTab === 'admin' && (
-          <div className="py-8">
-            <AdminPortal
-              applications={applications}
-              bikes={bikes}
-              onUpdateApplication={handleUpdateApplication}
-              onSaveBike={handleSaveBike}
-              onDeleteBike={handleDeleteBike}
-              onAddNewWalkin={handleAddNewWalkin}
-              onOpenLogoModal={() => setShowLogoModal(true)}
-              onOpenHeroModal={() => setShowHeroModal(true)}
-              customLogoUrl={customization.logoUrl}
-              customHeroUrl={customization.heroImageUrl}
-              onCloseAdmin={() => {
-                setActiveTab('home');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-            />
-          </div>
+          <AdminPortal
+            applications={applications}
+            bikes={bikes}
+            onUpdateApplication={handleUpdateApplication}
+            onSaveBike={handleSaveBike}
+            onDeleteBike={handleDeleteBike}
+            onAddNewWalkin={handleAddNewWalkin}
+            onSaveLogo={handleSaveLogo}
+            onSaveHeroImage={handleSaveHeroImage}
+            customLogoUrl={customization.logoUrl}
+            customHeroUrl={customization.heroImageUrl}
+            onCloseAdmin={() => {
+              setActiveTab('home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
         )}
       </main>
 
-      {/* Floating WhatsApp Quick-Contact Button */}
-      <WhatsAppFloatingButton />
+      {/* Floating WhatsApp Quick-Contact Button (Only on public views) */}
+      {!isAdminView && <WhatsAppFloatingButton />}
 
-      {/* Dynamic Rental Teal/Cyan Footer */}
-      <Footer
-        onOpenAdminLogin={handleOpenAdminFromFooter}
-        onOpenGitHubModal={() => setShowGitHubModal(true)}
-        isAdminLoggedIn={isAdminLoggedIn}
-      />
+      {/* Dynamic Rental Teal/Cyan Footer (Only on public views) */}
+      {!isAdminView && (
+        <Footer
+          onOpenAdminLogin={handleOpenAdminFromFooter}
+          onOpenGitHubModal={() => setShowGitHubModal(true)}
+          isAdminLoggedIn={isAdminLoggedIn}
+        />
+      )}
 
       {/* Custom Logo Upload Modal */}
       <LogoUploadModal

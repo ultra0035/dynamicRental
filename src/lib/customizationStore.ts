@@ -1,17 +1,18 @@
+import { 
+  SiteCustomizationData, 
+  fetchCustomizationFromDb, 
+  saveCustomizationToDb 
+} from './supabase';
+
 // Customization store for dynamic logo, hero image, and branding
-export interface SiteCustomization {
-  logoUrl: string;
-  heroImageUrl: string;
-  heroTitle: string;
-  heroSubtitle: string;
-}
+export type SiteCustomization = SiteCustomizationData;
 
 export const DEFAULT_HERO_IMAGE = 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1600&q=85';
 
 export const PRESET_HERO_IMAGES = [
   {
     id: 'boxer-hero',
-    title: 'Delivery Motorcycle on Road',
+    title: 'Bajaj Boxer 150 Fleet on Road',
     url: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1600&q=85',
   },
   {
@@ -62,6 +63,10 @@ export function getStoredCustomization(): SiteCustomization {
   };
 }
 
+export async function fetchCustomization(): Promise<SiteCustomization> {
+  return await fetchCustomizationFromDb();
+}
+
 export function saveStoredCustomization(customization: Partial<SiteCustomization>): SiteCustomization {
   const current = getStoredCustomization();
   const updated: SiteCustomization = {
@@ -73,5 +78,11 @@ export function saveStoredCustomization(customization: Partial<SiteCustomization
   } catch {
     // ignore
   }
+
+  // Also trigger async sync to Supabase cloud
+  saveCustomizationToDb(customization).catch((err) => {
+    console.warn('Async cloud customization save error:', err);
+  });
+
   return updated;
 }

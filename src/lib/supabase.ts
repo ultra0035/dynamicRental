@@ -82,13 +82,24 @@ CREATE TABLE IF NOT EXISTS bikes (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS site_settings (
+  id TEXT PRIMARY KEY,
+  logo_url TEXT,
+  hero_image_url TEXT,
+  hero_title TEXT,
+  hero_subtitle TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Enable Row Level Security (RLS)
 ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bikes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
 
 -- Public access policies for demo / prototype
 CREATE POLICY "Allow public read-write on applications" ON applications FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public read-write on bikes" ON bikes FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read-write on site_settings" ON site_settings FOR ALL USING (true) WITH CHECK (true);
 `;
 
 // Helper: Map application DB snake_case to frontend camelCase
@@ -354,3 +365,121 @@ export async function deleteBike(bikeId: string): Promise<void> {
 }
 
 export const deleteBikeFromDb = deleteBike;
+
+// -------------------------------------------------------------
+// SITE SETTINGS & BRANDING REPOSITORY API
+// -------------------------------------------------------------
+
+const LOCAL_CUSTOMIZATION_KEY = 'dynamic_rental_customization_v1';
+const DEFAULT_HERO_IMAGE = 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?auto=format&fit=crop&w=1600&q=85';
+
+export interface SiteCustomizationData {
+  logoUrl: string;
+  heroImageUrl: string;
+  heroTitle: string;
+  heroSubtitle: string;
+}
+
+export async function fetchCustomizationFromDb(): Promise<SiteCustomizationData> {
+  // 1. Check Supabase first
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('site_settings')
+        .select('*')
+        .eq('id', 'global')
+        .maybeSingle();
+
+      if (!error && data) {
+        const result: SiteCustomizationData = {
+          logoUrl: data.logo_url || '',
+          heroImageUrl: data.hero_image_url || DEFAULT_HERO_IMAGE,
+          heroTitle: data.hero_title || 'DYNAMIC RENTAL',
+          heroSubtitle: data.hero_subtitle || 'Ride Today. Own Tomorrow.',
+        };
+        try {
+          localStorage.setItem(LOCAL_CUSTOMIZATION_KEY, JSON.stringify(result));
+        } catch {
+          // ignore
+        }
+        return result;
+      }
+    } catch (err) {
+      console.warn('Supabase customization fetch error:', err);
+    }
+  }
+
+  // 2. Fallback to localStorage
+  try {
+    const cached = localStorage.getItem(LOCAL_CUSTOMIZATION_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      return {
+        logoUrl: parsed.logoUrl || '',
+        heroImageUrl: parsed.heroImageUrl || DEFAULT_HERO_IMAGE,
+        heroTitle: parsed.heroTitle || 'DYNAMIC RENTAL',
+        heroSubtitle: parsed.heroSubtitle || 'Ride Today. Own Tomorrow.',
+      };
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return {
+    logoUrl: '',
+    heroImageUrl: DEFAULT_HERO_IMAGE,
+    heroTitle: 'DYNAMIC RENTAL',
+    heroSubtitle: 'Ride Today. Own Tomorrow.',
+  };
+}
+
+export async function saveCustomizationToDb(
+  customization: Partial<SiteCustomizationData>
+): Promise<SiteCustomizationData> {
+  // 1. Update localStorage
+  let current: SiteCustomizationData = {
+    logoUrl: '',
+    heroImageUrl: DEFAULT_HERO_IMAGE,
+    heroTitle: 'DYNAMIC RENTAL',
+    heroSubtitle: 'Ride Today. Own Tomorrow.',
+  };
+
+  try {
+    const cached = localStorage.getItem(LOCAL_CUSTOMIZATION_KEY);
+    if (cached) {
+      current = { ...current, ...JSON.parse(cached) };
+    }
+  } catch {
+    // ignore
+  }
+
+  const updated: SiteCustomizationData = {
+    ...current,
+    ...customization,
+  };
+
+  try {
+    localStorage.setItem(LOCAL_CUSTOMIZATION_KEY, JSON.stringify(updated));
+  } catch {
+    // ignore
+  }
+
+  // 2. Persist to Supabase if available
+  if (supabase) {
+    try {
+      const dbRecord = {
+        id: 'global',
+        logo_url: updated.logoUrl,
+        hero_image_url: updated.heroImageUrl,
+        hero_title: updated.heroTitle,
+        hero_subtitle: updated.heroSubtitle,
+        updated_at: new Date().toISOString(),
+      };
+      await supabase.from('site_settings').upsert(dbRecord, { onConflict: 'id' });
+    } catch (err) {
+      console.warn('Supabase site_settings save error:', err);
+    }
+  }
+
+  return updated;
+}
