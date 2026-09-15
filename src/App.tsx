@@ -3,15 +3,23 @@ import { ActiveTab, RiderApplication, BikeCondition, Bike } from './types';
 import { COMPANY_DETAILS, BIKES } from './data/bikes';
 import { INITIAL_APPLICATIONS } from './data/initialApplications';
 import { Header } from './components/Header';
-import { BikeCatalog } from './components/BikeCatalog';
+import { HomePage } from './components/HomePage';
+import { AboutPage } from './components/AboutPage';
+import { ContactUsPage } from './components/ContactUsPage';
 import { ApplicationForm } from './components/ApplicationForm';
 import { StatusTracker } from './components/StatusTracker';
 import { AdminPortal } from './components/AdminPortal';
-import { LocationCard } from './components/LocationCard';
 import { Footer } from './components/Footer';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { GitHubExportModal } from './components/GitHubExportModal';
+import { LogoUploadModal } from './components/LogoUploadModal';
+import { HeroImageModal } from './components/HeroImageModal';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
+import { 
+  getStoredCustomization, 
+  saveStoredCustomization, 
+  SiteCustomization 
+} from './lib/customizationStore';
 import {
   fetchApplications,
   saveApplicationToDb,
@@ -21,10 +29,16 @@ import {
 } from './lib/supabase';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('apply');
+  // Default tab is HOME (Bikes and Pricing + Hero Section)
+  const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [applications, setApplications] = useState<RiderApplication[]>(INITIAL_APPLICATIONS);
   const [bikes, setBikes] = useState<Bike[]>(BIKES);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // Custom branding (Logo & Hero Image)
+  const [customization, setCustomization] = useState<SiteCustomization>(getStoredCustomization());
+  const [showLogoModal, setShowLogoModal] = useState<boolean>(false);
+  const [showHeroModal, setShowHeroModal] = useState<boolean>(false);
 
   // Admin Auth State
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(false);
@@ -45,7 +59,7 @@ export default function App() {
   // Status search prefill
   const [statusSearchQuery, setStatusSearchQuery] = useState<string>('');
 
-  // Initial Load from Supabase (with fallback to local repository)
+  // Initial Load from Supabase (with fallback to cached data)
   useEffect(() => {
     async function loadInitialData() {
       setIsLoading(true);
@@ -68,6 +82,16 @@ export default function App() {
     }
     loadInitialData();
   }, []);
+
+  const handleSaveLogo = (logoUrl: string) => {
+    const updated = saveStoredCustomization({ logoUrl });
+    setCustomization(updated);
+  };
+
+  const handleSaveHeroImage = (heroImageUrl: string) => {
+    const updated = saveStoredCustomization({ heroImageUrl });
+    setCustomization(updated);
+  };
 
   const handleSelectBikeForApplication = (bikeId: string, condition: BikeCondition, termMonths: number) => {
     setSelectedBikeForApp({ bikeId, condition, termMonths });
@@ -149,80 +173,135 @@ export default function App() {
   const pendingCount = applications.filter((a) => a.status === 'pending_review').length;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
-      {/* Global Navigation Header: Bikes & Pricing, Apply Now, Track Status */}
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-cyan-500 selection:text-slate-950">
+      {/* 1. Global Navigation Header: HOME, HOW DYNAMIC RENTAL WORKS, CONTACT US TODAY, -- APPLY NOW <2MIN -- */}
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        customLogoUrl={customization.logoUrl}
+        onOpenLogoModal={() => setShowLogoModal(true)}
         pendingCount={pendingCount}
       />
 
-      {/* Main Content View Switcher */}
-      <main className="flex-1 pb-16">
-        {activeTab === 'apply' && (
-          <ApplicationForm
+      {/* 2. Main Content View Switcher */}
+      <main className="flex-1">
+        {/* HOME VIEW: Bike Catalog + Pricing + Hero Section with Customizable Image */}
+        {(activeTab === 'home' || activeTab === 'fleet') && (
+          <HomePage
             bikes={bikes}
-            initialBikeId={selectedBikeForApp.bikeId}
-            initialCondition={selectedBikeForApp.condition}
-            initialTerm={selectedBikeForApp.termMonths}
-            onApplicationSubmitted={handleApplicationSubmitted}
-            onViewStatus={handleViewStatus}
-          />
-        )}
-
-        {activeTab === 'fleet' && (
-          <BikeCatalog
-            bikes={bikes}
+            heroImageUrl={customization.heroImageUrl}
+            onOpenHeroModal={() => setShowHeroModal(true)}
             onSelectBikeForApplication={handleSelectBikeForApplication}
-          />
-        )}
-
-        {activeTab === 'status' && (
-          <StatusTracker
-            applications={applications}
-            initialSearchQuery={statusSearchQuery}
-            onApplyNew={() => {
+            onApplyNow={() => {
               setActiveTab('apply');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onLearnMore={() => {
+              setActiveTab('about');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
         )}
 
-        {activeTab === 'admin' && (
-          <AdminPortal
-            applications={applications}
-            bikes={bikes}
-            onUpdateApplication={handleUpdateApplication}
-            onSaveBike={handleSaveBike}
-            onDeleteBike={handleDeleteBike}
-            onAddNewWalkin={handleAddNewWalkin}
-            onCloseAdmin={() => {
+        {/* ABOUT VIEW: How Dynamic Rental Works */}
+        {activeTab === 'about' && (
+          <AboutPage
+            onApplyNow={() => {
               setActiveTab('apply');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onViewFleet={() => {
+              setActiveTab('home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onContactUs={() => {
+              setActiveTab('contact');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
         )}
 
-        {activeTab === 'location' && (
-          <LocationCard
+        {/* CONTACT US VIEW: Matching dynamicrental.info screenshot */}
+        {(activeTab === 'contact' || activeTab === 'location') && (
+          <ContactUsPage
             onApplyNow={() => {
               setActiveTab('apply');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />
         )}
+
+        {/* APPLY NOW VIEW: 2-Minute Digital Application */}
+        {activeTab === 'apply' && (
+          <div className="py-8">
+            <ApplicationForm
+              bikes={bikes}
+              initialBikeId={selectedBikeForApp.bikeId}
+              initialCondition={selectedBikeForApp.condition}
+              initialTerm={selectedBikeForApp.termMonths}
+              onApplicationSubmitted={handleApplicationSubmitted}
+              onViewStatus={handleViewStatus}
+            />
+          </div>
+        )}
+
+        {/* TRACK STATUS VIEW */}
+        {activeTab === 'status' && (
+          <div className="py-8">
+            <StatusTracker
+              applications={applications}
+              initialSearchQuery={statusSearchQuery}
+              onApplyNew={() => {
+                setActiveTab('apply');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          </div>
+        )}
+
+        {/* ADMIN PORTAL VIEW */}
+        {activeTab === 'admin' && (
+          <div className="py-8">
+            <AdminPortal
+              applications={applications}
+              bikes={bikes}
+              onUpdateApplication={handleUpdateApplication}
+              onSaveBike={handleSaveBike}
+              onDeleteBike={handleDeleteBike}
+              onAddNewWalkin={handleAddNewWalkin}
+              onCloseAdmin={() => {
+                setActiveTab('home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          </div>
+        )}
       </main>
 
-      {/* Floating WhatsApp Contact Button */}
+      {/* Floating WhatsApp Quick-Contact Button */}
       <WhatsAppFloatingButton />
 
-      {/* App Footer with Admin Login & GitHub Loader */}
+      {/* Dynamic Rental Teal/Cyan Footer */}
       <Footer
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
         onOpenAdminLogin={handleOpenAdminFromFooter}
         onOpenGitHubModal={() => setShowGitHubModal(true)}
         isAdminLoggedIn={isAdminLoggedIn}
+      />
+
+      {/* Custom Logo Upload Modal */}
+      <LogoUploadModal
+        isOpen={showLogoModal}
+        onClose={() => setShowLogoModal(false)}
+        currentLogoUrl={customization.logoUrl}
+        onSaveLogo={handleSaveLogo}
+      />
+
+      {/* Hero Image Customizer Modal */}
+      <HeroImageModal
+        isOpen={showHeroModal}
+        onClose={() => setShowHeroModal(false)}
+        currentHeroUrl={customization.heroImageUrl}
+        onSaveHeroImage={handleSaveHeroImage}
       />
 
       {/* Admin Login Modal (Triggered from Footer) */}
@@ -232,7 +311,7 @@ export default function App() {
         onSuccess={handleAdminLoginSuccess}
       />
 
-      {/* GitHub Export / Publish Guide Modal */}
+      {/* GitHub / Vercel Publish Modal */}
       <GitHubExportModal
         isOpen={showGitHubModal}
         onClose={() => setShowGitHubModal(false)}

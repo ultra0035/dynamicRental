@@ -144,4 +144,4 @@ export interface RiderApplication {
   }>;
 }
 
-export type ActiveTab = 'apply' | 'fleet' | 'status' | 'admin' | 'location';
+export type ActiveTab = 'home' | 'about' | 'contact' | 'apply' | 'status' | 'admin' | 'fleet' | 'location';
