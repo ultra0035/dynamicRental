@@ -1,0 +1,6 @@
+{
+  "name": "Dynamic Rental - Rent to Own Bikes Randburg",
+  "description": "Fast 2-minute rent-to-own motorbike applications for delivery riders in Randburg, Johannesburg. No WhatsApp paperwork chasing — instant document verification for Boxer, Big Boy, and Electric bikes.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
