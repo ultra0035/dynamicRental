@@ -2,40 +2,75 @@ import React, { useState } from 'react';
 
 interface DynamicRentalLogoProps {
   customLogoUrl?: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
+  className?: string;
 }
 
 export const DynamicRentalLogo: React.FC<DynamicRentalLogoProps> = ({
   customLogoUrl,
   size = 'md',
+  className = '',
 }) => {
   const [imgError, setImgError] = useState(false);
 
+  // If custom logo image is provided (e.g. uploaded logo or /public/logo.png)
   if (customLogoUrl && !imgError) {
+    const heightClass =
+      size === 'sm'
+        ? 'h-9 sm:h-10'
+        : size === 'lg'
+        ? 'h-16 sm:h-20'
+        : size === 'xl'
+        ? 'h-20 sm:h-24'
+        : 'h-12 sm:h-14 md:h-16'; // Standard normal prominent navbar logo size
+
     return (
-      <div className="flex items-center gap-3" id="custom-brand-logo">
+      <div className={`flex items-center gap-3 ${className}`} id="custom-brand-logo">
         <img
           src={customLogoUrl}
           alt="Dynamic Rental Logo"
           onError={() => setImgError(true)}
-          className={`${
-            size === 'sm' ? 'h-8' : size === 'lg' ? 'h-14' : 'h-10 sm:h-11'
-          } w-auto object-contain`}
+          className={`${heightClass} w-auto max-w-[260px] sm:max-w-[340px] object-contain transition-all rounded-md`}
           referrerPolicy="no-referrer"
         />
       </div>
     );
   }
 
-  // Official Vector Reproduction of dynamicrental.info Logo
+  // Official High-Definition Vector Reproduction of Dynamic Rental Logo
+  const iconSizeClass =
+    size === 'sm'
+      ? 'w-9 h-9'
+      : size === 'lg'
+      ? 'w-16 h-16 sm:w-20 sm:h-20'
+      : size === 'xl'
+      ? 'w-20 h-20 sm:w-24 sm:h-24'
+      : 'w-12 h-12 sm:w-14 sm:h-14 md:w-15 md:h-15';
+
+  const titleClass =
+    size === 'sm'
+      ? 'text-sm font-black'
+      : size === 'lg'
+      ? 'text-xl sm:text-2xl font-black'
+      : size === 'xl'
+      ? 'text-2xl sm:text-3xl font-black'
+      : 'text-base sm:text-lg md:text-xl font-black';
+
+  const subtitleClass =
+    size === 'sm'
+      ? 'text-[10px] font-extrabold tracking-widest'
+      : size === 'lg'
+      ? 'text-xs sm:text-sm font-extrabold tracking-widest'
+      : size === 'xl'
+      ? 'text-sm sm:text-base font-extrabold tracking-widest'
+      : 'text-xs sm:text-sm font-extrabold tracking-widest';
+
   return (
-    <div className="flex items-center gap-2.5 sm:gap-3 select-none" id="vector-brand-logo">
+    <div className={`flex items-center gap-2.5 sm:gap-3.5 select-none ${className}`} id="vector-brand-logo">
       {/* DR Emblem Icon */}
-      <div className="relative flex items-center justify-center">
+      <div className="relative flex items-center justify-center shrink-0">
         <svg
-          className={`${
-            size === 'sm' ? 'w-9 h-9' : size === 'lg' ? 'w-14 h-14' : 'w-11 h-11'
-          } overflow-visible`}
+          className={`${iconSizeClass} overflow-visible drop-shadow-md`}
           viewBox="0 0 100 100"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
@@ -77,15 +112,16 @@ export const DynamicRentalLogo: React.FC<DynamicRentalLogoProps> = ({
       </div>
 
       {/* Brand Text: DYNAMIC RENTAL */}
-      <div className="flex flex-col leading-none">
-        <span className="text-white font-black tracking-wider text-sm sm:text-base uppercase font-sans">
+      <div className="flex flex-col leading-tight">
+        <span className={`text-white uppercase font-sans tracking-wider ${titleClass}`}>
           DYNAMIC
         </span>
-        <span className="text-slate-200 font-extrabold tracking-widest text-xs sm:text-sm uppercase font-sans text-transparent bg-clip-text bg-gradient-to-r from-slate-200 via-white to-cyan-300">
+        <span className={`text-cyan-400 uppercase font-sans ${subtitleClass} text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-cyan-300 to-white`}>
           RENTAL
         </span>
       </div>
     </div>
   );
 };
+
 

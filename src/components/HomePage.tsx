@@ -11,20 +11,19 @@ import {
   ArrowRight, 
   DollarSign, 
   Calculator, 
-  Coins,
-  CheckCircle2,
-  PhoneCall,
-  Image as ImageIcon,
-  ShieldCheck,
-  ChevronRight,
-  TrendingUp,
+  Coins, 
+  CheckCircle2, 
+  PhoneCall, 
+  Image as ImageIcon, 
+  ShieldCheck, 
+  ChevronRight, 
+  TrendingUp, 
   MapPin
 } from 'lucide-react';
 
 interface HomePageProps {
   bikes: Bike[];
   heroImageUrl: string;
-  onOpenHeroModal?: () => void;
   onSelectBikeForApplication: (bikeId: string, condition: BikeCondition, termMonths: number) => void;
   onApplyNow: () => void;
   onLearnMore: () => void;

@@ -83,7 +83,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Brand Logo */}
         <div 
           onClick={() => handleNavClick('home')}
-          className="flex items-center gap-2 cursor-pointer group"
+          className="flex items-center gap-2 cursor-pointer group shrink-0 py-0.5"
           id="brand-logo-btn"
         >
           <DynamicRentalLogo
