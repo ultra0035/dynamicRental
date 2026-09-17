@@ -63,6 +63,8 @@ export interface ApplicationDocuments {
   saIdBack?: string;
   passport?: string;
   passportPhoto?: string;
+  asylumDocument?: string;
+  asylumOrWorkPermit?: string;
   workPermit?: string;
   workPermitOrVisa?: string;
   driversLicense?: string;
@@ -109,16 +111,24 @@ export interface RiderApplication {
   idOrPassportNumber: string;
   nationalityCountry?: string;
   
-  // Residence in JHB
+  // Residence in JHB / SA
   address: string;
   suburb: string;
   city: string; // Default: Randburg / Johannesburg
+  province?: string;
   postalCode?: string;
+
+  // Alternative Contact / Next of Kin
+  alternativeContactName?: string;
+  alternativeContactPhone?: string;
   
   // Courier / Delivery Work
   primaryPlatform: string; // e.g. "Checkers Sixty60", "Uber Eats", "Mr D", "Bolt", "Takealot", "Private Courier"
+  deliveryApps?: string[]; // list of active delivery apps
   deliveryExperience: string; // "< 6 months", "1-2 years", "3+ years", "Starting Fresh"
   approxWeeklyEarnings: number; // estimated R3500+
+  referredBy?: string;
+  creditScore?: string;
   
   // Uploaded Documents
   documents: ApplicationDocuments;

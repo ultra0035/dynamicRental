@@ -1234,13 +1234,13 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                         Submitted Documents (Click image to zoom)
                       </h3>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {activeApp.documents.idDocumentFront && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                        {(activeApp.documents.idDocumentFront || activeApp.documents.saIdFront) && (
                           <div
-                            onClick={() => setActiveDocImage({ title: 'SA ID (Front)', url: activeApp.documents.idDocumentFront! })}
+                            onClick={() => setActiveDocImage({ title: 'SA ID (Front)', url: (activeApp.documents.idDocumentFront || activeApp.documents.saIdFront)! })}
                             className="group relative h-28 rounded-xl border border-slate-200 overflow-hidden bg-slate-100 cursor-pointer shadow-xs"
                           >
-                            <img src={activeApp.documents.idDocumentFront} alt="ID Front" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <img src={activeApp.documents.idDocumentFront || activeApp.documents.saIdFront} alt="ID Front" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
                               <ZoomIn className="w-4 h-4" /> Zoom
                             </div>
@@ -1265,27 +1265,27 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                           </div>
                         )}
 
-                        {activeApp.documents.workPermit && (
+                        {(activeApp.documents.asylumDocument || activeApp.documents.workPermit) && (
                           <div
-                            onClick={() => setActiveDocImage({ title: 'Work Permit / Asylum', url: activeApp.documents.workPermit! })}
+                            onClick={() => setActiveDocImage({ title: 'Asylum / Work Permit', url: (activeApp.documents.asylumDocument || activeApp.documents.workPermit)! })}
                             className="group relative h-28 rounded-xl border border-slate-200 overflow-hidden bg-slate-100 cursor-pointer shadow-xs"
                           >
-                            <img src={activeApp.documents.workPermit} alt="Work Permit" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <img src={activeApp.documents.asylumDocument || activeApp.documents.workPermit} alt="Asylum / Work Permit" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
                               <ZoomIn className="w-4 h-4" /> Zoom
                             </div>
                             <div className="absolute bottom-0 inset-x-0 bg-slate-900/80 text-white text-[10px] font-bold p-1 truncate text-center">
-                              Work Permit
+                              Asylum / Permit
                             </div>
                           </div>
                         )}
 
-                        {activeApp.documents.driversLicense && (
+                        {(activeApp.documents.driversLicense || activeApp.documents.driversLicenseFront) && (
                           <div
-                            onClick={() => setActiveDocImage({ title: "Driver's License", url: activeApp.documents.driversLicense! })}
+                            onClick={() => setActiveDocImage({ title: "Driver's License", url: (activeApp.documents.driversLicense || activeApp.documents.driversLicenseFront)! })}
                             className="group relative h-28 rounded-xl border border-slate-200 overflow-hidden bg-slate-100 cursor-pointer shadow-xs"
                           >
-                            <img src={activeApp.documents.driversLicense} alt="Driver License" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <img src={activeApp.documents.driversLicense || activeApp.documents.driversLicenseFront} alt="Driver License" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
                               <ZoomIn className="w-4 h-4" /> Zoom
                             </div>
@@ -1306,6 +1306,21 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                             </div>
                             <div className="absolute bottom-0 inset-x-0 bg-amber-600 text-white text-[10px] font-bold p-1 truncate text-center">
                               TRN Certificate
+                            </div>
+                          </div>
+                        )}
+
+                        {activeApp.documents.proofOfResidence && (
+                          <div
+                            onClick={() => setActiveDocImage({ title: 'Proof of Residence', url: activeApp.documents.proofOfResidence! })}
+                            className="group relative h-28 rounded-xl border border-slate-200 overflow-hidden bg-slate-100 cursor-pointer shadow-xs"
+                          >
+                            <img src={activeApp.documents.proofOfResidence} alt="Proof of Residence" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
+                              <ZoomIn className="w-4 h-4" /> Zoom
+                            </div>
+                            <div className="absolute bottom-0 inset-x-0 bg-slate-900/80 text-white text-[10px] font-bold p-1 truncate text-center">
+                              Proof Residence
                             </div>
                           </div>
                         )}

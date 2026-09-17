@@ -1,9 +1,18 @@
-import React, { useState } from 'react';
-import { RiderApplication, Bike, BikeCondition, ApplicationStatus, CitizenshipType } from '../types';
+import React, { useState, useRef } from 'react';
+import { 
+  RiderApplication, 
+  Bike, 
+  BikeCondition, 
+  ApplicationStatus, 
+  CitizenshipType,
+  ApplicationDocuments
+} from '../types';
+import { compressImageFile } from '../lib/imageUtils';
 import { 
   X, 
   User, 
   Phone, 
+  Mail, 
   MapPin, 
   Bike as BikeIcon, 
   DollarSign, 
@@ -13,7 +22,17 @@ import {
   Building2,
   Calendar,
   Briefcase,
-  ShieldCheck
+  ShieldCheck,
+  Upload,
+  Camera,
+  Trash2,
+  Check,
+  Eye,
+  Loader2,
+  Sparkles,
+  Info,
+  CreditCard,
+  Layers
 } from 'lucide-react';
 
 interface WalkInApplicantModalProps {
@@ -22,6 +41,29 @@ interface WalkInApplicantModalProps {
   bikes: Bike[];
   onSubmit: (newApp: RiderApplication) => Promise<void> | void;
 }
+
+const SA_PROVINCES = [
+  'Gauteng',
+  'Western Cape',
+  'KwaZulu-Natal',
+  'Eastern Cape',
+  'Free State',
+  'Limpopo',
+  'Mpumalanga',
+  'North West',
+  'Northern Cape'
+];
+
+const DELIVERY_PLATFORMS = [
+  { id: 'Mr Delivery', name: 'Mr D', color: 'bg-cyan-50 border-cyan-300 text-cyan-800' },
+  { id: 'Uber Eats', name: 'Uber Eats', color: 'bg-emerald-50 border-emerald-300 text-emerald-800' },
+  { id: 'Checkers Sixty60', name: 'Sixty60', color: 'bg-teal-50 border-teal-300 text-teal-800' },
+  { id: 'Woolies Dash', name: 'Woolies Dash', color: 'bg-slate-100 border-slate-400 text-slate-800' },
+  { id: 'Zulzi', name: 'Zulzi', color: 'bg-rose-50 border-rose-300 text-rose-800' },
+  { id: 'Picup', name: 'Picup', color: 'bg-sky-50 border-sky-300 text-sky-800' },
+  { id: 'Takealot', name: 'Takealot', color: 'bg-blue-50 border-blue-300 text-blue-800' },
+  { id: 'Bolt Food', name: 'Bolt Food', color: 'bg-green-50 border-green-300 text-green-800' }
+];
 
 export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
   isOpen,
@@ -45,7 +87,7 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
   const [bikeCondition, setBikeCondition] = useState<BikeCondition>('new');
   const [termMonths, setTermMonths] = useState<number>(18);
 
-  // Rider details
+  // Rider Personal & Contact details
   const [fullName, setFullName] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
   const [whatsappNumber, setWhatsappNumber] = useState<string>('');
@@ -55,25 +97,47 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
   const [idOrPassportNumber, setIdOrPassportNumber] = useState<string>('');
   const [nationalityCountry, setNationalityCountry] = useState<string>('Zimbabwe');
   
-  // Residence
+  // Residence & Address Information
   const [address, setAddress] = useState<string>('');
   const [suburb, setSuburb] = useState<string>('Randburg');
   const [city, setCity] = useState<string>('Johannesburg');
+  const [province, setProvince] = useState<string>('Gauteng');
 
-  // Work & Experience
-  const [primaryPlatform, setPrimaryPlatform] = useState<string>('Checkers Sixty60');
+  // Alternative Contact
+  const [altContactName, setAltContactName] = useState<string>('');
+  const [altContactPhone, setAltContactPhone] = useState<string>('');
+
+  // Work & Delivery Platforms
+  const [selectedApps, setSelectedApps] = useState<string[]>(['Checkers Sixty60']);
   const [deliveryExperience, setDeliveryExperience] = useState<string>('1-2 years');
-  const [approxWeeklyEarnings, setApproxWeeklyEarnings] = useState<number>(3800);
+  const [weeklyEarningsBracket, setWeeklyEarningsBracket] = useState<string>('R2000-R3500');
+  const [referredBy, setReferredBy] = useState<string>('');
+  const [creditScore, setCreditScore] = useState<string>('650');
   
   // Intake Status & Notes
   const [initialStatus, setInitialStatus] = useState<ApplicationStatus>('pending_review');
   const [assignedPlate, setAssignedPlate] = useState<string>('');
-  const [adminNotes, setAdminNotes] = useState<string>('Walk-in applicant registered at Randburg showroom.');
+  const [adminNotes, setAdminNotes] = useState<string>('Showroom walk-in applicant intake registered.');
   
   // Document verification on-site
   const [idVerified, setIdVerified] = useState<boolean>(true);
   const [licenseVerified, setLicenseVerified] = useState<boolean>(false);
   const [trnVerified, setTrnVerified] = useState<boolean>(false);
+  const [proofVerified, setProofVerified] = useState<boolean>(true);
+
+  // Uploaded Documents State
+  const [uploadedDocs, setUploadedDocs] = useState<ApplicationDocuments>({});
+  const [uploadingDocKey, setUploadingDocKey] = useState<string | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
+
+  const fileInputRefs = {
+    idDocumentFront: useRef<HTMLInputElement>(null),
+    passport: useRef<HTMLInputElement>(null),
+    asylumDocument: useRef<HTMLInputElement>(null),
+    driversLicenseFront: useRef<HTMLInputElement>(null),
+    trafficRegisterCertificate: useRef<HTMLInputElement>(null),
+    proofOfResidence: useRef<HTMLInputElement>(null),
+  };
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
@@ -86,6 +150,71 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
   const depositAmount = bikeCondition === 'new' 
     ? (activeBike.pricing?.new?.deposit || 1000) 
     : (activeBike.pricing?.used?.deposit || 650);
+
+  // Handle Delivery Apps Toggle
+  const toggleDeliveryApp = (appName: string) => {
+    setSelectedApps(prev => 
+      prev.includes(appName) 
+        ? prev.filter(a => a !== appName) 
+        : [...prev, appName]
+    );
+  };
+
+  // Handle Document File Upload & Compression
+  const handleFileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    docKey: keyof ApplicationDocuments
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingDocKey(docKey as string);
+    try {
+      const compressedDataUrl = await compressImageFile(file, {
+        maxWidth: 1200,
+        maxHeight: 1200,
+        quality: 0.85,
+        mimeType: 'image/jpeg'
+      });
+
+      setUploadedDocs(prev => ({
+        ...prev,
+        [docKey]: compressedDataUrl,
+        // Also map legacy aliases
+        ...(docKey === 'driversLicenseFront' ? { driversLicense: compressedDataUrl } : {}),
+        ...(docKey === 'asylumDocument' ? { workPermit: compressedDataUrl, workPermitOrVisa: compressedDataUrl } : {}),
+        ...(docKey === 'idDocumentFront' ? { saIdFront: compressedDataUrl } : {})
+      }));
+
+      // Auto-tick verification checklist when file is provided
+      if (docKey === 'idDocumentFront' || docKey === 'passport' || docKey === 'asylumDocument') {
+        setIdVerified(true);
+      }
+      if (docKey === 'driversLicenseFront') {
+        setLicenseVerified(true);
+      }
+      if (docKey === 'trafficRegisterCertificate') {
+        setTrnVerified(true);
+      }
+      if (docKey === 'proofOfResidence') {
+        setProofVerified(true);
+      }
+    } catch (err: any) {
+      console.error('File upload error:', err);
+      alert(err?.message || 'Error processing document image. Please try another file.');
+    } finally {
+      setUploadingDocKey(null);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const removeDocument = (docKey: keyof ApplicationDocuments) => {
+    setUploadedDocs(prev => {
+      const next = { ...prev };
+      delete next[docKey];
+      return next;
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,7 +229,7 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
       return;
     }
     if (!idOrPassportNumber.trim()) {
-      setErrorMsg('Please enter ID or Passport number');
+      setErrorMsg('Please enter ID or Passport / Asylum number');
       return;
     }
 
@@ -108,6 +237,13 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
     try {
       const walkinRef = `DR-WLK-${Math.floor(1000 + Math.random() * 9000)}`;
       const nowIso = new Date().toISOString();
+
+      // Estimate earnings number from bracket
+      let approxEarnings = 3500;
+      if (weeklyEarningsBracket.includes('1000')) approxEarnings = 1800;
+      if (weeklyEarningsBracket.includes('2000')) approxEarnings = 2800;
+      if (weeklyEarningsBracket.includes('3500')) approxEarnings = 4200;
+      if (weeklyEarningsBracket.includes('5000')) approxEarnings = 5500;
 
       const newApp: RiderApplication = {
         id: `walkin-${Date.now()}`,
@@ -124,23 +260,39 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
         fullName: fullName.trim(),
         phone: phone.trim(),
         whatsappNumber: (sameAsPhone ? phone : whatsappNumber).trim() || phone.trim(),
-        email: email.trim() || 'walkin@dynamicrental.co.za',
+        email: email.trim() || `${fullName.trim().toLowerCase().replace(/\s+/g, '.')}@rider.dynamicrental.co.za`,
         citizenship,
         idOrPassportNumber: idOrPassportNumber.trim(),
         nationalityCountry: citizenship !== 'south_african' ? nationalityCountry : undefined,
-        address: address.trim() || 'Showroom Walk-in',
+        address: address.trim() || 'Walk-in Intake',
         suburb: suburb.trim() || 'Randburg',
         city: city.trim() || 'Johannesburg',
-        primaryPlatform,
+        province: province.trim() || 'Gauteng',
+        alternativeContactName: altContactName.trim() || undefined,
+        alternativeContactPhone: altContactPhone.trim() || undefined,
+        primaryPlatform: selectedApps[0] || 'Checkers Sixty60',
+        deliveryApps: selectedApps.length > 0 ? selectedApps : ['Checkers Sixty60'],
         deliveryExperience,
-        approxWeeklyEarnings: Number(approxWeeklyEarnings) || 3500,
-        documents: {},
+        approxWeeklyEarnings: approxEarnings,
+        referredBy: referredBy.trim() || undefined,
+        creditScore: creditScore.trim() || '650',
+        documents: {
+          ...uploadedDocs,
+          idDocumentFront: uploadedDocs.idDocumentFront || (citizenship === 'south_african' ? uploadedDocs.idDocumentFront : undefined),
+          passport: uploadedDocs.passport,
+          asylumDocument: uploadedDocs.asylumDocument,
+          workPermit: uploadedDocs.asylumDocument || uploadedDocs.workPermit,
+          driversLicense: uploadedDocs.driversLicenseFront || uploadedDocs.driversLicense,
+          driversLicenseFront: uploadedDocs.driversLicenseFront,
+          trafficRegisterCertificate: uploadedDocs.trafficRegisterCertificate,
+          proofOfResidence: uploadedDocs.proofOfResidence,
+        },
         verification: {
           idVerified,
           licenseVerified,
           workPermitVerified: citizenship !== 'south_african',
           trafficRegisterVerified: trnVerified,
-          proofVerified: true,
+          proofVerified,
           notes: adminNotes,
         },
         depositAcknowledged: true,
@@ -152,7 +304,7 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
             timestamp: nowIso,
             status: initialStatus,
             title: 'Walk-in Intake Registered',
-            description: `Driver visited Randburg showroom. Selected ${activeBike.name} (${bikeCondition.toUpperCase()}) at R${weeklyRate}/wk.`,
+            description: `Driver registered at showroom with verified documents. Assigned ${activeBike.name} (${bikeCondition.toUpperCase()}) at R${weeklyRate}/wk.`,
           },
         ],
       };
@@ -160,132 +312,178 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
       await onSubmit(newApp);
       onClose();
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to save walk-in applicant.');
+      console.error('Submission failed:', err);
+      setErrorMsg(err?.message || 'Failed to save walk-in applicant. Please check all fields.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto" id="walkin-modal">
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-6">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white border-b border-slate-800">
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto" id="walkin-applicant-modal-backdrop">
+      <div 
+        className="bg-white rounded-3xl border border-slate-300 w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto"
+        id="walkin-applicant-modal-content"
+      >
+        {/* Modal Header */}
+        <div className="p-5 sm:p-6 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold border border-cyan-500/30">
+            <div className="w-10 h-10 rounded-2xl bg-cyan-500 text-slate-950 flex items-center justify-center font-black">
               <User className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-black tracking-tight">Showroom Walk-in Intake</h3>
-              <p className="text-xs text-slate-400">Log an in-person rider application directly into the system</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-black tracking-tight">ADD NEW CUSTOMER</h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-cyan-400 text-slate-950">
+                  WALK-IN INTAKE
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Register on-site delivery rider with email, document uploads, and contract specs
+              </p>
             </div>
           </div>
+
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors"
+            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[78vh] overflow-y-auto">
+        {/* Modal Form Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
           {errorMsg && (
-            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-600" />
               <span>{errorMsg}</span>
             </div>
           )}
 
-          {/* Section 1: Personal Details */}
-          <div>
-            <h4 className="text-xs font-black tracking-wider uppercase text-slate-500 mb-3 flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-cyan-600" />
-              <span>1. Rider Personal Details</span>
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Full Legal Name <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Sipho Ndlovu or Aaron Mutsvanga"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 text-sm font-medium text-slate-900 placeholder:text-slate-400 outline-hidden"
-                />
-              </div>
+          {/* ------------------------------------------------------------- */}
+          {/* SECTION 1: CUSTOMER PERSONAL & CONTACT INFORMATION */}
+          {/* ------------------------------------------------------------- */}
+          <div className="bg-slate-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-2.5">
+              <User className="w-4 h-4 text-cyan-600" />
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                1. Customer & Contact Details
+              </h3>
+            </div>
 
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {/* Full Name */}
+              <div className="sm:col-span-2 lg:col-span-1">
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Phone / Mobile <span className="text-rose-500">*</span>
+                  Full Name <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="tel"
-                  required
-                  placeholder="e.g. 083 123 4567"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 text-sm font-medium text-slate-900 placeholder:text-slate-400 outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  WhatsApp Number
-                </label>
-                <input
-                  type="tel"
-                  placeholder="e.g. 083 123 4567"
-                  value={sameAsPhone ? phone : whatsappNumber}
-                  disabled={sameAsPhone}
-                  onChange={(e) => setWhatsappNumber(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium outline-hidden ${
-                    sameAsPhone ? 'bg-slate-100 text-slate-500' : 'focus:border-cyan-500 text-slate-900'
-                  }`}
-                />
-                <label className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-600 font-semibold cursor-pointer">
+                <div className="relative">
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   <input
-                    type="checkbox"
-                    checked={sameAsPhone}
-                    onChange={(e) => setSameAsPhone(e.target.checked)}
-                    className="rounded text-cyan-600 focus:ring-cyan-500"
+                    type="text"
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="e.g. Tendai Moyo / Sipho Ndlovu"
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
                   />
-                  <span>Same as phone number</span>
-                </label>
+                </div>
               </div>
 
+              {/* Phone Number */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Citizenship Status <span className="text-rose-500">*</span>
+                  Phone Number <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="tel"
+                    required
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="079 098 8764"
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              {/* Email Address (Requested Specific Feature) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Email Address <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="driver.name@gmail.com"
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              {/* WhatsApp Number & Toggle */}
+              <div className="sm:col-span-2 lg:col-span-1">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700">WhatsApp Number</label>
+                  <label className="text-[11px] text-slate-500 flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={sameAsPhone}
+                      onChange={(e) => setSameAsPhone(e.target.checked)}
+                      className="rounded text-cyan-600"
+                    />
+                    <span>Same as phone</span>
+                  </label>
+                </div>
+                {!sameAsPhone && (
+                  <input
+                    type="tel"
+                    value={whatsappNumber}
+                    onChange={(e) => setWhatsappNumber(e.target.value)}
+                    placeholder="079 098 8764"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                  />
+                )}
+              </div>
+
+              {/* Citizenship Type */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Citizenship Status
                 </label>
                 <select
                   value={citizenship}
                   onChange={(e) => setCitizenship(e.target.value as CitizenshipType)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 text-sm font-medium text-slate-900 bg-white outline-hidden"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
                 >
-                  <option value="south_african">South African Citizen (SA ID)</option>
-                  <option value="foreign_national">Foreign National (Passport & Asylum/Work Permit)</option>
+                  <option value="south_african">🇿🇦 South African Citizen</option>
+                  <option value="foreign_national">🌍 Foreign National (Passport / Asylum)</option>
                 </select>
               </div>
 
+              {/* ID / Passport / Asylum Number */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  {citizenship === 'south_african' ? 'SA ID Number' : 'Passport / Asylum Permit Number'} <span className="text-rose-500">*</span>
+                  {citizenship === 'south_african' ? 'SA ID Number' : 'Passport / Asylum Number'} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder={citizenship === 'south_african' ? '13-digit SA ID' : 'Passport / Permit No.'}
                   value={idOrPassportNumber}
                   onChange={(e) => setIdOrPassportNumber(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200 text-sm font-medium text-slate-900 placeholder:text-slate-400 outline-hidden"
+                  placeholder={citizenship === 'south_african' ? '9208145028087' : '063635218764522'}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
                 />
               </div>
 
+              {/* Country of Origin (if foreign) */}
               {citizenship !== 'south_african' && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -295,52 +493,233 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
                     type="text"
                     value={nationalityCountry}
                     onChange={(e) => setNationalityCountry(e.target.value)}
-                    placeholder="e.g. Zimbabwe, Malawi, Mozambique"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-cyan-500 text-sm font-medium text-slate-900 outline-hidden"
+                    placeholder="e.g. Zimbabwe / Malawi / DRC"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
                   />
                 </div>
               )}
+            </div>
+          </div>
 
-              <div className={citizenship !== 'south_african' ? '' : 'sm:col-span-2'}>
+          {/* ------------------------------------------------------------- */}
+          {/* SECTION 2: ADDRESS & ALTERNATIVE CONTACT INFORMATION */}
+          {/* ------------------------------------------------------------- */}
+          <div className="bg-slate-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-2.5">
+              <MapPin className="w-4 h-4 text-cyan-600" />
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                2. Address & Alternative Contact
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {/* Physical Address */}
+              <div className="sm:col-span-2">
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Residential Suburb / Area (JHB)
+                  Physical Address <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
+                  required
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="000 Road Street, Apartment/House"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              {/* Suburb */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Suburb <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
                   value={suburb}
                   onChange={(e) => setSuburb(e.target.value)}
-                  placeholder="e.g. Randburg, Ferndale, Windsor, Soweto"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-cyan-500 text-sm font-medium text-slate-900 outline-hidden"
+                  placeholder="Suburb (e.g. Randburg)"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              {/* City */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  City <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="City (e.g. Johannesburg)"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              {/* Province Dropdown (from screenshot) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Province <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={province}
+                  onChange={(e) => setProvince(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                >
+                  {SA_PROVINCES.map((prov) => (
+                    <option key={prov} value={prov}>{prov}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Alternative Contact Name */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Alternative Contact Name
+                </label>
+                <input
+                  type="text"
+                  value={altContactName}
+                  onChange={(e) => setAltContactName(e.target.value)}
+                  placeholder="Next of Kin / Spouse Name"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              {/* Alternative Contact Number */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Alternative Contact Number
+                </label>
+                <input
+                  type="tel"
+                  value={altContactPhone}
+                  onChange={(e) => setAltContactPhone(e.target.value)}
+                  placeholder="079 098 8764"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
                 />
               </div>
             </div>
           </div>
 
-          {/* Section 2: Courier Platform & Bike Selection */}
-          <div className="pt-4 border-t border-slate-200">
-            <h4 className="text-xs font-black tracking-wider uppercase text-slate-500 mb-3 flex items-center gap-1.5">
-              <BikeIcon className="w-3.5 h-3.5 text-cyan-600" />
-              <span>2. Delivery Work & Bike Model</span>
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {/* ------------------------------------------------------------- */}
+          {/* SECTION 3: DELIVERY PLATFORMS & EXPERIENCE */}
+          {/* ------------------------------------------------------------- */}
+          <div className="bg-slate-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-2.5">
+              <Briefcase className="w-4 h-4 text-cyan-600" />
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                3. Delivery Apps & Income
+              </h3>
+            </div>
+
+            {/* Delivery Apps selector (Styled badges from screenshot) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-2">
+                Active Delivery Apps (Select all that apply):
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {DELIVERY_PLATFORMS.map((app) => {
+                  const isSelected = selectedApps.includes(app.id);
+                  return (
+                    <button
+                      key={app.id}
+                      type="button"
+                      onClick={() => toggleDeliveryApp(app.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                        isSelected 
+                          ? `${app.color} ring-2 ring-cyan-500 shadow-xs font-black`
+                          : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      {isSelected ? <Check className="w-3.5 h-3.5 text-cyan-600" /> : <div className="w-2 h-2 rounded-full bg-slate-300" />}
+                      <span>{app.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 pt-2">
+              {/* Experience */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Primary Delivery Platform
+                  Delivery Experience
                 </label>
                 <select
-                  value={primaryPlatform}
-                  onChange={(e) => setPrimaryPlatform(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-cyan-500 text-sm font-medium text-slate-900 bg-white outline-hidden"
+                  value={deliveryExperience}
+                  onChange={(e) => setDeliveryExperience(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
                 >
-                  <option value="Checkers Sixty60">Checkers Sixty60</option>
-                  <option value="Uber Eats">Uber Eats</option>
-                  <option value="Takealot">Takealot</option>
-                  <option value="Mr D Food">Mr D Food</option>
-                  <option value="Bolt Food">Bolt Food</option>
-                  <option value="Private Courier">Private Courier / Independent</option>
+                  <option value="Starting Fresh">Starting Fresh / New Rider</option>
+                  <option value="< 6 months">&lt; 6 months</option>
+                  <option value="1-2 years">1-2 years</option>
+                  <option value="3+ years">3+ years</option>
                 </select>
               </div>
 
+              {/* Weekly Earnings */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Weekly Earnings
+                </label>
+                <select
+                  value={weeklyEarningsBracket}
+                  onChange={(e) => setWeeklyEarningsBracket(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="R1000-R2000">R1000 - R2000 / week</option>
+                  <option value="R2000-R3500">R2000 - R3500 / week</option>
+                  <option value="R3500-R5000">R3500 - R5000 / week</option>
+                  <option value="R5000+">R5000+ / week</option>
+                </select>
+              </div>
+
+              {/* Referred By */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Referred By
+                </label>
+                <input
+                  type="text"
+                  value={referredBy}
+                  onChange={(e) => setReferredBy(e.target.value)}
+                  placeholder="Referral Rider / Agent"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              {/* Credit Score */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Credit Score
+                </label>
+                <input
+                  type="text"
+                  value={creditScore}
+                  onChange={(e) => setCreditScore(e.target.value)}
+                  placeholder="650"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ------------------------------------------------------------- */}
+          {/* SECTION 4: MOTORBIKE LEASE PACKAGE */}
+          {/* ------------------------------------------------------------- */}
+          <div className="bg-slate-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-2.5">
+              <BikeIcon className="w-4 h-4 text-cyan-600" />
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                4. Select Motorbike Package
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Bike Model Select */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Motorbike Model
@@ -348,19 +727,20 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
                 <select
                   value={selectedBikeId}
                   onChange={(e) => setSelectedBikeId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-cyan-500 text-sm font-medium text-slate-900 bg-white outline-hidden font-bold"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
                 >
                   {bikes.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.name} ({b.brand})
+                      {b.name}
                     </option>
                   ))}
                 </select>
               </div>
 
+              {/* Condition */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Condition & Pricing Tier
+                  Bike Condition
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -369,14 +749,13 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
                       setBikeCondition('new');
                       setTermMonths(18);
                     }}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold border text-center transition-all ${
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
                       bikeCondition === 'new'
-                        ? 'border-cyan-500 bg-cyan-50 text-cyan-900 ring-2 ring-cyan-400'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
-                    <div>Brand New</div>
-                    <div className="text-[11px] font-black text-cyan-700">R750/wk • R1k Dep</div>
+                    Brand New
                   </button>
                   <button
                     type="button"
@@ -384,157 +763,521 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
                       setBikeCondition('used');
                       setTermMonths(20);
                     }}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold border text-center transition-all ${
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
                       bikeCondition === 'used'
-                        ? 'border-cyan-500 bg-cyan-50 text-cyan-900 ring-2 ring-cyan-400'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
-                    <div>Demo / Refurbished</div>
-                    <div className="text-[11px] font-black text-slate-600">R650/wk • R650 Dep</div>
+                    Quality Used
                   </button>
                 </div>
               </div>
 
+              {/* Term Duration */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Contract Term Length
+                  Rent-to-Own Term
                 </label>
                 <select
                   value={termMonths}
                   onChange={(e) => setTermMonths(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-cyan-500 text-sm font-medium text-slate-900 bg-white outline-hidden"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
                 >
-                  <option value={12}>12 Months (Fast-Track Ownership)</option>
-                  <option value={15}>15 Months</option>
-                  <option value={18}>18 Months (Standard Rent-to-Own)</option>
-                  <option value={20}>20 Months</option>
-                  <option value={24}>24 Months</option>
+                  {bikeCondition === 'new' ? (
+                    <>
+                      <option value={15}>15 Months</option>
+                      <option value={18}>18 Months (Standard)</option>
+                    </>
+                  ) : (
+                    <option value={20}>20 Months (Standard)</option>
+                  )}
                 </select>
               </div>
             </div>
 
-            {/* Pricing Summary Box */}
-            <div className="mt-3.5 p-3.5 rounded-2xl bg-slate-900 text-white flex items-center justify-between">
+            {/* Calculated Pricing Summary */}
+            <div className="grid grid-cols-3 gap-2 bg-slate-900 text-white p-3.5 rounded-xl text-center">
               <div>
-                <div className="text-xs text-slate-400 font-semibold">Calculated Contract Rates:</div>
-                <div className="text-sm font-black text-white">{activeBike.name} • {bikeCondition === 'new' ? 'New' : 'Used'}</div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Weekly Rent</span>
+                <span className="text-sm sm:text-base font-black text-cyan-400 font-mono">R{weeklyRate}/wk</span>
               </div>
-              <div className="text-right">
-                <div className="text-base font-black text-cyan-400">R{weeklyRate} <span className="text-xs text-slate-300 font-normal">/ week</span></div>
-                <div className="text-xs text-amber-300 font-bold">Deposit: R{depositAmount}</div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Deposit</span>
+                <span className="text-sm sm:text-base font-black text-amber-400 font-mono">R{depositAmount}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">Term</span>
+                <span className="text-sm sm:text-base font-black text-white font-mono">{termMonths} Mos</span>
               </div>
             </div>
           </div>
 
-          {/* Section 3: Status & On-Site Verification */}
-          <div className="pt-4 border-t border-slate-200">
-            <h4 className="text-xs font-black tracking-wider uppercase text-slate-500 mb-3 flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-cyan-600" />
-              <span>3. Intake Stage & On-Site Checks</span>
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {/* ------------------------------------------------------------- */}
+          {/* SECTION 5: DOCUMENT UPLOAD & CAPTURE (Requested Feature) */}
+          {/* ------------------------------------------------------------- */}
+          <div className="bg-slate-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-cyan-600" />
+                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                  5. Upload & Capture Documents
+                </h3>
+              </div>
+              <span className="text-[11px] text-slate-500">
+                Snap photo from mobile or upload from computer
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {/* Document 1: ID / Passport */}
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 flex flex-col justify-between gap-3 shadow-xs">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-slate-900">
+                      {citizenship === 'south_african' ? 'SA ID Document (Front)' : 'Passport Bio Page'}
+                    </span>
+                    {uploadedDocs.idDocumentFront || uploadedDocs.passport ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Uploaded
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-rose-500 font-bold">Required</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Smart ID card, green ID book, or passport bio page.
+                  </p>
+
+                  {/* Thumbnail */}
+                  {(uploadedDocs.idDocumentFront || uploadedDocs.passport) && (
+                    <div className="mt-2 h-24 bg-slate-950 rounded-lg overflow-hidden relative group">
+                      <img
+                        src={uploadedDocs.idDocumentFront || uploadedDocs.passport}
+                        alt="ID Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeDocument(citizenship === 'south_african' ? 'idDocumentFront' : 'passport')}
+                        className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-md shadow-xs hover:bg-rose-700"
+                        title="Remove"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <input
+                    ref={fileInputRefs.idDocumentFront}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e, citizenship === 'south_african' ? 'idDocumentFront' : 'passport')}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    disabled={uploadingDocKey === 'idDocumentFront' || uploadingDocKey === 'passport'}
+                    onClick={() => fileInputRefs.idDocumentFront.current?.click()}
+                    className="w-full py-2 rounded-xl bg-slate-100 hover:bg-cyan-50 hover:text-cyan-900 text-slate-700 font-bold text-xs border border-slate-200 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    {uploadingDocKey === 'idDocumentFront' || uploadingDocKey === 'passport' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Camera className="w-3.5 h-3.5 text-cyan-600" />
+                    )}
+                    <span>{uploadedDocs.idDocumentFront || uploadedDocs.passport ? 'Replace ID Photo' : 'Upload ID / Passport'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Document 2: Driver's License */}
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 flex flex-col justify-between gap-3 shadow-xs">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-slate-900">
+                      Motorcycle Driver's License
+                    </span>
+                    {uploadedDocs.driversLicenseFront ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Uploaded
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-amber-600 font-bold">Code A/A1</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Valid Code A or A1 motorcycle license card.
+                  </p>
+
+                  {/* Thumbnail */}
+                  {uploadedDocs.driversLicenseFront && (
+                    <div className="mt-2 h-24 bg-slate-950 rounded-lg overflow-hidden relative group">
+                      <img
+                        src={uploadedDocs.driversLicenseFront}
+                        alt="License Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeDocument('driversLicenseFront')}
+                        className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-md shadow-xs hover:bg-rose-700"
+                        title="Remove"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <input
+                    ref={fileInputRefs.driversLicenseFront}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e, 'driversLicenseFront')}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    disabled={uploadingDocKey === 'driversLicenseFront'}
+                    onClick={() => fileInputRefs.driversLicenseFront.current?.click()}
+                    className="w-full py-2 rounded-xl bg-slate-100 hover:bg-cyan-50 hover:text-cyan-900 text-slate-700 font-bold text-xs border border-slate-200 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    {uploadingDocKey === 'driversLicenseFront' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Camera className="w-3.5 h-3.5 text-cyan-600" />
+                    )}
+                    <span>{uploadedDocs.driversLicenseFront ? 'Replace License' : 'Upload License'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Document 3: Asylum Seeker / Work Permit Document */}
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 flex flex-col justify-between gap-3 shadow-xs">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-slate-900">
+                      Asylum / Work Permit
+                    </span>
+                    {uploadedDocs.asylumDocument ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Uploaded
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400">Foreign National</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Home Affairs valid Asylum seeker or Work Visa paper.
+                  </p>
+
+                  {/* Thumbnail */}
+                  {uploadedDocs.asylumDocument && (
+                    <div className="mt-2 h-24 bg-slate-950 rounded-lg overflow-hidden relative group">
+                      <img
+                        src={uploadedDocs.asylumDocument}
+                        alt="Asylum Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeDocument('asylumDocument')}
+                        className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-md shadow-xs hover:bg-rose-700"
+                        title="Remove"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <input
+                    ref={fileInputRefs.asylumDocument}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e, 'asylumDocument')}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    disabled={uploadingDocKey === 'asylumDocument'}
+                    onClick={() => fileInputRefs.asylumDocument.current?.click()}
+                    className="w-full py-2 rounded-xl bg-slate-100 hover:bg-cyan-50 hover:text-cyan-900 text-slate-700 font-bold text-xs border border-slate-200 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    {uploadingDocKey === 'asylumDocument' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Camera className="w-3.5 h-3.5 text-cyan-600" />
+                    )}
+                    <span>{uploadedDocs.asylumDocument ? 'Replace Asylum/Permit' : 'Upload Asylum / Permit'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Document 4: Traffic Register Certificate (TRN) */}
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 flex flex-col justify-between gap-3 shadow-xs">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-slate-900">
+                      Traffic Register (TRN)
+                    </span>
+                    {uploadedDocs.trafficRegisterCertificate ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Uploaded
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-amber-700 font-bold">Mandatory for TRN</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Official certificate from DLTC / Licensing Department.
+                  </p>
+
+                  {/* Thumbnail */}
+                  {uploadedDocs.trafficRegisterCertificate && (
+                    <div className="mt-2 h-24 bg-slate-950 rounded-lg overflow-hidden relative group">
+                      <img
+                        src={uploadedDocs.trafficRegisterCertificate}
+                        alt="TRN Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeDocument('trafficRegisterCertificate')}
+                        className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-md shadow-xs hover:bg-rose-700"
+                        title="Remove"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <input
+                    ref={fileInputRefs.trafficRegisterCertificate}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e, 'trafficRegisterCertificate')}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    disabled={uploadingDocKey === 'trafficRegisterCertificate'}
+                    onClick={() => fileInputRefs.trafficRegisterCertificate.current?.click()}
+                    className="w-full py-2 rounded-xl bg-slate-100 hover:bg-cyan-50 hover:text-cyan-900 text-slate-700 font-bold text-xs border border-slate-200 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    {uploadingDocKey === 'trafficRegisterCertificate' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Camera className="w-3.5 h-3.5 text-cyan-600" />
+                    )}
+                    <span>{uploadedDocs.trafficRegisterCertificate ? 'Replace TRN' : 'Upload TRN Certificate'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Document 5: Proof of Residence */}
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 flex flex-col justify-between gap-3 shadow-xs">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-slate-900">
+                      Proof of Residence
+                    </span>
+                    {uploadedDocs.proofOfResidence ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Uploaded
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400">Utility / Lease</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Recent utility bill, rental affidavit, or store statement.
+                  </p>
+
+                  {/* Thumbnail */}
+                  {uploadedDocs.proofOfResidence && (
+                    <div className="mt-2 h-24 bg-slate-950 rounded-lg overflow-hidden relative group">
+                      <img
+                        src={uploadedDocs.proofOfResidence}
+                        alt="Proof Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeDocument('proofOfResidence')}
+                        className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-md shadow-xs hover:bg-rose-700"
+                        title="Remove"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <input
+                    ref={fileInputRefs.proofOfResidence}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e, 'proofOfResidence')}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    disabled={uploadingDocKey === 'proofOfResidence'}
+                    onClick={() => fileInputRefs.proofOfResidence.current?.click()}
+                    className="w-full py-2 rounded-xl bg-slate-100 hover:bg-cyan-50 hover:text-cyan-900 text-slate-700 font-bold text-xs border border-slate-200 flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    {uploadingDocKey === 'proofOfResidence' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Camera className="w-3.5 h-3.5 text-cyan-600" />
+                    )}
+                    <span>{uploadedDocs.proofOfResidence ? 'Replace Proof' : 'Upload Proof of Address'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ------------------------------------------------------------- */}
+          {/* SECTION 6: ON-SITE STAFF CHECKLIST & STATUS */}
+          {/* ------------------------------------------------------------- */}
+          <div className="bg-slate-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-2.5">
+              <ShieldCheck className="w-4 h-4 text-cyan-600" />
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                6. Staff Underwriting & Initial Stage
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+              <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-xl bg-white border border-slate-200">
+                <input
+                  type="checkbox"
+                  checked={idVerified}
+                  onChange={(e) => setIdVerified(e.target.checked)}
+                  className="rounded text-cyan-600"
+                />
+                <span className="font-semibold text-slate-800">1. ID Checked</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-xl bg-white border border-slate-200">
+                <input
+                  type="checkbox"
+                  checked={licenseVerified}
+                  onChange={(e) => setLicenseVerified(e.target.checked)}
+                  className="rounded text-cyan-600"
+                />
+                <span className="font-semibold text-slate-800">2. License Checked</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-xl bg-white border border-slate-200">
+                <input
+                  type="checkbox"
+                  checked={trnVerified}
+                  onChange={(e) => setTrnVerified(e.target.checked)}
+                  className="rounded text-cyan-600"
+                />
+                <span className="font-semibold text-slate-800">3. TRN Validated</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-xl bg-white border border-slate-200">
+                <input
+                  type="checkbox"
+                  checked={proofVerified}
+                  onChange={(e) => setProofVerified(e.target.checked)}
+                  className="rounded text-cyan-600"
+                />
+                <span className="font-semibold text-slate-800">4. Proof Checked</span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Initial Pipeline Stage
+                  Initial Pipeline Status
                 </label>
                 <select
                   value={initialStatus}
                   onChange={(e) => setInitialStatus(e.target.value as ApplicationStatus)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-cyan-500 text-sm font-bold text-slate-900 bg-white outline-hidden"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
                 >
-                  <option value="pending_review">Pending Review (Awaiting Full Vetting)</option>
-                  <option value="approved_for_collection">Approved for Collection (Ready to Handover)</option>
-                  <option value="needs_more_info">Needs Info / Missing TRN Certificate</option>
+                  <option value="pending_review">Pending Review</option>
+                  <option value="needs_more_info">Needs Info / Missing TRN</option>
+                  <option value="approved_for_collection">Approved for Collection</option>
+                  <option value="contract_signed">Contract Signed / Delivered</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Assigned Bike Number / VIN (Optional)
+                  Assign Motorbike Plate / Reg (Optional)
                 </label>
                 <input
                   type="text"
                   value={assignedPlate}
                   onChange={(e) => setAssignedPlate(e.target.value)}
-                  placeholder="e.g. Boxer White #04 / GP-77-BX-JHB"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-cyan-500 text-sm font-medium text-slate-900 outline-hidden"
+                  placeholder="e.g. KC 48 NM GP"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
                 />
               </div>
 
               <div className="sm:col-span-2">
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Receptionist / Staff Notes
+                  Internal Staff Notes
                 </label>
                 <textarea
                   rows={2}
                   value={adminNotes}
                   onChange={(e) => setAdminNotes(e.target.value)}
-                  placeholder="Notes from in-person conversation, deposit payment status, documents shown..."
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 focus:border-cyan-500 text-xs font-medium text-slate-900 outline-hidden"
+                  placeholder="Notes regarding deposit payment, physical inspection, delivery app schedule..."
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
                 />
-              </div>
-
-              <div className="sm:col-span-2 flex flex-wrap gap-4 pt-1">
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={idVerified}
-                    onChange={(e) => setIdVerified(e.target.checked)}
-                    className="rounded text-cyan-600 focus:ring-cyan-500"
-                  />
-                  <span>Original ID / Passport Inspected</span>
-                </label>
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={licenseVerified}
-                    onChange={(e) => setLicenseVerified(e.target.checked)}
-                    className="rounded text-cyan-600 focus:ring-cyan-500"
-                  />
-                  <span>Motorcycle License Checked</span>
-                </label>
-                {citizenship !== 'south_african' && (
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={trnVerified}
-                      onChange={(e) => setTrnVerified(e.target.checked)}
-                      className="rounded text-cyan-600 focus:ring-cyan-500"
-                    />
-                    <span>TRN Certificate Checked</span>
-                  </label>
-                )}
               </div>
             </div>
           </div>
 
-          {/* Footer Actions */}
-          <div className="pt-5 border-t border-slate-200 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs shadow-md shadow-cyan-500/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                  <span>Registering...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Register Walk-in Driver</span>
-                </>
-              )}
-            </button>
+          {/* Modal Footer Bar */}
+          <div className="border-t border-slate-200 pt-4 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white sticky bottom-0">
+            <div className="text-xs text-slate-500">
+              Customer record will immediately synchronize with the Pipeline Board and cloud database.
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex-1 sm:flex-initial px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black text-xs transition-colors shadow-md flex items-center justify-center gap-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Adding Customer...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Add Customer</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </div>
