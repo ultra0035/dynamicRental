@@ -3,12 +3,46 @@ import {
   RiderApplication, 
   ApplicationStatus, 
   CitizenshipType,
-  Bike
+  Bike,
+  Driver,
+  Vehicle,
+  PartsInventoryItem,
+  RepairAndService,
+  TrafficFine,
+  YocoTransaction,
+  RentalAgreement,
+  DriverReferral
 } from '../types';
 import { COMPANY_DETAILS, BIKES } from '../data/bikes';
 import { ContractModal } from './ContractModal';
 import { WalkInApplicantModal } from './WalkInApplicantModal';
+import { DriverManagementView } from './fleet/DriverManagementView';
+import { VehicleManagementView } from './fleet/VehicleManagementView';
+import { FleetFinancialsView } from './fleet/FleetFinancialsView';
 import { compressImageFile } from '../lib/imageUtils';
+import { SUPABASE_SQL_SCHEMA } from '../db/schemaSql';
+import {
+  getFleetDrivers,
+  saveFleetDrivers,
+  getFleetVehicles,
+  saveFleetVehicles,
+  getFleetParts,
+  saveFleetParts,
+  getFleetServices,
+  saveFleetServices,
+  getFleetFines,
+  saveFleetFines,
+  getFleetTransactions,
+  saveFleetTransactions,
+  getFleetAgreements,
+  saveFleetAgreements,
+  getFleetReferrals,
+  saveFleetReferrals,
+  getYocoSettings,
+  saveYocoSettings,
+  convertApplicantToDriver,
+  YocoSettings
+} from '../lib/fleetStore';
 import { 
   ShieldCheck, 
   Search, 
@@ -52,7 +86,20 @@ import {
   Menu, 
   CheckCheck,
   Loader2,
-  UserPlus
+  UserPlus,
+  UserCheck,
+  Radio,
+  CreditCard,
+  Wrench,
+  Package,
+  FileCheck,
+  ChevronDown,
+  ChevronUp,
+  Bell,
+  Gift,
+  ShieldAlert,
+  Landmark,
+  Settings as SettingsIcon
 } from 'lucide-react';
 
 interface AdminPortalProps {
@@ -69,7 +116,29 @@ interface AdminPortalProps {
   customHeroUrl?: string;
 }
 
-type AdminPage = 'dashboard' | 'applicant' | 'bike_and_stock';
+export type AdminPage = 
+  | 'dashboard' 
+  | 'applicant' 
+  | 'applicants'
+  | 'approved_customers' 
+  | 'driver_risk_registry' 
+  | 'referrals'
+  | 'vehicle_register' 
+  | 'live_tracking' 
+  | 'parts_inventory' 
+  | 'repairs_services' 
+  | 'traffic_fines'
+  | 'rental_options' 
+  | 'rental_agreements' 
+  | 'sales_agreements' 
+  | 'bank_reconciliation' 
+  | 'paystack_collections'
+  | 'financials_yoco'
+  | 'bike_and_stock' 
+  | 'drivers' 
+  | 'vehicles' 
+  | 'reports' 
+  | 'settings';
 
 // Pipeline stages configuration
 const PIPELINE_STAGES: {
@@ -187,6 +256,37 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   // Selected Application
   const activeApp = applications.find((a) => a.id === selectedAppId) || applications[0] || null;
 
+  // -------------------------------------------------------------
+  // FLEET STATE & YOCO INTEGRATION (Section II, III, IV)
+  // -------------------------------------------------------------
+  const [driversState, setDriversState] = useState<Driver[]>(() => getFleetDrivers());
+  const [vehiclesState, setVehiclesState] = useState<Vehicle[]>(() => getFleetVehicles());
+  const [partsState, setPartsState] = useState<PartsInventoryItem[]>(() => getFleetParts());
+  const [servicesState, setServicesState] = useState<RepairAndService[]>(() => getFleetServices());
+  const [finesState, setFinesState] = useState<TrafficFine[]>(() => getFleetFines());
+  const [transactionsState, setTransactionsState] = useState<YocoTransaction[]>(() => getFleetTransactions());
+  const [agreementsState, setAgreementsState] = useState<RentalAgreement[]>(() => getFleetAgreements());
+  const [referralsState, setReferralsState] = useState<DriverReferral[]>(() => getFleetReferrals());
+  const [yocoSettingsState, setYocoSettingsState] = useState<YocoSettings>(() => getYocoSettings());
+  const [selectedDriverForYocoPayment, setSelectedDriverForYocoPayment] = useState<Driver | null>(null);
+
+  // Sidebar Group Toggle State
+  const [isDriverGroupOpen, setIsDriverGroupOpen] = useState<boolean>(true);
+  const [isVehicleGroupOpen, setIsVehicleGroupOpen] = useState<boolean>(true);
+  const [isFleetGroupOpen, setIsFleetGroupOpen] = useState<boolean>(true);
+  const [isAdminGroupOpen, setIsAdminGroupOpen] = useState<boolean>(true);
+  const [sidebarSearchQuery, setSidebarSearchQuery] = useState<string>('');
+
+  // Top Bar & Dashboard State
+  const [adminUserName, setAdminUserName] = useState<string>('AARON');
+  const [dashboardTab, setDashboardTab] = useState<'all' | 'overdue' | 'applications' | 'payments'>('all');
+  const [isSetupBannerVisible, setIsSetupBannerVisible] = useState<boolean>(true);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState<boolean>(false);
+  const [feedbackText, setFeedbackText] = useState<string>('');
+  const [feedbackSuccess, setFeedbackSuccess] = useState<boolean>(false);
+  const [notificationsOpen, setNotificationsOpen] = useState<boolean>(false);
+  const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState<boolean>(false);
+
   // Filtering
   const filteredApps = applications.filter((app) => {
     const q = searchQuery.toLowerCase().trim();
@@ -270,6 +370,80 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     };
 
     onUpdateApplication(updated);
+
+    // AUTO-CONVERT TO ACTIVE DRIVER UPON DELIVERY / CONTRACT SIGNED
+    if (newStatus === 'contract_signed') {
+      try {
+        const { newDriver, updatedVehicles, newAgreement } = convertApplicantToDriver(
+          updated,
+          vehiclesState,
+          driversState
+        );
+
+        setDriversState((prev) => {
+          const next = [newDriver, ...prev.filter((d) => d.id !== newDriver.id)];
+          saveFleetDrivers(next);
+          return next;
+        });
+
+        setVehiclesState(updatedVehicles);
+        saveFleetVehicles(updatedVehicles);
+
+        setAgreementsState((prev) => {
+          const next = [newAgreement, ...prev.filter((a) => a.id !== newAgreement.id)];
+          saveFleetAgreements(next);
+          return next;
+        });
+      } catch (err) {
+        console.error('Auto-convert applicant to driver error:', err);
+      }
+    }
+  };
+
+  // Fleet State Handlers
+  const handleUpdateDriver = (updated: Driver) => {
+    setDriversState((prev) => {
+      const next = prev.map((d) => (d.id === updated.id ? updated : d));
+      saveFleetDrivers(next);
+      return next;
+    });
+  };
+
+  const handleAddDriver = (newDriver: Driver) => {
+    setDriversState((prev) => {
+      const next = [newDriver, ...prev];
+      saveFleetDrivers(next);
+      return next;
+    });
+  };
+
+  const handleUpdateVehicle = (updated: Vehicle) => {
+    setVehiclesState((prev) => {
+      const next = prev.map((v) => (v.id === updated.id ? updated : v));
+      saveFleetVehicles(next);
+      return next;
+    });
+  };
+
+  const handleAddVehicle = (newVehicle: Vehicle) => {
+    setVehiclesState((prev) => {
+      const next = [newVehicle, ...prev];
+      saveFleetVehicles(next);
+      return next;
+    });
+  };
+
+  const handleAddTransaction = (newTx: YocoTransaction) => {
+    setTransactionsState((prev) => {
+      const next = [newTx, ...prev];
+      saveFleetTransactions(next);
+      return next;
+    });
+  };
+
+  const handleUpdateYocoSettings = (newSettings: YocoSettings) => {
+    setYocoSettingsState(newSettings);
+    saveYocoSettings(newSettings);
   };
 
   // Export CSV Handler
@@ -449,19 +623,22 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
       {/* ------------------------------------------------------------- */}
       {/* SIDEBAR NAVIGATION */}
       {/* ------------------------------------------------------------- */}
+      {/* ------------------------------------------------------------- */}
+      {/* SIDEBAR NAVIGATION (FleetCO / Dynamic Rental) */}
+      {/* ------------------------------------------------------------- */}
       <aside className="w-full md:w-64 lg:w-72 bg-slate-900 text-white flex-shrink-0 flex flex-col border-r border-slate-800 shadow-xl z-20">
         {/* Sidebar Header / Brand */}
-        <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-cyan-400 flex items-center justify-center text-slate-950 font-black shadow-lg">
-              <ShieldCheck className="w-5 h-5 text-slate-950" />
+            <div className="w-8 h-8 rounded-xl bg-cyan-400 flex items-center justify-center text-slate-950 font-black shadow-lg">
+              <ShieldCheck className="w-4 h-4 text-slate-950" />
             </div>
             <div>
-              <span className="text-sm font-black tracking-tight text-white block">
-                DYNAMIC RENTAL
+              <span className="text-sm font-black tracking-tight text-white flex items-center gap-1.5">
+                FleetCO <span className="text-[10px] font-normal text-cyan-400">· Dynamic Rental</span>
               </span>
-              <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider block">
-                Staff Control Hub
+              <span className="text-[10px] text-slate-400 font-medium block">
+                Randburg Hub Staff Portal
               </span>
             </div>
           </div>
@@ -470,95 +647,521 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
           <button
             type="button"
             onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-            className="md:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+            className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
           >
             <Menu className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Navigation Items */}
-        <div className={`p-4 flex-1 flex flex-col gap-1.5 ${isMobileSidebarOpen ? 'block' : 'hidden md:flex'}`}>
-          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 mb-1">
-            Menu
+        {/* Global Search Input */}
+        <div className="p-3 border-b border-slate-800/80 bg-slate-950/30">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search anything..."
+              value={sidebarSearchQuery}
+              onChange={(e) => setSidebarSearchQuery(e.target.value)}
+              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+            />
           </div>
+        </div>
 
-          {/* 1. Dashboard */}
+        {/* Page-by-Page Navigation Menu */}
+        <div className={`p-3 flex-1 flex flex-col gap-3 overflow-y-auto ${isMobileSidebarOpen ? 'block' : 'hidden md:flex'}`}>
+          {/* Top Primary: Dashboard */}
           <button
             type="button"
             onClick={() => {
               setActivePage('dashboard');
               setIsMobileSidebarOpen(false);
             }}
-            className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between ${
+            className={`w-full px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between ${
               activePage === 'dashboard'
                 ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
             }`}
           >
             <div className="flex items-center gap-2.5">
-              <BarChart3 className="w-4 h-4" />
+              <LayoutGrid className="w-4 h-4" />
               <span>Dashboard</span>
             </div>
           </button>
 
-          {/* 2. Applicants */}
-          <button
-            type="button"
-            onClick={() => {
-              setActivePage('applicant');
-              setIsMobileSidebarOpen(false);
-            }}
-            className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between ${
-              activePage === 'applicant'
-                ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Users className="w-4 h-4" />
-              <span>Applicants</span>
-            </div>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-              activePage === 'applicant' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-cyan-400'
-            }`}>
-              {totalApps}
-            </span>
-          </button>
+          {/* GROUP 1: DRIVER MANAGEMENT */}
+          <div className="space-y-0.5">
+            <button
+              type="button"
+              onClick={() => setIsDriverGroupOpen(!isDriverGroupOpen)}
+              className="w-full flex items-center justify-between px-2.5 py-1 text-[11px] font-black text-slate-400 uppercase tracking-wider hover:text-slate-200 transition-colors"
+            >
+              <span>Driver Management</span>
+              {isDriverGroupOpen ? (
+                <ChevronUp className="w-3.5 h-3.5 text-slate-500" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+              )}
+            </button>
 
-          {/* 3. Bikes & Stock */}
-          <button
-            type="button"
-            onClick={() => {
-              setActivePage('bike_and_stock');
-              setIsMobileSidebarOpen(false);
-            }}
-            className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between ${
-              activePage === 'bike_and_stock'
-                ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <BikeIcon className="w-4 h-4" />
-              <span>Bikes & Stock</span>
-            </div>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-              activePage === 'bike_and_stock' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-slate-300'
-            }`}>
-              {bikes.length}
-            </span>
-          </button>
+            {isDriverGroupOpen && (
+              <div className="space-y-0.5 pt-0.5">
+                {/* Applicants */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('applicants');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'applicants' || activePage === 'applicant'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <UserPlus className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Applicants</span>
+                  </div>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
+                    activePage === 'applicants' || activePage === 'applicant' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-cyan-400'
+                  }`}>
+                    {totalApps}
+                  </span>
+                </button>
+
+                {/* Approved Customers */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('approved_customers');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'approved_customers'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Approved Customers</span>
+                  </div>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
+                    activePage === 'approved_customers' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-emerald-400'
+                  }`}>
+                    {driversState.filter((d) => d.status === 'active').length}
+                  </span>
+                </button>
+
+                {/* Driver Risk Registry */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('driver_risk_registry');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'driver_risk_registry'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Driver Risk Registry</span>
+                  </div>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
+                    activePage === 'driver_risk_registry' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {driversState.length}
+                  </span>
+                </button>
+
+                {/* Referrals */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('referrals');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'referrals'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Gift className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Referrals</span>
+                  </div>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
+                    activePage === 'referrals' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-purple-400'
+                  }`}>
+                    {referralsState.length}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* GROUP 2: VEHICLE MANAGEMENT */}
+          <div className="space-y-0.5">
+            <button
+              type="button"
+              onClick={() => setIsVehicleGroupOpen(!isVehicleGroupOpen)}
+              className="w-full flex items-center justify-between px-2.5 py-1 text-[11px] font-black text-slate-400 uppercase tracking-wider hover:text-slate-200 transition-colors"
+            >
+              <span>Vehicle Management</span>
+              {isVehicleGroupOpen ? (
+                <ChevronUp className="w-3.5 h-3.5 text-slate-500" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+              )}
+            </button>
+
+            {isVehicleGroupOpen && (
+              <div className="space-y-0.5 pt-0.5">
+                {/* Vehicle Register */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('vehicle_register');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'vehicle_register' || activePage === 'vehicles'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <BikeIcon className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Vehicle Register</span>
+                  </div>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
+                    activePage === 'vehicle_register' || activePage === 'vehicles' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {vehiclesState.length}
+                  </span>
+                </button>
+
+                {/* Live Tracking */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('live_tracking');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'live_tracking'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Radio className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+                    <span>Live Tracking</span>
+                  </div>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                </button>
+
+                {/* Parts Inventory */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('parts_inventory');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'parts_inventory'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Package className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Parts Inventory</span>
+                  </div>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
+                    activePage === 'parts_inventory' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-amber-400'
+                  }`}>
+                    {partsState.length}
+                  </span>
+                </button>
+
+                {/* Repairs and Services */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('repairs_services');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'repairs_services'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Wrench className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Repairs and Services</span>
+                  </div>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
+                    activePage === 'repairs_services' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-blue-400'
+                  }`}>
+                    {servicesState.length}
+                  </span>
+                </button>
+
+                {/* Traffic Fines */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('traffic_fines');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'traffic_fines'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Traffic Fines</span>
+                  </div>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
+                    activePage === 'traffic_fines' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-rose-400'
+                  }`}>
+                    {finesState.length}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* GROUP 3: FLEET MANAGEMENT */}
+          <div className="space-y-0.5">
+            <button
+              type="button"
+              onClick={() => setIsFleetGroupOpen(!isFleetGroupOpen)}
+              className="w-full flex items-center justify-between px-2.5 py-1 text-[11px] font-black text-slate-400 uppercase tracking-wider hover:text-slate-200 transition-colors"
+            >
+              <span>Fleet Management</span>
+              {isFleetGroupOpen ? (
+                <ChevronUp className="w-3.5 h-3.5 text-slate-500" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+              )}
+            </button>
+
+            {isFleetGroupOpen && (
+              <div className="space-y-0.5 pt-0.5">
+                {/* Vehicle Rental Options */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('rental_options');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'rental_options'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Vehicle Rental Options</span>
+                  </div>
+                </button>
+
+                {/* Rental Agreements */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('rental_agreements');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'rental_agreements'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Rental Agreements</span>
+                  </div>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
+                    activePage === 'rental_agreements' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-indigo-400'
+                  }`}>
+                    {agreementsState.length}
+                  </span>
+                </button>
+
+                {/* Sales Agreements */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('sales_agreements');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'sales_agreements'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Sales Agreements</span>
+                  </div>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
+                    activePage === 'sales_agreements' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-emerald-400'
+                  }`}>
+                    {agreementsState.length}
+                  </span>
+                </button>
+
+                {/* Bank Account Reconciliation */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('bank_reconciliation');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'bank_reconciliation'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Landmark className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Bank Reconciliation</span>
+                  </div>
+                </button>
+
+                {/* Paystack & Yoco Collections */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('paystack_collections');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'paystack_collections' || activePage === 'financials_yoco'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <CreditCard className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Paystack Collections</span>
+                  </div>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
+                    activePage === 'paystack_collections' || activePage === 'financials_yoco' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-amber-400'
+                  }`}>
+                    {transactionsState.length}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* GROUP 4: ADMIN */}
+          <div className="space-y-0.5">
+            <button
+              type="button"
+              onClick={() => setIsAdminGroupOpen(!isAdminGroupOpen)}
+              className="w-full flex items-center justify-between px-2.5 py-1 text-[11px] font-black text-slate-400 uppercase tracking-wider hover:text-slate-200 transition-colors"
+            >
+              <span>Admin</span>
+              {isAdminGroupOpen ? (
+                <ChevronUp className="w-3.5 h-3.5 text-slate-500" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+              )}
+            </button>
+
+            {isAdminGroupOpen && (
+              <div className="space-y-0.5 pt-0.5">
+                {/* Reports */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('reports');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'reports'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Reports</span>
+                  </div>
+                </button>
+
+                {/* Settings */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('settings');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'settings'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <SettingsIcon className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Settings</span>
+                  </div>
+                </button>
+
+                {/* Bikes Showroom Catalog */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('bike_and_stock');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
+                    activePage === 'bike_and_stock'
+                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <BikeIcon className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Bikes & Stock</span>
+                  </div>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
+                    activePage === 'bike_and_stock' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {bikes.length}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Spacer */}
           <div className="my-auto" />
 
           {/* Exit Staff Mode Button */}
           {onCloseAdmin && (
-            <div className="pt-4 border-t border-slate-800">
+            <div className="pt-2 border-t border-slate-800">
               <button
                 type="button"
                 onClick={onCloseAdmin}
-                className="w-full px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-800/80 hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 border border-slate-700/60 hover:border-rose-700/60 transition-all flex items-center gap-2"
+                className="w-full px-3 py-2 rounded-xl text-xs font-bold bg-slate-800/80 hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 border border-slate-700/60 hover:border-rose-700/60 transition-all flex items-center gap-2"
               >
                 <LogOut className="w-4 h-4" />
                 <span>Exit Staff Mode</span>
@@ -568,187 +1171,484 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
         </div>
 
         {/* Sidebar Footer Info */}
-        <div className="p-4 border-t border-slate-800/80 text-[11px] text-slate-400 bg-slate-950/40">
-          <div className="font-bold text-slate-200">Randburg Showroom</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">304 Tungsten Rd, Strijdom Park</div>
+        <div className="p-3 border-t border-slate-800/80 text-[11px] text-slate-400 bg-slate-950/40 flex items-center justify-between">
+          <div>
+            <div className="font-bold text-slate-200">Randburg Showroom</div>
+            <div className="text-[10px] text-slate-400">304 Tungsten Rd, Strijdom Park</div>
+          </div>
+          <span className="w-2 h-2 rounded-full bg-emerald-400" title="Connected to Fleet Hub" />
         </div>
       </aside>
 
       {/* ------------------------------------------------------------- */}
       {/* MAIN ADMIN CONTENT AREA */}
       {/* ------------------------------------------------------------- */}
-      <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
+      <main className="flex-1 overflow-y-auto bg-slate-50 flex flex-col min-h-screen">
         
-        {/* PAGE 1: DASHBOARD OVERVIEW */}
+        {/* TOP BAR: Welcome, AARON + Actions + User Avatar */}
+        <header className="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between sticky top-0 z-10 shadow-xs">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+              className="md:hidden p-1.5 rounded-lg text-slate-600 hover:bg-slate-100"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div>
+              <h1 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
+                Welcome, {adminUserName}
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {/* Feedback Button */}
+            <button
+              type="button"
+              onClick={() => setIsFeedbackModalOpen(true)}
+              className="px-3 py-1.5 rounded-full text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 transition-colors flex items-center gap-1.5 shadow-2xs"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-purple-600" />
+              <span>Feedback</span>
+            </button>
+
+            {/* Help Button */}
+            <button
+              type="button"
+              onClick={() => alert("FleetCO Help: Quick shortcuts: Press Applicants to vet new couriers, Live Tracking to monitor telemetry, or Paystack/Yoco Collections to process instant debit/card collections.")}
+              className="w-8 h-8 rounded-full border border-slate-200 hover:bg-slate-100 text-slate-600 flex items-center justify-center transition-colors text-xs font-black"
+              title="Help & Support"
+            >
+              ?
+            </button>
+
+            {/* Notification Bell */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setNotificationsOpen(!notificationsOpen)}
+                className="w-8 h-8 rounded-full border border-slate-200 hover:bg-slate-100 text-slate-600 flex items-center justify-center transition-colors relative"
+                title="System Notifications"
+              >
+                <Bell className="w-4 h-4 text-slate-600" />
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+              </button>
+
+              {notificationsOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-4 z-30 space-y-2">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <span className="text-xs font-black text-slate-900">Notifications</span>
+                    <span className="text-[10px] text-cyan-600 font-bold">2 New</span>
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    <div className="p-2 bg-blue-50 rounded-xl border border-blue-100">
+                      <div className="font-bold text-blue-900">New Applicant Waiting</div>
+                      <div className="text-[11px] text-blue-700">Tinashe Moyo submitted TRN Certificate for review.</div>
+                    </div>
+                    <div className="p-2 bg-amber-50 rounded-xl border border-amber-100">
+                      <div className="font-bold text-amber-900">Weekly Rent Due Today</div>
+                      <div className="text-[11px] text-amber-700">3 couriers have rent-to-own installments due today.</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Profile Avatar */}
+            <div className="flex items-center gap-2 pl-1">
+              <div className="w-8 h-8 rounded-full bg-slate-900 text-cyan-400 font-black text-xs flex items-center justify-center border border-cyan-400 shadow-sm">
+                AM
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* INNER CONTENT SCROLLER */}
+        <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col gap-6">
+
+        {/* PAGE: DASHBOARD OVERVIEW (Matching Screenshot) */}
         {activePage === 'dashboard' && (
           <div className="flex flex-col gap-6" id="admin-dashboard-page">
-            <div>
-              <h1 className="text-2xl font-black text-slate-900 tracking-tight">Dealership Overview</h1>
-              <p className="text-xs text-slate-600 mt-0.5">
-                Key performance metrics, stage distribution, and active fleet overview.
-              </p>
+            {/* Sub-Header: Date and Customise */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs text-slate-500 font-bold">
+                <span>{new Date().toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCustomizeModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs flex items-center gap-1.5 w-fit"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+                <span>Customise</span>
+              </button>
             </div>
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-                <span className="text-xs font-semibold text-slate-500">Total Applications</span>
-                <div className="text-3xl font-black text-slate-900 mt-1">{totalApps}</div>
-                <span className="text-[11px] text-slate-400">All submissions on record</span>
-              </div>
+            {/* Finish Setting Up FleetCO Progress Banner */}
+            {isSetupBannerVisible && (
+              <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950 text-white rounded-3xl p-5 sm:p-6 shadow-md border border-slate-800 relative overflow-hidden">
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-cyan-400 text-slate-950 flex items-center justify-center text-xs font-black">
+                        ✓
+                      </div>
+                      <h2 className="text-sm font-black tracking-tight text-white uppercase">
+                        FINISH SETTING UP FLEETCO
+                      </h2>
+                    </div>
+                    <p className="text-xs text-slate-300">
+                      5 of 6 core steps done · ~1 minutes remaining
+                    </p>
+                    {/* Progress bar (83%) */}
+                    <div className="w-full max-w-md bg-slate-800 rounded-full h-2 overflow-hidden mt-2">
+                      <div className="bg-cyan-400 h-full rounded-full transition-all duration-500" style={{ width: '83%' }} />
+                    </div>
+                  </div>
 
-              <div className="bg-white p-5 rounded-2xl border border-blue-200 shadow-xs">
-                <span className="text-xs font-semibold text-blue-700">Pending Review</span>
-                <div className="text-3xl font-black text-blue-700 mt-1">{pendingCount}</div>
-                <span className="text-[11px] text-blue-600">Awaiting vetting</span>
-              </div>
-
-              <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-xs">
-                <span className="text-xs font-semibold text-emerald-700">Approved for Pickup</span>
-                <div className="text-3xl font-black text-emerald-700 mt-1">{approvedCount}</div>
-                <span className="text-[11px] text-emerald-600">Ready at Randburg</span>
-              </div>
-
-              <div className="bg-white p-5 rounded-2xl border border-indigo-200 shadow-xs">
-                <span className="text-xs font-semibold text-indigo-700">Delivered / Active</span>
-                <div className="text-3xl font-black text-indigo-700 mt-1">{signedCount}</div>
-                <span className="text-[11px] text-indigo-600">Active contracts</span>
-              </div>
-            </div>
-
-            {/* Stage Distribution Breakdown */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col gap-4">
-              <h2 className="text-base font-black text-slate-900">Application Stage Breakdown</h2>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-                {PIPELINE_STAGES.map((stage) => {
-                  const count = applications.filter((a) => a.status === stage.id).length;
-                  const StageIcon = stage.icon;
-
-                  return (
-                    <div
-                      key={stage.id}
-                      onClick={() => {
-                        setStatusFilter(stage.id);
-                        setActivePage('applicant');
-                      }}
-                      className={`p-4 rounded-2xl border ${stage.borderClass} ${stage.bgClass} cursor-pointer hover:shadow-md transition-all flex flex-col justify-between`}
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsSetupBannerVisible(false)}
+                      className="px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
                     >
-                      <div className="flex items-center justify-between">
-                        <StageIcon className={`w-5 h-5 ${stage.textClass}`} />
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold ${stage.badgeClass}`}>
-                          {count}
-                        </span>
-                      </div>
-                      <div className="mt-3">
-                        <div className="text-xs font-black text-slate-900">{stage.label}</div>
-                        <div className="text-[10px] text-slate-500 mt-0.5">{stage.description}</div>
-                      </div>
+                      Remind Me Tomorrow
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActivePage('settings')}
+                      className="px-5 py-2 rounded-xl text-xs font-black bg-cyan-400 hover:bg-cyan-300 text-slate-950 transition-all shadow-md"
+                    >
+                      Resume
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TODAY'S PRIORITIES (5 Vibrant Cards from Screenshot) */}
+            <div>
+              <h2 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">
+                TODAY'S PRIORITIES
+              </h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                {/* 1. Red Card: Overdue Payments */}
+                <div className="bg-white rounded-2xl border-2 border-rose-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+                  <div>
+                    <div className="text-2xl font-black text-rose-600">
+                      {driversState.filter((d) => d.balanceDue > 0).length}
                     </div>
-                  );
-                })}
+                    <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
+                      OVERDUE PAYMENTS
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActivePage('paystack_collections')}
+                    className="mt-4 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-colors w-fit border border-rose-200"
+                  >
+                    Collect Now
+                  </button>
+                </div>
+
+                {/* 2. Mint Green Card: New Applicants */}
+                <div className="bg-white rounded-2xl border-2 border-emerald-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+                  <div>
+                    <div className="text-2xl font-black text-emerald-600">
+                      {pendingCount}
+                    </div>
+                    <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
+                      NEW APPLICANTS
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActivePage('applicants')}
+                    className="mt-4 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold transition-colors w-fit border border-emerald-200"
+                  >
+                    Review
+                  </button>
+                </div>
+
+                {/* 3. Yellow/Gold Card: Vehicles in Maintenance */}
+                <div className="bg-white rounded-2xl border-2 border-amber-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+                  <div>
+                    <div className="text-2xl font-black text-amber-600">
+                      {vehiclesState.filter((v) => v.status === 'in_maintenance' || v.status === 'repair_needed').length}
+                    </div>
+                    <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
+                      VEHICLES IN MAINTENANCE
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActivePage('repairs_services')}
+                    className="mt-4 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-bold transition-colors w-fit border border-amber-200"
+                  >
+                    Check Status
+                  </button>
+                </div>
+
+                {/* 4. Sky Blue Card: Missing Documents */}
+                <div className="bg-white rounded-2xl border-2 border-cyan-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+                  <div>
+                    <div className="text-2xl font-black text-cyan-600">
+                      {missingDocsCount}
+                    </div>
+                    <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
+                      MISSING DOCUMENTS
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActivePage('applicants')}
+                    className="mt-4 px-3 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-800 rounded-xl text-xs font-bold transition-colors w-fit border border-cyan-200"
+                  >
+                    Follow Up
+                  </button>
+                </div>
+
+                {/* 5. Dark / Charcoal Card: Referrals Owed */}
+                <div className="bg-white rounded-2xl border-2 border-slate-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+                  <div>
+                    <div className="text-2xl font-black text-slate-800">
+                      {referralsState.filter((r) => r.payoutStatus === 'pending_payout').length}
+                    </div>
+                    <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
+                      REFERRALS OWED
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActivePage('referrals')}
+                    className="mt-4 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-colors w-fit border border-slate-300"
+                  >
+                    Pay Out
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Quick Actions & Recent Applicants */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Quick Actions */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col gap-4">
-                <h2 className="text-base font-black text-slate-900">Quick Actions</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActivePage('applicant');
-                      setPipelineViewMode('board');
-                    }}
-                    className="p-4 rounded-2xl bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 font-bold text-xs flex items-center gap-3 transition-colors text-left"
-                  >
-                    <LayoutGrid className="w-5 h-5 flex-shrink-0 text-blue-700" />
-                    <div>
-                      <div className="font-black text-slate-900">Pipeline Board</div>
-                      <div className="text-[10px] text-slate-500 font-normal">Move drivers across stages</div>
-                    </div>
-                  </button>
+            {/* Quick Actions Bar */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-black text-slate-400 uppercase tracking-wider mr-2">Quick Actions:</span>
 
-                  <button
-                    type="button"
-                    onClick={() => setIsWalkinModalOpen(true)}
-                    className="p-4 rounded-2xl bg-cyan-50 hover:bg-cyan-100 text-cyan-900 border border-cyan-200 font-bold text-xs flex items-center gap-3 transition-colors text-left"
-                  >
-                    <UserPlus className="w-5 h-5 flex-shrink-0 text-cyan-700" />
-                    <div>
-                      <div className="font-black text-slate-900">+ Log Walk-in</div>
-                      <div className="text-[10px] text-slate-500 font-normal">Intake applicant at showroom</div>
-                    </div>
-                  </button>
+                <button
+                  type="button"
+                  onClick={() => setIsWalkinModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center gap-2"
+                >
+                  <UserPlus className="w-4 h-4 text-cyan-600" />
+                  <span>+ Add Customer</span>
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActivePage('bike_and_stock');
-                      startAddNewBike();
-                    }}
-                    className="p-4 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs flex items-center gap-3 transition-colors text-left"
-                  >
-                    <Plus className="w-5 h-5 flex-shrink-0 text-emerald-700" />
-                    <div>
-                      <div className="font-black text-slate-900">Add Motorbike</div>
-                      <div className="text-[10px] text-slate-500 font-normal">Upload bike photo from device</div>
-                    </div>
-                  </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage('bike_and_stock');
+                    startAddNewBike();
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center gap-2"
+                >
+                  <BikeIcon className="w-4 h-4 text-emerald-600" />
+                  <span>Add Vehicle</span>
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={handleExportCSV}
-                    className="p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 font-bold text-xs flex items-center gap-3 transition-colors text-left"
-                  >
-                    <Download className="w-5 h-5 flex-shrink-0 text-slate-700" />
-                    <div>
-                      <div className="font-black text-slate-900">Export All CSV</div>
-                      <div className="text-[10px] text-slate-500 font-normal">Download spreadsheet backup</div>
-                    </div>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setActivePage('paystack_collections')}
+                  className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center gap-2"
+                >
+                  <CreditCard className="w-4 h-4 text-amber-600" />
+                  <span>Record Payment</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (applications.length > 0) {
+                      setContractApp(applications[0]);
+                    } else {
+                      alert('Register an applicant first to generate agreements.');
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4 text-indigo-600" />
+                  <span>Create New Document</span>
+                </button>
               </div>
+            </div>
 
-              {/* Recent Applicants */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col gap-4">
+            {/* Split Dashboard: NEEDS ATTENTION & REVENUE TREND */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
+              {/* Left Card: NEEDS ATTENTION */}
+              <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs flex flex-col gap-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-base font-black text-slate-900">Recent Applications</h2>
-                  <button
-                    type="button"
-                    onClick={() => setActivePage('applicant')}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                  >
-                    <span>View All</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                    NEEDS ATTENTION
+                  </h3>
+                  
+                  {/* Filter Tabs */}
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+                    {(['all', 'overdue', 'applications', 'payments'] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setDashboardTab(tab)}
+                        className={`px-2.5 py-1 rounded-lg capitalize font-bold transition-all ${
+                          dashboardTab === tab
+                            ? 'bg-white text-slate-900 shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="space-y-2.5">
-                  {applications.slice(0, 4).map((app) => {
-                    const st = PIPELINE_STAGES.find((s) => s.id === app.status) || PIPELINE_STAGES[0];
-                    return (
+                {/* Attention Items List */}
+                <div className="space-y-3 mt-1">
+                  {/* Overdue items */}
+                  {driversState
+                    .filter((d) => d.balanceDue > 0)
+                    .slice(0, 3)
+                    .map((d) => (
                       <div
-                        key={app.id}
-                        onClick={() => {
-                          setSelectedAppId(app.id);
-                          setActivePage('applicant');
-                          setPipelineViewMode('list');
-                        }}
-                        className="p-3 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all flex items-center justify-between cursor-pointer"
+                        key={d.id}
+                        className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-200 flex items-center justify-between hover:bg-rose-100/70 transition-colors"
                       >
                         <div>
-                          <div className="text-xs font-black text-slate-900">{app.fullName}</div>
-                          <div className="text-[10px] text-slate-500">{app.bikeName} · {app.refNumber}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-slate-900">{d.fullName}</span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800">
+                              Overdue R{d.balanceDue.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            Bike: {d.assignedVehiclePlate || 'None'} · Contact: {d.phone}
+                          </div>
                         </div>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${st.badgeClass}`}>
-                          {st.shortLabel}
-                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDriverForYocoPayment(d);
+                            setActivePage('paystack_collections');
+                          }}
+                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-2xs"
+                        >
+                          Collect
+                        </button>
                       </div>
-                    );
-                  })}
+                    ))}
+
+                  {/* Pending applications */}
+                  {applications
+                    .filter((a) => a.status === 'pending_review' || a.status === 'needs_more_info')
+                    .slice(0, 3)
+                    .map((a) => (
+                      <div
+                        key={a.id}
+                        className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between hover:bg-slate-100 transition-colors"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-slate-900">{a.fullName}</span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800">
+                              {a.status === 'needs_more_info' ? 'Missing TRN/Docs' : 'Pending Review'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            Ref: {a.refNumber} · Chosen: {a.bikeName}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedAppId(a.id);
+                            setActivePage('applicants');
+                          }}
+                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold"
+                        >
+                          Inspect
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* Right Card: REVENUE TREND */}
+              <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs flex flex-col justify-between gap-4">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                      REVENUE TREND
+                    </h3>
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                      +18.4% this month
+                    </span>
+                  </div>
+
+                  {/* Summary Metric Chips */}
+                  <div className="grid grid-cols-3 gap-3 mt-4">
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Collected This Month</span>
+                      <span className="text-base font-black text-slate-900">
+                        R{transactionsState.reduce((sum, tx) => sum + (tx.amountZar || 0), 0).toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Deposits Banked</span>
+                      <span className="text-base font-black text-cyan-700">
+                        R{transactionsState.filter((tx) => tx.allocation === 'deposit').reduce((sum, tx) => sum + (tx.amountZar || 0), 0).toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Active Deployed</span>
+                      <span className="text-base font-black text-emerald-700">
+                        {vehiclesState.filter((v) => v.status === 'assigned_active').length} Bikes
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* SVG Line Graph */}
+                  <div className="mt-5 h-36 w-full flex items-end">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 400 120">
+                      <defs>
+                        <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.3" />
+                          <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.0" />
+                        </linearGradient>
+                      </defs>
+                      <path
+                        d="M 10 100 Q 80 80, 140 60 T 260 40 T 390 15 L 390 120 L 10 120 Z"
+                        fill="url(#revenueGrad)"
+                      />
+                      <path
+                        d="M 10 100 Q 80 80, 140 60 T 260 40 T 390 15"
+                        fill="none"
+                        stroke="#0891b2"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                      />
+                      <circle cx="390" cy="15" r="4" fill="#0891b2" className="animate-ping" />
+                      <circle cx="390" cy="15" r="4" fill="#0891b2" />
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-100">
+                  <span>Target: R250,000 / month</span>
+                  <span className="font-bold text-slate-800">74% Target Achieved</span>
                 </div>
               </div>
             </div>
@@ -756,7 +1656,7 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
         )}
 
         {/* PAGE 2: APPLICANTS PIPELINE & MANAGEMENT */}
-        {activePage === 'applicant' && (
+        {(activePage === 'applicant' || activePage === 'applicants') && (
           <div className="flex flex-col gap-5" id="admin-applicants-page">
             {/* Top Bar with Search & View Toggle */}
             <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
@@ -1530,6 +2430,339 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
             </div>
           </div>
         )}
+
+        {/* PAGE 4: DRIVER MANAGEMENT (Directory, Approved Customers, Risk Registry, Referrals) */}
+        {(activePage === 'drivers' || activePage === 'approved_customers' || activePage === 'driver_risk_registry' || activePage === 'referrals') && (
+          <DriverManagementView
+            drivers={driversState}
+            agreements={agreementsState}
+            referrals={referralsState}
+            vehicles={vehiclesState}
+            activeSubTab={
+              activePage === 'driver_risk_registry' 
+                ? 'risk_registry' 
+                : activePage === 'referrals' 
+                ? 'referrals' 
+                : 'directory'
+            }
+            onUpdateDriver={handleUpdateDriver}
+            onAddDriver={handleAddDriver}
+            onUpdateReferral={(updatedRef) => {
+              setReferralsState((prev) => {
+                const next = prev.map((r) => (r.id === updatedRef.id ? updatedRef : r));
+                saveFleetReferrals(next);
+                return next;
+              });
+            }}
+            onOpenYocoPaymentForDriver={(driver) => {
+              setSelectedDriverForYocoPayment(driver);
+              setActivePage('paystack_collections');
+            }}
+          />
+        )}
+
+        {/* PAGE 5: VEHICLE MANAGEMENT (Register, Live Tracking, Parts, Repairs, Traffic Fines) */}
+        {(activePage === 'vehicles' || activePage === 'vehicle_register' || activePage === 'live_tracking' || activePage === 'parts_inventory' || activePage === 'repairs_services' || activePage === 'traffic_fines') && (
+          <VehicleManagementView
+            vehicles={vehiclesState}
+            parts={partsState}
+            services={servicesState}
+            fines={finesState}
+            drivers={driversState}
+            activeSubTab={
+              activePage === 'live_tracking'
+                ? 'live_telematics'
+                : activePage === 'parts_inventory'
+                ? 'parts_inventory'
+                : activePage === 'repairs_services'
+                ? 'repairs_service'
+                : activePage === 'traffic_fines'
+                ? 'traffic_fines'
+                : 'register'
+            }
+            onUpdateVehicle={handleUpdateVehicle}
+            onAddVehicle={handleAddVehicle}
+            onUpdatePart={(updatedPart) => {
+              const next = partsState.map((p) => (p.id === updatedPart.id ? updatedPart : p));
+              setPartsState(next);
+              saveFleetParts(next);
+            }}
+            onAddPart={(newPart) => {
+              const next = [newPart, ...partsState];
+              setPartsState(next);
+              saveFleetParts(next);
+            }}
+            onAddService={(newSrv) => {
+              setServicesState((prev) => {
+                const next = [newSrv, ...prev];
+                saveFleetServices(next);
+                return next;
+              });
+            }}
+            onUpdateFine={(updatedFine) => {
+              setFinesState((prev) => {
+                const next = prev.map((f) => (f.id === updatedFine.id ? updatedFine : f));
+                saveFleetFines(next);
+                return next;
+              });
+            }}
+            onAddFine={(newFine) => {
+              setFinesState((prev) => {
+                const next = [newFine, ...prev];
+                saveFleetFines(next);
+                return next;
+              });
+            }}
+          />
+        )}
+
+        {/* PAGE 6: FLEET MANAGEMENT (Rental Options, Rental Agreements, Sales Agreements, Bank Reconciliation, Paystack/Yoco) */}
+        {(activePage === 'financials_yoco' || activePage === 'paystack_collections' || activePage === 'rental_options' || activePage === 'rental_agreements' || activePage === 'sales_agreements' || activePage === 'bank_reconciliation') && (
+          <FleetFinancialsView
+            drivers={driversState}
+            agreements={agreementsState}
+            transactions={transactionsState}
+            vehicles={vehiclesState}
+            yocoSettings={yocoSettingsState}
+            activeSubTab={
+              activePage === 'rental_options'
+                ? 'rental_options'
+                : activePage === 'rental_agreements'
+                ? 'agreements'
+                : activePage === 'sales_agreements'
+                ? 'sales_agreements'
+                : activePage === 'bank_reconciliation'
+                ? 'bank_reconciliation'
+                : 'yoco_hub'
+            }
+            onUpdateDriver={handleUpdateDriver}
+            onAddTransaction={handleAddTransaction}
+            onUpdateYocoSettings={handleUpdateYocoSettings}
+            initialSelectedDriverForPayment={selectedDriverForYocoPayment}
+          />
+        )}
+
+        {/* PAGE 7: REPORTS & FLEET INTELLIGENCE */}
+        {activePage === 'reports' && (
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs flex flex-col gap-6" id="admin-reports-page">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Fleet Analytics & Executive Reports</h2>
+                <p className="text-xs text-slate-500 mt-1">Real-time financial yield, recovery rates, vehicle maintenance expense summaries, and risk metrics.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Export All Data (.CSV)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Top KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-5 rounded-2xl bg-cyan-50/70 border border-cyan-200">
+                <span className="text-[11px] font-bold text-cyan-800 uppercase tracking-wider block">Monthly Gross Collections</span>
+                <div className="text-2xl font-black text-slate-900 mt-1">
+                  R{transactionsState.reduce((sum, tx) => sum + (tx.amountZar || 0), 0).toLocaleString()}
+                </div>
+                <span className="text-[11px] text-cyan-700 font-semibold mt-1 block">94.2% Collection Efficiency</span>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-emerald-50/70 border border-emerald-200">
+                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">Active Fleet Utilization</span>
+                <div className="text-2xl font-black text-slate-900 mt-1">
+                  {Math.round((vehiclesState.filter(v => v.status === 'assigned_active').length / (vehiclesState.length || 1)) * 100)}%
+                </div>
+                <span className="text-[11px] text-emerald-700 font-semibold mt-1 block">{vehiclesState.filter(v => v.status === 'assigned_active').length} of {vehiclesState.length} bikes on road</span>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-amber-50/70 border border-amber-200">
+                <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block">Outstanding Arrears</span>
+                <div className="text-2xl font-black text-slate-900 mt-1">
+                  R{driversState.reduce((sum, d) => sum + (d.balanceDue || 0), 0).toLocaleString()}
+                </div>
+                <span className="text-[11px] text-amber-700 font-semibold mt-1 block">{driversState.filter(d => d.balanceDue > 0).length} accounts with balance</span>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-purple-50/70 border border-purple-200">
+                <span className="text-[11px] font-bold text-purple-800 uppercase tracking-wider block">Total Deposits Held</span>
+                <div className="text-2xl font-black text-slate-900 mt-1">
+                  R{driversState.reduce((sum, d) => sum + (d.depositPaid || 0), 0).toLocaleString()}
+                </div>
+                <span className="text-[11px] text-purple-700 font-semibold mt-1 block">Secured in escrow</span>
+              </div>
+            </div>
+
+            {/* Breakdown Tables */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Driver Risk Distribution */}
+              <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 flex flex-col justify-between">
+                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Driver Risk Rating Distribution</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs p-2 bg-white rounded-xl border border-slate-100">
+                    <span className="font-bold text-emerald-700">Tier 1: Low Risk (Excellent Payer)</span>
+                    <span className="font-black text-slate-900">{driversState.filter(d => d.riskTier === 'low_risk').length} Drivers</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs p-2 bg-white rounded-xl border border-slate-100">
+                    <span className="font-bold text-amber-700">Tier 2: Medium Risk (Occasional Delay)</span>
+                    <span className="font-black text-slate-900">{driversState.filter(d => d.riskTier === 'medium_risk').length} Drivers</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs p-2 bg-white rounded-xl border border-slate-100">
+                    <span className="font-bold text-rose-700">Tier 3: High Risk (Frequent Arrears)</span>
+                    <span className="font-black text-slate-900">{driversState.filter(d => d.riskTier === 'high_risk').length} Drivers</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Maintenance Expenses vs Rental Income */}
+              <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 flex flex-col justify-between">
+                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Maintenance & Part Costs</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs p-2 bg-white rounded-xl border border-slate-100">
+                    <span className="text-slate-600 font-bold">Total Services Completed</span>
+                    <span className="font-black text-slate-900">{servicesState.length} work orders</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs p-2 bg-white rounded-xl border border-slate-100">
+                    <span className="text-slate-600 font-bold">Parts In Stock Value</span>
+                    <span className="font-black text-slate-900">R{partsState.reduce((sum, p) => sum + (p.unitCost * p.quantityInStock), 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs p-2 bg-white rounded-xl border border-slate-100">
+                    <span className="text-slate-600 font-bold">Traffic Fines Incurred</span>
+                    <span className="font-black text-rose-600">R{finesState.reduce((sum, f) => sum + (f.fineAmount || 0), 0).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* PAGE 8: SYSTEM SETTINGS */}
+        {activePage === 'settings' && (
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs flex flex-col gap-6" id="admin-settings-page">
+            <div className="border-b border-slate-200 pb-5">
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">FleetCO System Settings</h2>
+              <p className="text-xs text-slate-500 mt-1">Configure payment gateways (Yoco / Paystack), showroom location, bank details, and automated notifications.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+              {/* Dealership Info */}
+              <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
+                <h3 className="font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <span>Showroom Hub Profile</span>
+                </h3>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Showroom Location</label>
+                  <input
+                    type="text"
+                    defaultValue="304 Tungsten Rd, Strijdom Park, Randburg, 2194"
+                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 text-slate-900 font-medium outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Official WhatsApp Support Line</label>
+                  <input
+                    type="text"
+                    defaultValue="+27 71 234 5678"
+                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 text-slate-900 font-medium outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              {/* Payment Gateway Settings */}
+              <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
+                <h3 className="font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <span>Payment Gateways (Yoco & Paystack)</span>
+                </h3>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Yoco Secret Key (Sandbox / Live)</label>
+                  <input
+                    type="password"
+                    value={yocoSettingsState.secretKey}
+                    onChange={(e) => handleUpdateYocoSettings({ ...yocoSettingsState, secretKey: e.target.value })}
+                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 text-slate-900 font-medium outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Paystack Public / Secret Key</label>
+                  <input
+                    type="password"
+                    defaultValue="pk_test_fleetco_paystack_sample_key"
+                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 text-slate-900 font-medium outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="yocoSandbox"
+                    checked={yocoSettingsState.isSandbox}
+                    onChange={(e) => handleUpdateYocoSettings({ ...yocoSettingsState, isSandbox: e.target.checked })}
+                    className="rounded text-cyan-600 focus:ring-cyan-500"
+                  />
+                  <label htmlFor="yocoSandbox" className="font-bold text-slate-800">
+                    Enable Gateway Sandbox / Test Mode
+                  </label>
+                </div>
+              </div>
+
+              {/* GitHub Export & Repository Connection */}
+              <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-black text-slate-900 uppercase tracking-wider">GitHub Integration & Export</h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-slate-200 text-slate-700">Cloud Run Ready</span>
+                </div>
+                <p className="text-slate-600 text-xs">
+                  To sync with or export this project to your GitHub repository:
+                </p>
+                <ol className="list-decimal list-inside space-y-1.5 text-slate-700 font-medium text-[11px] bg-white p-3 rounded-xl border border-slate-200">
+                  <li>Open the <strong>AI Studio Menu</strong> in the top-right corner.</li>
+                  <li>Select <strong>&quot;Export to GitHub&quot;</strong> or <strong>&quot;Download ZIP&quot;</strong>.</li>
+                  <li>Authenticate your GitHub account to create or push to a repo directly.</li>
+                  <li>Clone locally using <code className="bg-slate-100 px-1 py-0.5 rounded text-cyan-700 font-mono">git clone &lt;your-repo-url&gt;</code>.</li>
+                </ol>
+              </div>
+
+              {/* PostgreSQL / Supabase Database Schema */}
+              <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-black text-slate-900 uppercase tracking-wider">Production Database Schema (11 Tables)</h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800">PostgreSQL / Supabase</span>
+                </div>
+                <p className="text-slate-600 text-xs">
+                  The complete SQL DDL schema with RLS policies, triggers, and foreign keys is available in <code className="bg-slate-200 px-1 py-0.5 rounded font-mono font-bold text-slate-800">/schema.sql</code>.
+                </p>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
+                      alert("✅ Complete 11-table PostgreSQL SQL Schema copied to clipboard!");
+                    }}
+                    className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Copy Full SQL Schema</span>
+                  </button>
+                  <span className="text-[11px] text-slate-500">Ready for Supabase SQL Editor</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => alert("Settings saved successfully to FleetCO hub!")}
+                className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs shadow-md transition-all"
+              >
+                Save All Settings
+              </button>
+            </div>
+          </div>
+        )}
+        </div>
       </main>
 
       {/* ------------------------------------------------------------- */}

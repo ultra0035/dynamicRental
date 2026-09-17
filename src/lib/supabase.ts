@@ -23,10 +23,11 @@ const LOCAL_APPS_KEY = 'dynamic_rental_applications_v1';
 const LOCAL_BIKES_KEY = 'dynamic_rental_bikes_v1';
 
 // SQL Setup Schema for Supabase
-export const SUPABASE_SQL_SCHEMA = `-- Dynamic Rental Supabase PostgreSQL Schema
--- Run this in your Supabase SQL Editor to initialize tables
+export const SUPABASE_SQL_SCHEMA = `-- Dynamic Rental Supabase PostgreSQL Full Fleet Schema
+-- Run this in your Supabase SQL Editor to initialize all tables & policies
 
-CREATE TABLE IF NOT EXISTS applications (
+-- 1. Applicants / Onboarding Pipeline
+CREATE TABLE IF NOT EXISTS public.applications (
   id TEXT PRIMARY KEY,
   ref_number TEXT UNIQUE NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -48,20 +49,29 @@ CREATE TABLE IF NOT EXISTS applications (
   address TEXT,
   suburb TEXT,
   city TEXT DEFAULT 'Randburg',
+  province TEXT DEFAULT 'Gauteng',
+  postal_code TEXT,
+  alternative_contact_name TEXT,
+  alternative_contact_phone TEXT,
   primary_platform TEXT,
+  delivery_apps JSONB DEFAULT '[]'::jsonb,
   delivery_experience TEXT,
   approx_weekly_earnings NUMERIC,
+  referred_by TEXT,
+  credit_score TEXT,
   documents JSONB DEFAULT '{}'::jsonb,
-  verification JSONB DEFAULT '{}'::jsonb,
+  verification JSONB DEFAULT '{"idVerified":false,"licenseVerified":false}'::jsonb,
   signature_data_url TEXT,
   deposit_acknowledged BOOLEAN DEFAULT true,
   terms_agreed BOOLEAN DEFAULT true,
+  collection_date TEXT,
   assigned_bike_vin_or_plate TEXT,
   admin_notes TEXT,
   timeline JSONB DEFAULT '[]'::jsonb
 );
 
-CREATE TABLE IF NOT EXISTS bikes (
+-- 2. Motorbike Catalog / Stock Master
+CREATE TABLE IF NOT EXISTS public.bikes (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   subtitle TEXT,
@@ -82,7 +92,198 @@ CREATE TABLE IF NOT EXISTS bikes (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS site_settings (
+-- 3. Active Drivers & Risk Directory
+CREATE TABLE IF NOT EXISTS public.drivers (
+  id TEXT PRIMARY KEY,
+  application_id TEXT REFERENCES public.applications(id) ON DELETE SET NULL,
+  ref_number TEXT UNIQUE NOT NULL,
+  full_name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  whatsapp_number TEXT NOT NULL,
+  email TEXT,
+  id_or_passport_number TEXT NOT NULL,
+  citizenship TEXT NOT NULL,
+  nationality_country TEXT,
+  address TEXT,
+  suburb TEXT,
+  city TEXT DEFAULT 'Randburg',
+  status TEXT NOT NULL DEFAULT 'active', -- 'active', 'suspended', 'completed', 'in_arrears', 'defaulted'
+  assigned_vehicle_id TEXT,
+  assigned_bike_vin_or_plate TEXT,
+  assigned_bike_name TEXT,
+  weekly_rate NUMERIC NOT NULL DEFAULT 650,
+  balance_due NUMERIC NOT NULL DEFAULT 0, -- positive = overdue, negative = credit
+  deposit_paid NUMERIC NOT NULL DEFAULT 0,
+  contract_start_date DATE DEFAULT CURRENT_DATE,
+  contract_end_date DATE,
+  term_months INT DEFAULT 18,
+  primary_platform TEXT,
+  delivery_apps JSONB DEFAULT '[]'::jsonb,
+  risk_tier TEXT DEFAULT 'low', -- 'low', 'medium', 'high', 'critical'
+  risk_score INT DEFAULT 85, -- 0 to 100
+  payment_score INT DEFAULT 95, -- percentage on-time
+  incident_count INT DEFAULT 0,
+  total_paid NUMERIC DEFAULT 0,
+  yoco_customer_token TEXT,
+  referred_by TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. Vehicles & Asset Register
+CREATE TABLE IF NOT EXISTS public.vehicles (
+  id TEXT PRIMARY KEY,
+  vin TEXT UNIQUE NOT NULL,
+  engine_number TEXT UNIQUE NOT NULL,
+  registration_plate TEXT UNIQUE NOT NULL,
+  bike_model_id TEXT REFERENCES public.bikes(id) ON DELETE RESTRICT,
+  make TEXT NOT NULL,
+  model TEXT NOT NULL,
+  year INT NOT NULL,
+  category TEXT NOT NULL,
+  condition TEXT NOT NULL DEFAULT 'new',
+  status TEXT NOT NULL DEFAULT 'available', -- 'available', 'assigned', 'in_maintenance', 'impounded', 'retired'
+  assigned_driver_id TEXT REFERENCES public.drivers(id) ON DELETE SET NULL,
+  assigned_driver_name TEXT,
+  odometer_km INT NOT NULL DEFAULT 0,
+  next_service_km INT NOT NULL DEFAULT 5000,
+  last_service_date DATE,
+  tracker_device_id TEXT,
+  tracker_provider TEXT DEFAULT 'Cartrack SA',
+  battery_health_percent INT DEFAULT 100,
+  fuel_level_percent INT DEFAULT 100,
+  is_ignition_on BOOLEAN DEFAULT false,
+  latitude NUMERIC,
+  longitude NUMERIC,
+  last_location_address TEXT,
+  last_ping_time TIMESTAMPTZ,
+  insurance_policy_number TEXT,
+  license_disk_expiry_date DATE,
+  image_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. Parts & Consumables Inventory
+CREATE TABLE IF NOT EXISTS public.parts_inventory (
+  id TEXT PRIMARY KEY,
+  sku TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL, -- 'helmets', 'delivery_boxes', 'phone_mounts', 'brake_pads', 'chains_sprockets', 'tires_tubes', 'engine_oil'
+  quantity_in_stock INT NOT NULL DEFAULT 0,
+  min_threshold INT NOT NULL DEFAULT 5,
+  cost_price_zar NUMERIC NOT NULL,
+  selling_price_zar NUMERIC NOT NULL,
+  compatible_models JSONB DEFAULT '[]'::jsonb,
+  supplier_name TEXT,
+  last_restocked_date DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6. Maintenance, Repairs & Service History
+CREATE TABLE IF NOT EXISTS public.repairs_and_services (
+  id TEXT PRIMARY KEY,
+  vehicle_id TEXT NOT NULL REFERENCES public.vehicles(id) ON DELETE CASCADE,
+  vehicle_plate TEXT NOT NULL,
+  driver_id TEXT REFERENCES public.drivers(id) ON DELETE SET NULL,
+  driver_name TEXT,
+  service_type TEXT NOT NULL, -- 'routine_5000km', 'major_overhaul', 'brake_replacement', 'tire_change', 'accident_repair'
+  odometer_km INT NOT NULL,
+  cost_zar NUMERIC NOT NULL,
+  technician_name TEXT NOT NULL,
+  garage_location TEXT DEFAULT 'Randburg Workshop - 304 Tungsten Rd',
+  service_date DATE DEFAULT CURRENT_DATE,
+  status TEXT NOT NULL DEFAULT 'completed', -- 'scheduled', 'in_progress', 'completed', 'cancelled'
+  parts_used JSONB DEFAULT '[]'::jsonb,
+  notes TEXT,
+  invoice_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 7. Traffic Fines & AARTO Infringements
+CREATE TABLE IF NOT EXISTS public.traffic_fines (
+  id TEXT PRIMARY KEY,
+  notice_number TEXT UNIQUE NOT NULL,
+  infringement_date DATE NOT NULL,
+  vehicle_plate TEXT NOT NULL,
+  driver_id TEXT REFERENCES public.drivers(id) ON DELETE SET NULL,
+  driver_name TEXT,
+  location TEXT NOT NULL,
+  municipality TEXT DEFAULT 'JMPD - City of Johannesburg',
+  infringement_type TEXT NOT NULL,
+  amount_zar NUMERIC NOT NULL,
+  discounted_amount_zar NUMERIC,
+  due_date DATE NOT NULL,
+  aarto_status TEXT NOT NULL DEFAULT 'notice_issued', -- 'notice_issued', 'courtesy_letter', 'enforcement_order', 'paid', 'transferred_to_driver'
+  payment_status TEXT NOT NULL DEFAULT 'unpaid', -- 'unpaid', 'allocated_to_driver', 'deducted_from_earnings', 'paid_by_company'
+  document_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 8. Yoco Payment Transactions & Bank Reconciliation
+CREATE TABLE IF NOT EXISTS public.yoco_transactions (
+  id TEXT PRIMARY KEY,
+  yoco_charge_id TEXT UNIQUE NOT NULL,
+  yoco_payment_link_id TEXT,
+  driver_id TEXT REFERENCES public.drivers(id) ON DELETE SET NULL,
+  driver_name TEXT NOT NULL,
+  amount_zar NUMERIC NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'ZAR',
+  payment_method TEXT NOT NULL, -- 'yoco_card_terminal', 'yoco_payment_link', 'yoco_recurring_token', 'instant_eft'
+  allocation TEXT NOT NULL DEFAULT 'weekly_rental', -- 'weekly_rental', 'security_deposit', 'traffic_fine', 'repair_deductible'
+  status TEXT NOT NULL DEFAULT 'successful', -- 'successful', 'pending', 'failed', 'refunded'
+  yoco_fee_zar NUMERIC DEFAULT 0,
+  net_amount_zar NUMERIC NOT NULL,
+  card_last4 TEXT,
+  card_brand TEXT,
+  reconciliation_status TEXT NOT NULL DEFAULT 'reconciled', -- 'reconciled', 'unallocated', 'disputed'
+  transaction_date TIMESTAMPTZ DEFAULT NOW(),
+  yoco_metadata JSONB DEFAULT '{}'::jsonb
+);
+
+-- 9. Rental & Sales Agreements
+CREATE TABLE IF NOT EXISTS public.rental_agreements (
+  id TEXT PRIMARY KEY,
+  agreement_number TEXT UNIQUE NOT NULL,
+  driver_id TEXT NOT NULL REFERENCES public.drivers(id) ON DELETE CASCADE,
+  driver_name TEXT NOT NULL,
+  vehicle_id TEXT NOT NULL REFERENCES public.vehicles(id) ON DELETE RESTRICT,
+  vehicle_plate TEXT NOT NULL,
+  agreement_type TEXT NOT NULL DEFAULT 'rent_to_own',
+  term_months INT NOT NULL DEFAULT 18,
+  weekly_rate_zar NUMERIC NOT NULL,
+  deposit_amount_zar NUMERIC NOT NULL,
+  deposit_paid BOOLEAN DEFAULT true,
+  start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  expected_end_date DATE NOT NULL,
+  actual_end_date DATE,
+  total_contract_value_zar NUMERIC NOT NULL,
+  total_paid_zar NUMERIC DEFAULT 0,
+  remaining_balance_zar NUMERIC NOT NULL,
+  is_completed BOOLEAN DEFAULT false,
+  signature_data_url TEXT,
+  contract_pdf_url TEXT,
+  terms_version TEXT DEFAULT 'v2026.1',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 10. Driver Referral Program
+CREATE TABLE IF NOT EXISTS public.driver_referrals (
+  id TEXT PRIMARY KEY,
+  referrer_driver_id TEXT NOT NULL REFERENCES public.drivers(id) ON DELETE CASCADE,
+  referrer_driver_name TEXT NOT NULL,
+  referred_applicant_name TEXT NOT NULL,
+  referred_phone TEXT NOT NULL,
+  referral_date DATE DEFAULT CURRENT_DATE,
+  status TEXT NOT NULL DEFAULT 'pending_onboarding', -- 'pending_onboarding', 'active_driving', 'bonus_eligible', 'paid_out'
+  reward_amount_zar NUMERIC NOT NULL DEFAULT 350,
+  paid_date DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 11. Site Settings & Branding
+CREATE TABLE IF NOT EXISTS public.site_settings (
   id TEXT PRIMARY KEY,
   logo_url TEXT,
   hero_image_url TEXT,
@@ -91,15 +292,42 @@ CREATE TABLE IF NOT EXISTS site_settings (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Enable Row Level Security (RLS)
-ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE bikes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
+-- Enable Row Level Security (RLS) on all tables
+ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bikes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.drivers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vehicles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.parts_inventory ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.repairs_and_services ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.traffic_fines ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.yoco_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rental_agreements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.driver_referrals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
 
--- Public access policies for demo / prototype
-CREATE POLICY "Allow public read-write on applications" ON applications FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write on bikes" ON bikes FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write on site_settings" ON site_settings FOR ALL USING (true) WITH CHECK (true);
+-- Public / Authenticated Access Policies
+CREATE POLICY "Allow read-write on applications" ON public.applications FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow read-write on bikes" ON public.bikes FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow read-write on drivers" ON public.drivers FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow read-write on vehicles" ON public.vehicles FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow read-write on parts_inventory" ON public.parts_inventory FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow read-write on repairs_and_services" ON public.repairs_and_services FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow read-write on traffic_fines" ON public.traffic_fines FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow read-write on yoco_transactions" ON public.yoco_transactions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow read-write on rental_agreements" ON public.rental_agreements FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow read-write on driver_referrals" ON public.driver_referrals FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow read-write on site_settings" ON public.site_settings FOR ALL USING (true) WITH CHECK (true);
+
+-- Indexes for lightning fast queries
+CREATE INDEX IF NOT EXISTS idx_applications_status ON public.applications(status);
+CREATE INDEX IF NOT EXISTS idx_drivers_status ON public.drivers(status);
+CREATE INDEX IF NOT EXISTS idx_drivers_assigned_vehicle ON public.drivers(assigned_vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_vehicles_status ON public.vehicles(status);
+CREATE INDEX IF NOT EXISTS idx_vehicles_plate ON public.vehicles(registration_plate);
+CREATE INDEX IF NOT EXISTS idx_repairs_vehicle ON public.repairs_and_services(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_traffic_fines_driver ON public.traffic_fines(driver_id);
+CREATE INDEX IF NOT EXISTS idx_yoco_tx_driver ON public.yoco_transactions(driver_id);
+CREATE INDEX IF NOT EXISTS idx_rental_agreements_driver ON public.rental_agreements(driver_id);
 `;
 
 // Helper: Map application DB snake_case to frontend camelCase

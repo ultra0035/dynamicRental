@@ -155,3 +155,197 @@ export interface RiderApplication {
 }
 
 export type ActiveTab = 'home' | 'about' | 'contact' | 'apply' | 'status' | 'admin' | 'fleet' | 'location';
+
+// ---------------------------------------------------------------------------
+// FLEET MANAGEMENT EXTENDED DATA MODELS
+// ---------------------------------------------------------------------------
+
+export type DriverStatus = 'active' | 'suspended' | 'completed' | 'in_arrears' | 'defaulted';
+export type DriverRiskTier = 'low' | 'medium' | 'high' | 'critical';
+
+export interface Driver {
+  id: string;
+  applicationId?: string;
+  refNumber: string; // e.g. DRV-7492-JHB
+  fullName: string;
+  phone: string;
+  whatsappNumber: string;
+  email?: string;
+  idOrPassportNumber: string;
+  citizenship: CitizenshipType;
+  nationalityCountry?: string;
+  address: string;
+  suburb: string;
+  city: string;
+  status: DriverStatus;
+  assignedVehicleId?: string;
+  assignedBikeVinOrPlate?: string;
+  assignedBikeName?: string;
+  weeklyRate: number; // e.g. R650 or R750
+  balanceDue: number; // Positive = Overdue Arrears, Negative = Prepaid Credit
+  depositPaid: number;
+  contractStartDate: string;
+  contractEndDate?: string;
+  termMonths: number;
+  primaryPlatform: string;
+  deliveryApps?: string[];
+  riskTier: DriverRiskTier;
+  riskScore: number; // 0 - 100 (Higher is safer)
+  paymentScore: number; // On-time payment rate %
+  incidentCount: number;
+  totalPaid: number;
+  yocoCustomerToken?: string;
+  referredBy?: string;
+  notes?: string;
+}
+
+export type VehicleStatus = 'available' | 'assigned' | 'in_maintenance' | 'impounded' | 'retired';
+
+export interface Vehicle {
+  id: string;
+  vin: string;
+  engineNumber: string;
+  registrationPlate: string;
+  bikeModelId: string;
+  make: string;
+  model: string;
+  year: number;
+  category: BikeCategory;
+  condition: BikeCondition;
+  status: VehicleStatus;
+  assignedDriverId?: string;
+  assignedDriverName?: string;
+  odometerKm: number;
+  nextServiceKm: number;
+  lastServiceDate?: string;
+  trackerDeviceId?: string;
+  trackerProvider?: string; // e.g. 'Cartrack', 'Netstar', 'Tracker SA', 'DynamicGPS'
+  batteryHealthPercent?: number;
+  fuelLevelPercent?: number;
+  isIgnitionOn?: boolean;
+  latitude?: number;
+  longitude?: number;
+  lastLocationAddress?: string;
+  lastPingTime?: string;
+  insurancePolicyNumber?: string;
+  licenseDiskExpiryDate?: string;
+  imageUrl?: string;
+}
+
+export interface PartsInventoryItem {
+  id: string;
+  sku: string;
+  name: string;
+  category: 'helmets' | 'delivery_boxes' | 'phone_mounts' | 'brake_pads' | 'chains_sprockets' | 'tires_tubes' | 'engine_oil' | 'batteries' | 'cables_levers' | 'general';
+  quantityInStock: number;
+  minThreshold: number;
+  costPriceZar: number;
+  sellingPriceZar: number;
+  compatibleModels: string[];
+  supplierName?: string;
+  lastRestockedDate?: string;
+}
+
+export type ServiceType = 
+  | 'routine_5000km' 
+  | 'major_overhaul' 
+  | 'brake_replacement' 
+  | 'tire_change' 
+  | 'accident_repair' 
+  | 'electrical_tracker' 
+  | 'cosmetic_box';
+
+export interface RepairAndService {
+  id: string;
+  vehicleId: string;
+  vehiclePlate: string;
+  driverId?: string;
+  driverName?: string;
+  serviceType: ServiceType;
+  odometerKm: number;
+  costZar: number;
+  technicianName: string;
+  garageLocation: string;
+  serviceDate: string;
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  partsUsed?: string[];
+  notes?: string;
+  invoiceUrl?: string;
+}
+
+export interface TrafficFine {
+  id: string;
+  noticeNumber: string;
+  infringementDate: string;
+  vehiclePlate: string;
+  driverId?: string;
+  driverName?: string;
+  location: string;
+  municipality: string; // e.g. 'JMPD - Johannesburg', 'EMPD - Ekurhuleni', 'TMPD - Tshwane'
+  infringementType: string;
+  amountZar: number;
+  discountedAmountZar?: number;
+  dueDate: string;
+  aartoStatus: 'notice_issued' | 'courtesy_letter' | 'enforcement_order' | 'paid' | 'transferred_to_driver' | 'contested';
+  paymentStatus: 'unpaid' | 'allocated_to_driver' | 'deducted_from_earnings' | 'paid_by_company';
+  documentUrl?: string;
+}
+
+export type YocoPaymentMethod = 'yoco_card_terminal' | 'yoco_payment_link' | 'yoco_recurring_token' | 'instant_eft';
+export type PaymentAllocation = 'weekly_rental' | 'security_deposit' | 'traffic_fine' | 'repair_deductible' | 'other';
+
+export interface YocoTransaction {
+  id: string;
+  yocoChargeId: string; // e.g. 'ch_yoco_live_9a8b7c'
+  yocoPaymentLinkId?: string;
+  driverId: string;
+  driverName: string;
+  amountZar: number;
+  currency: 'ZAR';
+  paymentMethod: YocoPaymentMethod;
+  allocation: PaymentAllocation;
+  status: 'successful' | 'pending' | 'failed' | 'refunded';
+  yocoFeeZar: number;
+  netAmountZar: number;
+  cardLast4?: string;
+  cardBrand?: string;
+  reconciliationStatus: 'reconciled' | 'unallocated' | 'disputed';
+  transactionDate: string;
+  yocoMetadata?: Record<string, any>;
+}
+
+export interface RentalAgreement {
+  id: string;
+  agreementNumber: string; // e.g. AGR-2026-081
+  driverId: string;
+  driverName: string;
+  vehicleId: string;
+  vehiclePlate: string;
+  agreementType: 'rent_to_own' | 'pure_commercial_rental';
+  termMonths: number;
+  weeklyRateZar: number;
+  depositAmountZar: number;
+  depositPaid: boolean;
+  startDate: string;
+  expectedEndDate: string;
+  actualEndDate?: string;
+  totalContractValueZar: number;
+  totalPaidZar: number;
+  remainingBalanceZar: number;
+  isCompleted: boolean;
+  signatureDataUrl?: string;
+  contractPdfUrl?: string;
+  termsVersion: string;
+}
+
+export interface DriverReferral {
+  id: string;
+  referrerDriverId: string;
+  referrerDriverName: string;
+  referredApplicantName: string;
+  referredPhone: string;
+  referralDate: string;
+  status: 'pending_onboarding' | 'active_driving' | 'bonus_eligible' | 'paid_out';
+  rewardAmountZar: number;
+  paidDate?: string;
+}
