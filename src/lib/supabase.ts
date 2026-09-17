@@ -190,8 +190,17 @@ export async function fetchApplications(): Promise<RiderApplication[]> {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        return data.map(mapDbToApplication);
+      if (!error && Array.isArray(data)) {
+        const mapped = data.map(mapDbToApplication);
+        try {
+          localStorage.setItem(LOCAL_APPS_KEY, JSON.stringify(mapped));
+        } catch (e) {
+          // ignore
+        }
+        return mapped;
+      }
+      if (error) {
+        console.warn('Supabase fetch applications error:', error);
       }
     } catch (err) {
       console.warn('Supabase fetch failed, fallback to local storage:', err);
@@ -202,20 +211,25 @@ export async function fetchApplications(): Promise<RiderApplication[]> {
   try {
     const cached = localStorage.getItem(LOCAL_APPS_KEY);
     if (cached) {
-      return JSON.parse(cached);
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) {
+        // Filter out legacy mock data if any exists in local storage
+        const cleaned = parsed.filter((a: any) => !a.id?.startsWith('app-00'));
+        return cleaned;
+      }
     }
   } catch (e) {
     // ignore
   }
 
-  return INITIAL_APPLICATIONS;
+  return [];
 }
 
 export async function saveApplication(app: RiderApplication): Promise<void> {
   // 1. Always update localStorage cache
   try {
     const cached = localStorage.getItem(LOCAL_APPS_KEY);
-    let list: RiderApplication[] = cached ? JSON.parse(cached) : INITIAL_APPLICATIONS;
+    let list: RiderApplication[] = cached ? JSON.parse(cached) : [];
     const exists = list.some((a) => a.id === app.id);
     if (exists) {
       list = list.map((a) => (a.id === app.id ? app : a));

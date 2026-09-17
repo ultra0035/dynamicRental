@@ -70,7 +70,7 @@ export default function App() {
           fetchBikes(),
           fetchCustomization(),
         ]);
-        if (loadedApps && loadedApps.length > 0) {
+        if (loadedApps) {
           setApplications(loadedApps);
         }
         if (loadedBikes && loadedBikes.length > 0) {
@@ -114,9 +114,13 @@ export default function App() {
   };
 
   const handleUpdateApplication = async (updated: RiderApplication) => {
-    setApplications((prev) =>
-      prev.map((app) => (app.id === updated.id ? updated : app))
-    );
+    setApplications((prev) => {
+      const exists = prev.some((app) => app.id === updated.id);
+      if (exists) {
+        return prev.map((app) => (app.id === updated.id ? updated : app));
+      }
+      return [updated, ...prev];
+    });
     try {
       await saveApplicationToDb(updated);
     } catch (e) {
@@ -148,54 +152,12 @@ export default function App() {
     }
   };
 
-  const handleAddNewWalkin = () => {
-    const walkinRef = `DR-WLK-${Math.floor(1000 + Math.random() * 9000)}`;
-    const newWalkin: RiderApplication = {
-      id: `walkin-${Date.now()}`,
-      refNumber: walkinRef,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      status: 'pending_review',
-      bikeId: 'bajaj-boxer-150',
-      bikeName: 'Bajaj Boxer 150 HD',
-      bikeCondition: 'new',
-      termMonths: 18,
-      weeklyRate: 750,
-      depositAmount: 1000,
-      fullName: 'Walk-in Showroom Applicant',
-      phone: '071 000 0000',
-      whatsappNumber: '0710000000',
-      email: 'showroom@dynamicrental.info',
-      citizenship: 'south_african',
-      idOrPassportNumber: '0000000000000',
-      address: COMPANY_DETAILS.address,
-      suburb: 'Randburg',
-      city: 'Johannesburg',
-      primaryPlatform: 'Takealot',
-      deliveryExperience: '1-2 years',
-      approxWeeklyEarnings: 3800,
-      documents: {},
-      verification: {
-        idVerified: false,
-        licenseVerified: false,
-        workPermitVerified: false,
-        trafficRegisterVerified: false,
-      },
-      depositAcknowledged: true,
-      termsAgreed: true,
-      adminNotes: 'Walk-in registered by showroom receptionist.',
-      timeline: [
-        {
-          timestamp: new Date().toISOString(),
-          status: 'pending_review',
-          title: 'Walk-in Registered',
-          description: 'Rider visited showroom at 304 Tungsten Rd, Randburg.',
-        },
-      ],
-    };
-
-    setApplications((prev) => [newWalkin, ...prev]);
-    saveApplicationToDb(newWalkin);
+  const handleAddNewWalkin = async (newWalkin?: RiderApplication) => {
+    if (newWalkin) {
+      setApplications((prev) => [newWalkin, ...prev]);
+      await saveApplicationToDb(newWalkin);
+      return;
+    }
   };
 
   const handleAdminLoginSuccess = () => {

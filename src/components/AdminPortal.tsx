@@ -7,8 +7,7 @@ import {
 } from '../types';
 import { COMPANY_DETAILS, BIKES } from '../data/bikes';
 import { ContractModal } from './ContractModal';
-import { isSupabaseConfigured, SUPABASE_SQL_SCHEMA, saveCustomizationToDb } from '../lib/supabase';
-import { PRESET_HERO_IMAGES, saveStoredCustomization } from '../lib/customizationStore';
+import { WalkInApplicantModal } from './WalkInApplicantModal';
 import { compressImageFile } from '../lib/imageUtils';
 import { 
   ShieldCheck, 
@@ -31,8 +30,6 @@ import {
   Plus, 
   Trash2, 
   Edit, 
-  Database, 
-  Copy, 
   ExternalLink, 
   ZoomIn, 
   X, 
@@ -52,10 +49,10 @@ import {
   BarChart3, 
   Users, 
   LogOut, 
-  Palette, 
   Menu, 
   CheckCheck,
-  Loader2
+  Loader2,
+  UserPlus
 } from 'lucide-react';
 
 interface AdminPortalProps {
@@ -64,7 +61,7 @@ interface AdminPortalProps {
   onUpdateApplication: (updated: RiderApplication) => Promise<void> | void;
   onSaveBike: (bike: Bike) => Promise<void> | void;
   onDeleteBike: (bikeId: string) => Promise<void> | void;
-  onAddNewWalkin?: () => void;
+  onAddNewWalkin?: (newApp?: RiderApplication) => Promise<void> | void;
   onCloseAdmin?: () => void;
   onSaveLogo?: (logoUrl: string) => void;
   onSaveHeroImage?: (heroUrl: string) => void;
@@ -72,7 +69,7 @@ interface AdminPortalProps {
   customHeroUrl?: string;
 }
 
-type AdminPage = 'dashboard' | 'applicant' | 'bike_and_stock' | 'branding_and_assets' | 'supabase';
+type AdminPage = 'dashboard' | 'applicant' | 'bike_and_stock';
 
 // Pipeline stages configuration
 const PIPELINE_STAGES: {
@@ -157,14 +154,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onDeleteBike,
   onAddNewWalkin,
   onCloseAdmin,
-  onSaveLogo,
-  onSaveHeroImage,
-  customLogoUrl,
-  customHeroUrl,
 }) => {
-  // Sidebar active page state: 'dashboard' | 'applicant' | 'bike_and_stock' | 'branding_and_assets' | 'supabase'
+  // Sidebar active page state: 'dashboard' | 'applicant' | 'bike_and_stock'
   const [activePage, setActivePage] = useState<AdminPage>('applicant');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+
+  // Walk-in modal state
+  const [isWalkinModalOpen, setIsWalkinModalOpen] = useState<boolean>(false);
 
   // Application Pipeline View Mode: 'board' (Kanban) or 'list' (Master-Detail)
   const [pipelineViewMode, setPipelineViewMode] = useState<'board' | 'list'>('board');
@@ -185,21 +181,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [editingBike, setEditingBike] = useState<Bike | null>(null);
   const [isNewBikeModal, setIsNewBikeModal] = useState<boolean>(false);
   const [bikeImageMode, setBikeImageMode] = useState<'upload' | 'url' | 'presets'>('upload');
-  const [copiedSql, setCopiedSql] = useState<boolean>(false);
+  const [isUploadingBikeImg, setIsUploadingBikeImg] = useState<boolean>(false);
   const bikeFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Branding Editor Direct States (for immediate preview and upload)
-  const [logoInput, setLogoInput] = useState<string>(customLogoUrl || '');
-  const [heroInput, setHeroInput] = useState<string>(customHeroUrl || '');
-  const [brandingSuccessMessage, setBrandingSuccessMessage] = useState<string>('');
-  const [isUploadingLogo, setIsUploadingLogo] = useState<boolean>(false);
-  const [isUploadingHero, setIsUploadingHero] = useState<boolean>(false);
-  const [isUploadingBikeImg, setIsUploadingBikeImg] = useState<boolean>(false);
-  const logoFileInputRef = useRef<HTMLInputElement>(null);
-  const heroFileInputRef = useRef<HTMLInputElement>(null);
-
   // Selected Application
-  const activeApp = applications.find((a) => a.id === selectedAppId) || applications[0];
+  const activeApp = applications.find((a) => a.id === selectedAppId) || applications[0] || null;
 
   // Filtering
   const filteredApps = applications.filter((app) => {
@@ -394,69 +380,16 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
     }
   };
 
-  // Handle Direct Logo Upload from Device
-  const handleLogoDeviceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploadingLogo(true);
-    try {
-      const dataUrl = await compressImageFile(file, {
-        maxWidth: 600,
-        maxHeight: 240,
-        quality: 0.9,
-      });
-      setLogoInput(dataUrl);
-      if (onSaveLogo) onSaveLogo(dataUrl);
-      saveStoredCustomization({ logoUrl: dataUrl });
-      saveCustomizationToDb({ logoUrl: dataUrl });
-      setBrandingSuccessMessage('Logo updated and synced to cloud!');
-      setTimeout(() => setBrandingSuccessMessage(''), 4000);
-    } catch (err: any) {
-      console.error('Logo upload error:', err);
-      alert(err?.message || 'Could not process logo. Please select a valid image file.');
-    } finally {
-      setIsUploadingLogo(false);
-      if (logoFileInputRef.current) logoFileInputRef.current.value = '';
+  // Handle walk-in submission from modal
+  const handleWalkInSubmit = async (newApp: RiderApplication) => {
+    if (onAddNewWalkin) {
+      await onAddNewWalkin(newApp);
+    } else {
+      await onUpdateApplication(newApp);
     }
-  };
-
-  // Handle Direct Hero Upload from Device
-  const handleHeroDeviceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploadingHero(true);
-    try {
-      const dataUrl = await compressImageFile(file, {
-        maxWidth: 1600,
-        maxHeight: 900,
-        quality: 0.84,
-        mimeType: 'image/jpeg',
-      });
-      setHeroInput(dataUrl);
-      if (onSaveHeroImage) onSaveHeroImage(dataUrl);
-      saveStoredCustomization({ heroImageUrl: dataUrl });
-      saveCustomizationToDb({ heroImageUrl: dataUrl });
-      setBrandingSuccessMessage('Hero banner updated and synced to cloud!');
-      setTimeout(() => setBrandingSuccessMessage(''), 4000);
-    } catch (err: any) {
-      console.error('Hero upload error:', err);
-      alert(err?.message || 'Could not process hero image. Please select a valid photo.');
-    } finally {
-      setIsUploadingHero(false);
-      if (heroFileInputRef.current) heroFileInputRef.current.value = '';
-    }
-  };
-
-  const handleSaveBrandingUrls = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (onSaveLogo) onSaveLogo(logoInput);
-    if (onSaveHeroImage) onSaveHeroImage(heroInput);
-    saveStoredCustomization({ logoUrl: logoInput, heroImageUrl: heroInput });
-    saveCustomizationToDb({ logoUrl: logoInput, heroImageUrl: heroInput });
-    setBrandingSuccessMessage('Branding changes saved and synced across all devices!');
-    setTimeout(() => setBrandingSuccessMessage(''), 4000);
+    setSelectedAppId(newApp.id);
+    setActivePage('applicant');
+    setIsWalkinModalOpen(false);
   };
 
   // Bike Management Save Handler
@@ -509,12 +442,6 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
     setEditingBike(newB);
     setIsNewBikeModal(true);
     setBikeImageMode('upload');
-  };
-
-  const copySqlToClipboard = () => {
-    navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2500);
   };
 
   return (
@@ -620,45 +547,6 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
             }`}>
               {bikes.length}
             </span>
-          </button>
-
-          {/* 4. Branding & Assets */}
-          <button
-            type="button"
-            onClick={() => {
-              setActivePage('branding_and_assets');
-              setIsMobileSidebarOpen(false);
-            }}
-            className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between ${
-              activePage === 'branding_and_assets'
-                ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Palette className="w-4 h-4" />
-              <span>Branding & Assets</span>
-            </div>
-          </button>
-
-          {/* 5. Supabase Cloud */}
-          <button
-            type="button"
-            onClick={() => {
-              setActivePage('supabase');
-              setIsMobileSidebarOpen(false);
-            }}
-            className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between ${
-              activePage === 'supabase'
-                ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Database className="w-4 h-4" />
-              <span>Supabase Cloud</span>
-            </div>
-            <div className={`w-2 h-2 rounded-full ${isSupabaseConfigured ? 'bg-emerald-400' : 'bg-amber-400'}`} />
           </button>
 
           {/* Spacer */}
@@ -785,6 +673,18 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
 
                   <button
                     type="button"
+                    onClick={() => setIsWalkinModalOpen(true)}
+                    className="p-4 rounded-2xl bg-cyan-50 hover:bg-cyan-100 text-cyan-900 border border-cyan-200 font-bold text-xs flex items-center gap-3 transition-colors text-left"
+                  >
+                    <UserPlus className="w-5 h-5 flex-shrink-0 text-cyan-700" />
+                    <div>
+                      <div className="font-black text-slate-900">+ Log Walk-in</div>
+                      <div className="text-[10px] text-slate-500 font-normal">Intake applicant at showroom</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => {
                       setActivePage('bike_and_stock');
                       startAddNewBike();
@@ -795,18 +695,6 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                     <div>
                       <div className="font-black text-slate-900">Add Motorbike</div>
                       <div className="text-[10px] text-slate-500 font-normal">Upload bike photo from device</div>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActivePage('branding_and_assets')}
-                    className="p-4 rounded-2xl bg-cyan-50 hover:bg-cyan-100 text-cyan-900 border border-cyan-200 font-bold text-xs flex items-center gap-3 transition-colors text-left"
-                  >
-                    <Palette className="w-5 h-5 flex-shrink-0 text-cyan-700" />
-                    <div>
-                      <div className="font-black text-slate-900">Branding & Assets</div>
-                      <div className="text-[10px] text-slate-500 font-normal">Manage site logo & hero banner</div>
                     </div>
                   </button>
 
@@ -951,16 +839,14 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                   <span className="hidden sm:inline">Export CSV</span>
                 </button>
 
-                {onAddNewWalkin && (
-                  <button
-                    type="button"
-                    onClick={onAddNewWalkin}
-                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5 transition-colors shadow-xs"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Walk-in</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setIsWalkinModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center gap-1.5 transition-colors shadow-xs"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>+ Walk-in</span>
+                </button>
               </div>
             </div>
 
@@ -1502,7 +1388,29 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                       </div>
                     )}
                   </div>
-                ) : null}
+                ) : (
+                  <div className="lg:col-span-7 bg-white rounded-3xl border border-dashed border-slate-300 p-12 text-center flex flex-col items-center justify-center gap-3 min-h-[350px]">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
+                      <Users className="w-6 h-6" />
+                    </div>
+                    <div className="font-bold text-slate-800 text-sm">
+                      {applications.length === 0 ? 'No Applications in Database' : 'No Applicant Selected'}
+                    </div>
+                    <p className="text-xs text-slate-500 max-w-sm">
+                      {applications.length === 0
+                        ? 'There are currently 0 applications in the database. When riders apply online or visit your showroom, their records will display here.'
+                        : 'Select an applicant from the list on the left to inspect documents, manage stage, and trigger WhatsApp notices.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setIsWalkinModalOpen(true)}
+                      className="mt-2 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>+ Register Walk-in Applicant</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1604,285 +1512,6 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-        )}
-
-        {/* PAGE 4: BRANDING & ASSETS (Persistent Sync for Logo & Hero Banner) */}
-        {activePage === 'branding_and_assets' && (
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-md flex flex-col gap-6" id="admin-branding-page">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
-              <div>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-cyan-50 text-cyan-800 border border-cyan-200 mb-2">
-                  <Palette className="w-3.5 h-3.5 text-cyan-600" />
-                  <span>BRANDING & ASSETS</span>
-                </div>
-                <h2 className="text-2xl font-black text-slate-900">
-                  Site Logo & Home Hero Banner
-                </h2>
-                <p className="text-xs text-slate-600 mt-1">
-                  Upload custom assets from your device or set image URLs. Automatically syncs persistently to your live Vercel deployment and cloud storage.
-                </p>
-              </div>
-
-              {brandingSuccessMessage && (
-                <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-xs flex items-center gap-2 animate-bounce">
-                  <CheckCheck className="w-4 h-4 text-emerald-600" />
-                  <span>{brandingSuccessMessage}</span>
-                </div>
-              )}
-            </div>
-
-            <form onSubmit={handleSaveBrandingUrls} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Card 1: Website Logo */}
-              <div className="bg-slate-50 rounded-2xl border border-slate-200 p-6 flex flex-col justify-between gap-5">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                      1. Dealership Website Logo
-                    </span>
-                    <span className="text-[11px] text-slate-400">Header Branding</span>
-                  </div>
-                  <p className="text-xs text-slate-600 mb-4">
-                    Upload your official PNG/SVG transparent logo or provide a direct image link.
-                  </p>
-
-                  {/* Logo Preview */}
-                  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-center min-h-[120px]">
-                    {logoInput ? (
-                      <img src={logoInput} alt="Custom Logo Preview" className="h-14 w-auto object-contain" />
-                    ) : (
-                      <div className="text-cyan-400 font-black text-sm tracking-wider flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-cyan-400" />
-                        DYNAMIC RENTAL (DEFAULT VECTOR)
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  <input
-                    ref={logoFileInputRef}
-                    type="file"
-                    accept="image/png, image/jpeg, image/webp, image/svg+xml"
-                    onChange={handleLogoDeviceUpload}
-                    className="hidden"
-                  />
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={isUploadingLogo}
-                      onClick={() => logoFileInputRef.current?.click()}
-                      className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-colors shadow-xs"
-                    >
-                      {isUploadingLogo ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Optimizing Logo...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="w-4 h-4" />
-                          <span>Upload Logo from Device</span>
-                        </>
-                      )}
-                    </button>
-
-                    {logoInput && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLogoInput('');
-                          if (onSaveLogo) onSaveLogo('');
-                          saveStoredCustomization({ logoUrl: '' });
-                          saveCustomizationToDb({ logoUrl: '' });
-                        }}
-                        className="p-2.5 rounded-xl bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 text-xs"
-                        title="Reset to default logo"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Or Logo Web URL:</label>
-                    <input
-                      type="text"
-                      value={logoInput}
-                      onChange={(e) => setLogoInput(e.target.value)}
-                      placeholder="https://your-domain.com/logo.png"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-900 bg-white font-mono focus:border-blue-500 outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Card 2: Home Hero Banner */}
-              <div className="bg-slate-50 rounded-2xl border border-slate-200 p-6 flex flex-col justify-between gap-5">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                      2. Home Hero Banner Image
-                    </span>
-                    <span className="text-[11px] text-slate-400">Showcase Hero</span>
-                  </div>
-                  <p className="text-xs text-slate-600 mb-4">
-                    High-impact delivery motorbike photo displayed on the homepage.
-                  </p>
-
-                  {/* Hero Preview */}
-                  <div className="h-44 bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden relative">
-                    <img
-                      src={heroInput || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80'}
-                      alt="Hero Preview"
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent flex items-end p-3 text-white text-xs font-bold">
-                      Live Hero Banner Preview
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  <input
-                    ref={heroFileInputRef}
-                    type="file"
-                    accept="image/png, image/jpeg, image/webp"
-                    onChange={handleHeroDeviceUpload}
-                    className="hidden"
-                  />
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={isUploadingHero}
-                      onClick={() => heroFileInputRef.current?.click()}
-                      className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-colors shadow-xs"
-                    >
-                      {isUploadingHero ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Optimizing Hero Banner...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="w-4 h-4" />
-                          <span>Upload Hero Image from Device</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Or Hero Image Web URL:</label>
-                    <input
-                      type="text"
-                      value={heroInput}
-                      onChange={(e) => setHeroInput(e.target.value)}
-                      placeholder="https://images.unsplash.com/..."
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs text-slate-900 bg-white font-mono focus:border-blue-500 outline-none"
-                    />
-                  </div>
-
-                  {/* Preset Quick Selectors */}
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-                      Or Pick Showroom Preset:
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {PRESET_HERO_IMAGES.slice(0, 3).map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => setHeroInput(p.url)}
-                          className={`p-1 rounded-xl border text-[10px] font-semibold text-slate-700 hover:bg-white truncate transition-all ${
-                            heroInput === p.url ? 'border-cyan-500 bg-cyan-50 text-cyan-900 font-bold ring-1 ring-cyan-400' : 'border-slate-200 bg-white'
-                          }`}
-                        >
-                          {p.title}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Submit / Save Bar */}
-              <div className="lg:col-span-2 bg-slate-900 text-white p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
-                <div className="text-xs text-slate-300">
-                  Save all asset updates. These will immediately persist on your live Vercel site and across all visitors.
-                </div>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black text-xs transition-colors shadow-xs flex items-center justify-center gap-2"
-                >
-                  <CheckCheck className="w-4 h-4" />
-                  <span>Save Branding Changes</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* PAGE 5: SUPABASE CLOUD POSTGRESQL */}
-        {activePage === 'supabase' && (
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-md flex flex-col gap-6" id="admin-supabase-page">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
-              <div>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 mb-2">
-                  <Database className="w-3.5 h-3.5" />
-                  <span>SUPABASE CLOUD POSTGRESQL</span>
-                </div>
-                <h2 className="text-2xl font-black text-slate-900">
-                  Database Cloud Sync & Architecture
-                </h2>
-                <p className="text-xs text-slate-600 mt-1">
-                  Real-time cloud synchronization for applications, documents, bike inventory, and site branding.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${
-                  isSupabaseConfigured
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    : 'bg-amber-100 text-amber-800 border border-amber-300'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full ${isSupabaseConfigured ? 'bg-emerald-600' : 'bg-amber-600 animate-ping'}`} />
-                  <span>{isSupabaseConfigured ? 'Supabase Connected' : 'Local Fallback Active'}</span>
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 rounded-2xl border border-slate-200 p-5 text-xs text-slate-700 space-y-3">
-              <strong className="text-slate-900 text-sm block">How Supabase works in this app:</strong>
-              <p>
-                1. When <code className="bg-slate-200 px-1.5 py-0.5 rounded text-blue-700 font-mono">VITE_SUPABASE_URL</code> and <code className="bg-slate-200 px-1.5 py-0.5 rounded text-blue-700 font-mono">VITE_SUPABASE_ANON_KEY</code> are provided in environment variables (such as on Vercel), the app automatically syncs all applications, inventory, and branding to your cloud PostgreSQL database.
-              </p>
-              <p>
-                2. When unconfigured, the app runs smoothly on browser local storage with zero runtime crashes.
-              </p>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-bold text-slate-700 uppercase">
-                  Supabase SQL Schema (Run in Supabase SQL Editor):
-                </label>
-                <button
-                  type="button"
-                  onClick={copySqlToClipboard}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5 transition-colors shadow-xs"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>{copiedSql ? 'SQL Copied!' : 'Copy SQL Script'}</span>
-                </button>
-              </div>
-
-              <pre className="bg-slate-900 text-cyan-300 p-4 rounded-2xl text-xs font-mono overflow-x-auto max-h-80 border border-slate-800">
-                {SUPABASE_SQL_SCHEMA}
-              </pre>
             </div>
           </div>
         )}
@@ -2158,6 +1787,14 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
           onClose={() => setContractApp(null)}
         />
       )}
+
+      {/* WALK-IN APPLICANT MODAL */}
+      <WalkInApplicantModal
+        isOpen={isWalkinModalOpen}
+        onClose={() => setIsWalkinModalOpen(false)}
+        bikes={bikes}
+        onSubmit={handleWalkInSubmit}
+      />
     </div>
   );
 };
