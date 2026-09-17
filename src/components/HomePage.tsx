@@ -225,97 +225,109 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
 
         {/* Fleet Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-          {bikes.map((bike) => {
-            const pricing = selectedCondition === 'new' ? bike.pricing.new : bike.pricing.used;
-            const termDisplay = selectedCondition === 'new' 
-              ? `${bike.pricing.new.termMonthsOptions?.join(' or ')} Months`
-              : `${bike.pricing.used.termMonths} Months`;
+        {bikes.length === 0 ? (
+          <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center flex flex-col items-center justify-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 shadow-xs">
+              <Clock className="w-6 h-6 text-slate-400" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800">No Motorbike Models Currently Listed</h3>
+            <p className="text-xs text-slate-500 max-w-md">
+              The showroom stock catalog is currently empty. Log into the Staff Portal to add new motorbike models and configure rental terms.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+            {bikes.map((bike) => {
+              const pricing = selectedCondition === 'new' ? bike.pricing.new : bike.pricing.used;
+              const termDisplay = selectedCondition === 'new' 
+                ? `${bike.pricing.new.termMonthsOptions?.join(' or ')} Months`
+                : `${bike.pricing.used.termMonths} Months`;
 
-            return (
-              <div
-                key={bike.id}
-                className={`bg-white rounded-3xl border transition-all duration-300 flex flex-col justify-between overflow-hidden shadow-sm hover:shadow-xl ${
-                  bike.isAvailable ? 'border-slate-200 hover:border-cyan-400' : 'border-slate-200 opacity-80'
-                }`}
-              >
-                <div>
-                  {/* Bike Image Container */}
-                  <div className="relative aspect-16/10 bg-slate-900 overflow-hidden group">
-                    <img
-                      src={bike.image}
-                      alt={bike.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      referrerPolicy="no-referrer"
-                    />
-                    {bike.badge && (
-                      <span className="absolute top-3 left-3 px-3 py-1 text-[11px] font-bold rounded-full bg-slate-900/90 text-cyan-300 border border-slate-700 backdrop-blur-xs">
-                        {bike.badge}
+              return (
+                <div
+                  key={bike.id}
+                  className={`bg-white rounded-3xl border transition-all duration-300 flex flex-col justify-between overflow-hidden shadow-sm hover:shadow-xl ${
+                    bike.isAvailable ? 'border-slate-200 hover:border-cyan-400' : 'border-slate-200 opacity-80'
+                  }`}
+                >
+                  <div>
+                    {/* Bike Image Container */}
+                    <div className="relative aspect-16/10 bg-slate-900 overflow-hidden group">
+                      <img
+                        src={bike.image}
+                        alt={bike.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        referrerPolicy="no-referrer"
+                      />
+                      {bike.badge && (
+                        <span className="absolute top-3 left-3 px-3 py-1 text-[11px] font-bold rounded-full bg-slate-900/90 text-cyan-300 border border-slate-700 backdrop-blur-xs">
+                          {bike.badge}
+                        </span>
+                      )}
+                      <span className="absolute bottom-3 right-3 px-2.5 py-1 text-[10px] font-extrabold uppercase rounded-lg bg-black/80 text-white backdrop-blur-xs font-mono">
+                        {bike.fuelType}
                       </span>
-                    )}
-                    <span className="absolute bottom-3 right-3 px-2.5 py-1 text-[10px] font-extrabold uppercase rounded-lg bg-black/80 text-white backdrop-blur-xs font-mono">
-                      {bike.fuelType}
-                    </span>
-                  </div>
-
-                  {/* Bike Details */}
-                  <div className="p-6 space-y-4">
-                    <div>
-                      <div className="text-xs font-bold text-cyan-700 uppercase tracking-wider">{bike.brand}</div>
-                      <h3 className="text-xl font-black text-slate-900 mt-0.5">{bike.name}</h3>
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-2">{bike.subtitle}</p>
                     </div>
 
-                    {/* Pricing Box */}
-                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-baseline justify-between">
+                    {/* Bike Details */}
+                    <div className="p-6 space-y-4">
                       <div>
-                        <span className="text-[10px] uppercase font-bold text-slate-500 block">Weekly Rental</span>
-                        <div className="text-2xl font-black text-slate-900 font-mono">
-                          R{pricing.weeklyPayment}
-                          <span className="text-xs font-normal text-slate-500"> /week</span>
+                        <div className="text-xs font-bold text-cyan-700 uppercase tracking-wider">{bike.brand}</div>
+                        <h3 className="text-xl font-black text-slate-900 mt-0.5">{bike.name}</h3>
+                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">{bike.subtitle}</p>
+                      </div>
+
+                      {/* Pricing Box */}
+                      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-baseline justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-500 block">Weekly Rental</span>
+                          <div className="text-2xl font-black text-slate-900 font-mono">
+                            R{pricing.weeklyPayment}
+                            <span className="text-xs font-normal text-slate-500"> /week</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] uppercase font-bold text-slate-500 block">Term & Deposit</span>
+                          <div className="text-xs font-bold text-slate-800">{termDisplay}</div>
+                          <span className="text-[11px] font-semibold text-emerald-700">R{pricing.deposit} Deposit</span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[10px] uppercase font-bold text-slate-500 block">Term & Deposit</span>
-                        <div className="text-xs font-bold text-slate-800">{termDisplay}</div>
-                        <span className="text-[11px] font-semibold text-emerald-700">R{pricing.deposit} Deposit</span>
-                      </div>
-                    </div>
 
-                    {/* Features list */}
-                    <ul className="space-y-1.5 text-xs text-slate-600">
-                      {bike.keyFeatures.slice(0, 3).map((feat, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <Check className="w-3.5 h-3.5 text-cyan-600 flex-shrink-0 mt-0.5" />
-                          <span>{feat}</span>
-                        </li>
-                      ))}
-                    </ul>
+                      {/* Features list */}
+                      <ul className="space-y-1.5 text-xs text-slate-600">
+                        {bike.keyFeatures.slice(0, 3).map((feat, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <Check className="w-3.5 h-3.5 text-cyan-600 flex-shrink-0 mt-0.5" />
+                            <span>{feat}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  {/* Card Action Button */}
+                  <div className="p-6 pt-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const term = selectedCondition === 'new' ? (bike.pricing.new.termMonthsOptions[0] || 18) : bike.pricing.used.termMonths;
+                        onSelectBikeForApplication(bike.id, selectedCondition, term);
+                      }}
+                      className={`w-full py-3.5 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all ${
+                        bike.isAvailable
+                          ? 'bg-slate-900 hover:bg-slate-800 text-white shadow-md hover:shadow-cyan-500/10'
+                          : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                      }`}
+                    >
+                      <span>{bike.isAvailable ? 'Apply For This Bike' : 'Coming Soon'}</span>
+                      <ArrowRight className="w-4 h-4 text-cyan-400" />
+                    </button>
                   </div>
                 </div>
-
-                {/* Card Action Button */}
-                <div className="p-6 pt-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const term = selectedCondition === 'new' ? (bike.pricing.new.termMonthsOptions[0] || 18) : bike.pricing.used.termMonths;
-                      onSelectBikeForApplication(bike.id, selectedCondition, term);
-                    }}
-                    className={`w-full py-3.5 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all ${
-                      bike.isAvailable
-                        ? 'bg-slate-900 hover:bg-slate-800 text-white shadow-md hover:shadow-cyan-500/10'
-                        : 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                    }`}
-                  >
-                    <span>{bike.isAvailable ? 'Apply For This Bike' : 'Coming Soon'}</span>
-                    <ArrowRight className="w-4 h-4 text-cyan-400" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* 3. EARNINGS CALCULATOR & PROFIT SIMULATOR */}
         <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-10 border border-slate-800 shadow-xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">

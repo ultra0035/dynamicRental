@@ -2355,79 +2355,99 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
             </div>
 
             {/* Bike Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {bikes.map((b) => (
-                <div
-                  key={b.id}
-                  className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col"
+            {bikes.length === 0 ? (
+              <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-12 text-center flex flex-col items-center justify-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <Plus className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-slate-800">No Motorbike Models in Database</h3>
+                <p className="text-xs text-slate-500 max-w-md">
+                  Your bike catalog is clean and empty. Click the button below to add your first motorbike model and configure its weekly rental pricing.
+                </p>
+                <button
+                  type="button"
+                  onClick={startAddNewBike}
+                  className="mt-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1.5 transition-colors shadow-xs"
                 >
-                  <div className="relative h-48 bg-slate-950 overflow-hidden">
-                    <img
-                      src={b.image}
-                      alt={b.name}
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="absolute top-3 inset-x-3 flex items-center justify-between">
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white text-blue-700 border border-blue-100 shadow-xs">
-                        {b.brand}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                        b.isAvailable ? 'bg-emerald-500 text-white' : 'bg-slate-500 text-white'
-                      }`}>
-                        {b.isAvailable ? 'In Stock' : 'Out of Stock'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="p-4 flex-1 flex flex-col justify-between gap-3">
-                    <div>
-                      <h3 className="text-base font-black text-slate-900">{b.name}</h3>
-                      <p className="text-xs text-slate-500">{b.subtitle}</p>
-
-                      <div className="mt-3 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs grid grid-cols-2 gap-2">
-                        <div>
-                          <span className="text-slate-500 block">Brand New:</span>
-                          <strong className="text-blue-600 font-mono">
-                            R{b.pricing.new.weeklyPayment}/wk · R{b.pricing.new.deposit} dep
-                          </strong>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block">Pre-Owned:</span>
-                          <strong className="text-cyan-700 font-mono">
-                            R{b.pricing.used.weeklyPayment}/wk · R{b.pricing.used.deposit} dep
-                          </strong>
-                        </div>
+                  <Plus className="w-4 h-4" />
+                  <span>Add First Motorbike Model</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {bikes.map((b) => (
+                  <div
+                    key={b.id}
+                    className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col"
+                  >
+                    <div className="relative h-48 bg-slate-950 overflow-hidden">
+                      <img
+                        src={b.image}
+                        alt={b.name}
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute top-3 inset-x-3 flex items-center justify-between">
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white text-blue-700 border border-blue-100 shadow-xs">
+                          {b.brand}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                          b.isAvailable ? 'bg-emerald-500 text-white' : 'bg-slate-500 text-white'
+                        }`}>
+                          {b.isAvailable ? 'In Stock' : 'Out of Stock'}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingBike(b);
-                          setIsNewBikeModal(false);
-                          setBikeImageMode('upload');
-                        }}
-                        className="flex-1 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center gap-1 transition-colors"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                        <span>Edit Bike / Pricing</span>
-                      </button>
+                    <div className="p-4 flex-1 flex flex-col justify-between gap-3">
+                      <div>
+                        <h3 className="text-base font-black text-slate-900">{b.name}</h3>
+                        <p className="text-xs text-slate-500">{b.subtitle}</p>
 
-                      <button
-                        type="button"
-                        onClick={() => onDeleteBike(b.id)}
-                        className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                        title="Delete bike"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                        <div className="mt-3 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs grid grid-cols-2 gap-2">
+                          <div>
+                            <span className="text-slate-500 block">Brand New:</span>
+                            <strong className="text-blue-600 font-mono">
+                              R{b.pricing.new.weeklyPayment}/wk · R{b.pricing.new.deposit} dep
+                            </strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block">Pre-Owned:</span>
+                            <strong className="text-cyan-700 font-mono">
+                              R{b.pricing.used.weeklyPayment}/wk · R{b.pricing.used.deposit} dep
+                            </strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingBike(b);
+                            setIsNewBikeModal(false);
+                            setBikeImageMode('upload');
+                          }}
+                          className="flex-1 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center gap-1 transition-colors"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                          <span>Edit Bike / Pricing</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onDeleteBike(b.id)}
+                          className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          title="Delete bike"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

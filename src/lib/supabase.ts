@@ -499,8 +499,8 @@ export async function fetchBikes(): Promise<Bike[]> {
         .select('*')
         .order('created_at', { ascending: true });
 
-      if (!error && data && data.length > 0) {
-        return data.map((b: any) => ({
+      if (!error && Array.isArray(data)) {
+        const mapped = data.map((b: any) => ({
           id: b.id,
           name: b.name,
           subtitle: b.subtitle,
@@ -519,6 +519,12 @@ export async function fetchBikes(): Promise<Bike[]> {
           keyFeatures: b.key_features || b.keyFeatures || [],
           recommendedFor: b.recommended_for || b.recommendedFor || '',
         }));
+        try {
+          localStorage.setItem(LOCAL_BIKES_KEY, JSON.stringify(mapped));
+        } catch (e) {
+          // ignore
+        }
+        return mapped;
       }
     } catch (err) {
       console.warn('Supabase bikes fetch error, fallback to local:', err);
@@ -529,13 +535,16 @@ export async function fetchBikes(): Promise<Bike[]> {
   try {
     const cached = localStorage.getItem(LOCAL_BIKES_KEY);
     if (cached) {
-      return JSON.parse(cached);
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
     }
   } catch (e) {
     // ignore
   }
 
-  return BIKES;
+  return [];
 }
 
 export async function saveBike(bike: Bike): Promise<void> {

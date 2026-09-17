@@ -73,7 +73,7 @@ export default function App() {
         if (loadedApps) {
           setApplications(loadedApps);
         }
-        if (loadedBikes && loadedBikes.length > 0) {
+        if (loadedBikes) {
           setBikes(loadedBikes);
         }
         if (loadedCustomization) {
