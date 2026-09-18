@@ -227,19 +227,19 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
     const srv: RepairAndService = {
       id: `srv-${Date.now()}`,
-      vehicleId: matchedVeh?.id || 'veh-001',
-      vehiclePlate: newServiceForm.vehiclePlate || 'JH 49 XP GP',
+      vehicleId: matchedVeh?.id || '',
+      vehiclePlate: newServiceForm.vehiclePlate || '',
       driverId: matchedVeh?.assignedDriverId,
       driverName: newServiceForm.driverName,
       serviceType: newServiceForm.serviceType || 'routine_5000km',
-      odometerKm: Number(newServiceForm.odometerKm) || 5000,
-      costZar: Number(newServiceForm.costZar) || 350,
-      technicianName: newServiceForm.technicianName || 'Master Siphesihle',
-      garageLocation: newServiceForm.garageLocation || 'Randburg Hub Workshop',
+      odometerKm: Number(newServiceForm.odometerKm) || 0,
+      costZar: Number(newServiceForm.costZar) || 0,
+      technicianName: newServiceForm.technicianName || '',
+      garageLocation: newServiceForm.garageLocation || 'Workshop',
       serviceDate: new Date().toISOString().split('T')[0],
       status: 'completed',
-      partsUsed: ['Castrol 20W-50 Oil', 'Spark Plug NGK'],
-      notes: newServiceForm.notes || 'Service successfully completed.',
+      partsUsed: [],
+      notes: newServiceForm.notes || '',
     };
 
     onAddService(srv);
@@ -264,15 +264,15 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     e.preventDefault();
     const fine: TrafficFine = {
       id: `fine-${Date.now()}`,
-      noticeNumber: newFineForm.noticeNumber || `JMPD-${Date.now()}`,
+      noticeNumber: newFineForm.noticeNumber || `FINE-${Date.now()}`,
       infringementDate: newFineForm.infringementDate || new Date().toISOString().split('T')[0],
-      vehiclePlate: newFineForm.vehiclePlate || 'JH 49 XP GP',
+      vehiclePlate: newFineForm.vehiclePlate || '',
       driverName: newFineForm.driverName,
-      location: newFineForm.location || 'Randburg Area',
+      location: newFineForm.location || 'Johannesburg',
       municipality: newFineForm.municipality || 'JMPD',
-      infringementType: newFineForm.infringementType || 'Speeding',
-      amountZar: Number(newFineForm.amountZar) || 250,
-      discountedAmountZar: (Number(newFineForm.amountZar) || 250) / 2,
+      infringementType: newFineForm.infringementType || 'Traffic Violation',
+      amountZar: Number(newFineForm.amountZar) || 0,
+      discountedAmountZar: (Number(newFineForm.amountZar) || 0) / 2,
       dueDate: newFineForm.dueDate || new Date().toISOString().split('T')[0],
       aartoStatus: 'notice_issued',
       paymentStatus: 'allocated_to_driver',
@@ -987,7 +987,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. JH 49 XP GP"
+                    placeholder="e.g. GP registration plate"
                     value={newVehicleForm.registrationPlate}
                     onChange={(e) => setNewVehicleForm({ ...newVehicleForm, registrationPlate: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold"
@@ -998,7 +998,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="MD2A25BY8PC90..."
+                    placeholder="17-character VIN"
                     value={newVehicleForm.vin}
                     onChange={(e) => setNewVehicleForm({ ...newVehicleForm, vin: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono"

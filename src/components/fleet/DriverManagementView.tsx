@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Driver, DriverReferral, DriverRiskTier, DriverStatus, Vehicle } from '../../types';
+import { Driver, DriverReferral, DriverRiskTier, DriverStatus, Vehicle, RiderApplication, RentalAgreement } from '../../types';
+import { DriverDetailModal } from './DriverDetailModal';
 import { 
   Users, 
   ShieldAlert, 
@@ -19,7 +20,10 @@ import {
   CreditCard,
   FileText,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 
 export type DriverSubTab = 'directory' | 'risk_registry' | 'referrals';
@@ -28,10 +32,14 @@ interface DriverManagementViewProps {
   drivers: Driver[];
   vehicles: Vehicle[];
   referrals: DriverReferral[];
+  applications?: RiderApplication[];
+  agreements?: RentalAgreement[];
   onUpdateDriver: (driver: Driver) => void;
   onAddDriver: (driver: Driver) => void;
   onUpdateReferral: (referral: DriverReferral) => void;
   onOpenYocoPaymentForDriver: (driver: Driver) => void;
+  onChangeBike?: (driverId: string, newVehicleId: string) => void;
+  onRemoveBike?: (driverId: string) => void;
   activeSubTab?: DriverSubTab;
 }
 
@@ -39,10 +47,14 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
   drivers,
   vehicles,
   referrals,
+  applications = [],
+  agreements = [],
   onUpdateDriver,
   onAddDriver,
   onUpdateReferral,
   onOpenYocoPaymentForDriver,
+  onChangeBike,
+  onRemoveBike,
   activeSubTab,
 }) => {
   const [subTab, setSubTab] = useState<DriverSubTab>(activeSubTab || 'directory');
@@ -324,13 +336,41 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
 
                       {/* Assigned Bike */}
                       <td className="py-3.5 px-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <Bike className="w-3.5 h-3.5 text-slate-400" />
-                            <span className="font-bold text-slate-900">{driver.assignedBikeVinOrPlate || 'Pending Bike'}</span>
+                        {driver.assignedBikeVinOrPlate ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-slate-900 text-cyan-300">
+                                {driver.assignedBikeVinOrPlate}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-500 font-medium block truncate max-w-[160px]">
+                              {driver.assignedBikeName || 'Bajaj Boxer 150'}
+                            </span>
+                            <div className="flex items-center gap-1 text-[10px]">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedDriver(driver)}
+                                className="text-indigo-600 hover:text-indigo-800 font-bold underline"
+                              >
+                                Switch / Remove
+                              </button>
+                            </div>
                           </div>
-                          <span className="text-[11px] text-slate-500 block">{driver.assignedBikeName || 'Bajaj Boxer 150'}</span>
-                        </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800">
+                              ⚠️ No Bike Assigned
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDriver(driver)}
+                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-black shadow-2xs flex items-center gap-1 transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Assign Bike</span>
+                            </button>
+                          </div>
+                        )}
                       </td>
 
                       {/* Weekly Rate & Ledger Balance */}
@@ -394,6 +434,17 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Centralized Documents & Bike Modal Button */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDriver(driver)}
+                            title="Open Driver Documents & Motorbike Hub"
+                            className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors font-bold flex items-center gap-1 text-[11px] px-2.5"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Docs & Bike</span>
+                          </button>
+
                           {/* Yoco Payment Quick Button */}
                           <button
                             type="button"
@@ -819,6 +870,54 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* ALL-IN-ONE DRIVER HUB & DOCUMENTS MODAL */}
+      <DriverDetailModal
+        isOpen={!!selectedDriver}
+        driver={selectedDriver}
+        vehicles={vehicles}
+        application={applications.find(
+          (a) => a.id === selectedDriver?.applicationId || a.fullName === selectedDriver?.fullName || a.idOrPassportNumber === selectedDriver?.idOrPassportNumber
+        )}
+        agreements={agreements}
+        onClose={() => setSelectedDriver(null)}
+        onUpdateDriver={(updated) => {
+          onUpdateDriver(updated);
+          setSelectedDriver(updated);
+        }}
+        onChangeBike={(driverId, newVehicleId) => {
+          if (onChangeBike) {
+            onChangeBike(driverId, newVehicleId);
+          }
+          // Also update local selected driver state if vehicle changed
+          const veh = vehicles.find((v) => v.id === newVehicleId);
+          if (veh && selectedDriver) {
+            setSelectedDriver({
+              ...selectedDriver,
+              assignedVehicleId: veh.id,
+              assignedBikeVinOrPlate: veh.registrationPlate || veh.vin,
+              assignedBikeName: `${veh.make} ${veh.model} (${veh.registrationPlate || veh.vin})`,
+            });
+          }
+        }}
+        onRemoveBike={(driverId) => {
+          if (onRemoveBike) {
+            onRemoveBike(driverId);
+          }
+          if (selectedDriver) {
+            setSelectedDriver({
+              ...selectedDriver,
+              assignedVehicleId: undefined,
+              assignedBikeVinOrPlate: undefined,
+              assignedBikeName: undefined,
+            });
+          }
+        }}
+        onOpenYocoPayment={(drv) => {
+          setSelectedDriver(null);
+          onOpenYocoPaymentForDriver(drv);
+        }}
+      />
     </div>
   );
 };

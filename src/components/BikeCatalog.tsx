@@ -131,8 +131,29 @@ export const BikeCatalog: React.FC<BikeCatalogProps> = ({
       </div>
 
       {/* Bike Fleet Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="bike-grid">
-        {bikes.map((bike) => {
+      {bikes.length === 0 ? (
+        <div className="bg-slate-50 border border-slate-200 rounded-3xl p-8 sm:p-12 text-center flex flex-col items-center justify-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center">
+            <Sparkles className="w-7 h-7" />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-slate-900">Commercial Rent-to-Own Fleet</h3>
+            <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mt-1">
+              Apply online for a delivery motorcycle with flexible rent-to-own terms.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onSelectBikeForApplication('custom-delivery-bike', selectedCondition, selectedCondition === 'new' ? 18 : 20)}
+            className="mt-2 px-8 py-3.5 rounded-2xl font-black text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/25 transition-all flex items-center gap-2"
+          >
+            <span>Start Online Application</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="bike-grid">
+          {bikes.map((bike) => {
           const isSelected = selectedBikeForCalc === bike.id;
           const isComing = bike.isComingSoon;
           const weeklyRate = selectedCondition === 'new' 
@@ -278,6 +299,7 @@ export const BikeCatalog: React.FC<BikeCatalogProps> = ({
           );
         })}
       </div>
+      )}
 
       {/* Interactive Delivery Courier Earnings & Profit Calculator */}
       <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xl relative overflow-hidden" id="roi-calculator">

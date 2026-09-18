@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   RiderApplication, 
   ApplicationStatus, 
@@ -16,11 +16,14 @@ import {
 import { COMPANY_DETAILS, BIKES } from '../data/bikes';
 import { ContractModal } from './ContractModal';
 import { WalkInApplicantModal } from './WalkInApplicantModal';
+import { SupabaseConfigModal } from './SupabaseConfigModal';
 import { DriverManagementView } from './fleet/DriverManagementView';
 import { VehicleManagementView } from './fleet/VehicleManagementView';
 import { FleetFinancialsView } from './fleet/FleetFinancialsView';
+import { DeliverAndAssignModal } from './fleet/DeliverAndAssignModal';
 import { compressImageFile } from '../lib/imageUtils';
 import { SUPABASE_SQL_SCHEMA } from '../db/schemaSql';
+import { isSupabaseConnected } from '../lib/supabase';
 import {
   getFleetDrivers,
   saveFleetDrivers,
@@ -41,6 +44,10 @@ import {
   getYocoSettings,
   saveYocoSettings,
   convertApplicantToDriver,
+  assignBikeToDriver,
+  unassignBikeFromDriver,
+  fetchAllFleetData,
+  deduplicateDrivers,
   YocoSettings
 } from '../lib/fleetStore';
 import { 
@@ -88,6 +95,7 @@ import {
   Loader2,
   UserPlus,
   UserCheck,
+  Lock,
   Radio,
   CreditCard,
   Wrench,
@@ -99,6 +107,7 @@ import {
   Gift,
   ShieldAlert,
   Landmark,
+  Database,
   Settings as SettingsIcon
 } from 'lucide-react';
 
@@ -269,6 +278,35 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [referralsState, setReferralsState] = useState<DriverReferral[]>(() => getFleetReferrals());
   const [yocoSettingsState, setYocoSettingsState] = useState<YocoSettings>(() => getYocoSettings());
   const [selectedDriverForYocoPayment, setSelectedDriverForYocoPayment] = useState<Driver | null>(null);
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
+  const [isLoadingFleetFromDb, setIsLoadingFleetFromDb] = useState<boolean>(false);
+  const [assigningDeliveryApp, setAssigningDeliveryApp] = useState<RiderApplication | null>(null);
+
+  // Live Database Fetcher
+  const reloadAllFleetFromDb = async () => {
+    setIsLoadingFleetFromDb(true);
+    try {
+      const data = await fetchAllFleetData();
+      if (data) {
+        setDriversState(data.drivers);
+        setVehiclesState(data.vehicles);
+        setPartsState(data.parts);
+        setServicesState(data.services);
+        setFinesState(data.fines);
+        setTransactionsState(data.transactions);
+        setAgreementsState(data.agreements);
+        setReferralsState(data.referrals);
+      }
+    } catch (e) {
+      console.warn('Failed loading fleet data from DB:', e);
+    } finally {
+      setIsLoadingFleetFromDb(false);
+    }
+  };
+
+  useEffect(() => {
+    reloadAllFleetFromDb();
+  }, []);
 
   // Sidebar Group Toggle State
   const [isDriverGroupOpen, setIsDriverGroupOpen] = useState<boolean>(true);
@@ -334,6 +372,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   // Move Driver Status Handler (Works from Board, List, or Inspector)
   const handleMoveStatus = (targetApp: RiderApplication, newStatus: ApplicationStatus) => {
+    // STRICT PIPELINE RULE: Once an applicant is on Delivered / Contract Signed, lock position permanently
+    if (targetApp.status === 'contract_signed') {
+      return;
+    }
+
+    // If moving to Delivered / Contract Signed, open the bike assignment & delivery handover modal
+    if (newStatus === 'contract_signed') {
+      setAssigningDeliveryApp(targetApp);
+      return;
+    }
+
     let title = 'Status Updated';
     let desc = `Application stage changed to ${newStatus.replace(/_/g, ' ')}.`;
 
@@ -343,9 +392,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     } else if (newStatus === 'needs_more_info') {
       title = 'Action Required: Missing Documentation / TRN';
       desc = 'Rider notified to submit missing Traffic Register certificate (TRN) or ID docs.';
-    } else if (newStatus === 'contract_signed') {
-      title = 'Contract Signed & Bike Delivered';
-      desc = 'Deposit received, contract executed, keys handed over to rider.';
     } else if (newStatus === 'declined') {
       title = 'Application Declined';
       desc = 'Did not meet current underwriting or insurance criteria.';
@@ -370,34 +416,147 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     };
 
     onUpdateApplication(updated);
+  };
 
-    // AUTO-CONVERT TO ACTIVE DRIVER UPON DELIVERY / CONTRACT SIGNED
-    if (newStatus === 'contract_signed') {
-      try {
-        const { newDriver, updatedVehicles, newAgreement } = convertApplicantToDriver(
-          updated,
-          vehiclesState,
-          driversState
-        );
+  // Confirm Handover & Assign Motorbike (Executed from DeliverAndAssignModal)
+  const handleConfirmDeliveryAndAssignment = ({
+    application,
+    selectedVehicleId,
+    customVinOrPlate,
+    customBikeName,
+    weeklyRate,
+    depositPaid,
+    termMonths,
+    startOdoKm,
+    handoverDate,
+    adminNotes,
+    collectionPhotoUrl,
+    handoverPhotos,
+    newVehicleToCreate,
+  }: {
+    application: RiderApplication;
+    selectedVehicleId?: string;
+    customVinOrPlate?: string;
+    customBikeName?: string;
+    weeklyRate: number;
+    depositPaid: number;
+    termMonths: number;
+    startOdoKm: number;
+    handoverDate: string;
+    adminNotes?: string;
+    collectionPhotoUrl?: string;
+    handoverPhotos?: string[];
+    newVehicleToCreate?: Vehicle;
+  }) => {
+    const title = 'Contract Signed & Bike Delivered';
+    const desc = `Motorbike ${customVinOrPlate || selectedVehicleId || ''} handed over at Randburg showroom on ${handoverDate}. Deposit R${depositPaid} settled.`;
 
-        setDriversState((prev) => {
-          const next = [newDriver, ...prev.filter((d) => d.id !== newDriver.id)];
-          saveFleetDrivers(next);
-          return next;
-        });
+    const updatedApp: RiderApplication = {
+      ...application,
+      status: 'contract_signed',
+      assignedBikeVinOrPlate: customVinOrPlate,
+      weeklyRate,
+      depositAmount: depositPaid,
+      termMonths,
+      adminNotes,
+      collectionPhotoUrl,
+      handoverPhotos,
+      handoverOdometerKm: startOdoKm,
+      updatedAt: new Date().toISOString(),
+      timeline: [
+        {
+          timestamp: new Date().toISOString(),
+          status: 'contract_signed',
+          title,
+          description: desc,
+        },
+        ...(application.timeline || []),
+      ],
+    };
 
-        setVehiclesState(updatedVehicles);
-        saveFleetVehicles(updatedVehicles);
+    onUpdateApplication(updatedApp);
 
-        setAgreementsState((prev) => {
-          const next = [newAgreement, ...prev.filter((a) => a.id !== newAgreement.id)];
-          saveFleetAgreements(next);
-          return next;
-        });
-      } catch (err) {
-        console.error('Auto-convert applicant to driver error:', err);
+    try {
+      // If a new vehicle was registered on the fly, add to pool first
+      let currentVehicles = vehiclesState;
+      if (newVehicleToCreate) {
+        currentVehicles = [newVehicleToCreate, ...vehiclesState.filter((v) => v.id !== newVehicleToCreate.id)];
+        setVehiclesState(currentVehicles);
+        saveFleetVehicles(currentVehicles);
       }
+
+      const { newDriver, updatedVehicles, newAgreement } = convertApplicantToDriver(
+        updatedApp,
+        currentVehicles,
+        driversState,
+        {
+          assignedVehicleId: selectedVehicleId,
+          customVinOrPlate,
+          customBikeName,
+          customWeeklyRate: weeklyRate,
+          customDepositPaid: depositPaid,
+          customTermMonths: termMonths,
+        }
+      );
+
+      setDriversState((prev) => {
+        const next = deduplicateDrivers([
+          newDriver,
+          ...prev.filter(
+            (d) =>
+              d.id !== newDriver.id &&
+              d.idOrPassportNumber !== newDriver.idOrPassportNumber &&
+              d.phone !== newDriver.phone
+          ),
+        ]);
+        saveFleetDrivers(next);
+        return next;
+      });
+
+      setVehiclesState(updatedVehicles);
+      saveFleetVehicles(updatedVehicles);
+
+      setAgreementsState((prev) => {
+        const next = [
+          newAgreement,
+          ...prev.filter(
+            (a) =>
+              a.id !== newAgreement.id &&
+              a.driverId !== newDriver.id &&
+              a.driverName !== newDriver.fullName
+          ),
+        ];
+        saveFleetAgreements(next);
+        return next;
+      });
+    } catch (err) {
+      console.error('Handover and bike assignment error:', err);
     }
+
+    setAssigningDeliveryApp(null);
+  };
+
+  // Change Assigned Motorbike for Driver
+  const handleChangeDriverBike = (driverId: string, newVehicleId: string) => {
+    const { updatedDrivers, updatedVehicles } = assignBikeToDriver(
+      driverId,
+      newVehicleId,
+      driversState,
+      vehiclesState
+    );
+    setDriversState(updatedDrivers);
+    setVehiclesState(updatedVehicles);
+  };
+
+  // Remove / Unassign Motorbike from Driver
+  const handleRemoveDriverBike = (driverId: string) => {
+    const { updatedDrivers, updatedVehicles } = unassignBikeFromDriver(
+      driverId,
+      driversState,
+      vehiclesState
+    );
+    setDriversState(updatedDrivers);
+    setVehiclesState(updatedVehicles);
   };
 
   // Fleet State Handlers
@@ -1203,6 +1362,33 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
           </div>
 
           <div className="flex items-center gap-2.5">
+            {/* Supabase Database Connection Status Button */}
+            <button
+              type="button"
+              onClick={() => setIsSupabaseModalOpen(true)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs border ${
+                isSupabaseConnected()
+                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                  : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+              }`}
+              title="Configure live Supabase database connection and sync data"
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{isSupabaseConnected() ? 'DB: Connected' : 'Connect DB'}</span>
+              <span className={`w-2 h-2 rounded-full ${isSupabaseConnected() ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+            </button>
+
+            {/* Refresh DB Data Button */}
+            <button
+              type="button"
+              onClick={reloadAllFleetFromDb}
+              disabled={isLoadingFleetFromDb}
+              className="w-8 h-8 rounded-full border border-slate-200 hover:bg-slate-100 text-slate-600 flex items-center justify-center transition-colors text-xs font-black disabled:opacity-50"
+              title="Sync & refresh all data from Supabase database"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${isLoadingFleetFromDb ? 'animate-spin text-cyan-600' : ''}`} />
+            </button>
+
             {/* Feedback Button */}
             <button
               type="button"
@@ -1824,73 +2010,91 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                                 </span>
                               </div>
 
-                              {/* Action Buttons: 1-Click Stage Transitions */}
-                              <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5">
-                                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
-                                  Move Stage:
-                                </label>
-                                
-                                <div className="grid grid-cols-2 gap-1">
-                                  {stage.id !== 'approved_for_collection' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleMoveStatus(app, 'approved_for_collection')}
-                                      className="px-1.5 py-1 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-600 hover:text-white border border-emerald-200 transition-colors flex items-center justify-center gap-0.5"
-                                      title="Approve for Showroom Handover"
-                                    >
-                                      <Check className="w-2.5 h-2.5" />
-                                      <span>Approve</span>
-                                    </button>
-                                  )}
-
-                                  {stage.id !== 'needs_more_info' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleMoveStatus(app, 'needs_more_info')}
-                                      className="px-1.5 py-1 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 hover:bg-amber-500 hover:text-slate-950 border border-amber-200 transition-colors flex items-center justify-center gap-0.5"
-                                      title="Request Missing TRN or Info"
-                                    >
-                                      <AlertTriangle className="w-2.5 h-2.5" />
-                                      <span>Needs TRN</span>
-                                    </button>
-                                  )}
-
-                                  {stage.id !== 'contract_signed' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleMoveStatus(app, 'contract_signed')}
-                                      className="px-1.5 py-1 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-800 hover:bg-indigo-600 hover:text-white border border-indigo-200 transition-colors flex items-center justify-center gap-0.5"
-                                      title="Mark Contract Signed & Handed Over"
-                                    >
-                                      <ShieldCheck className="w-2.5 h-2.5" />
-                                      <span>Delivered</span>
-                                    </button>
-                                  )}
-
-                                  {stage.id !== 'declined' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleMoveStatus(app, 'declined')}
-                                      className="px-1.5 py-1 rounded-md text-[10px] font-bold bg-rose-50 text-rose-800 hover:bg-rose-600 hover:text-white border border-rose-200 transition-colors flex items-center justify-center gap-0.5"
-                                      title="Decline application"
-                                    >
-                                      <X className="w-2.5 h-2.5" />
-                                      <span>Decline</span>
-                                    </button>
-                                  )}
-
-                                  {stage.id !== 'pending_review' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleMoveStatus(app, 'pending_review')}
-                                      className="px-1.5 py-1 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-colors flex items-center justify-center gap-0.5 col-span-2"
-                                      title="Move back to Pending Review"
-                                    >
-                                      <RefreshCw className="w-2.5 h-2.5" />
-                                      <span>Reset to Pending</span>
-                                    </button>
-                                  )}
+                              {/* Action Buttons: 1-Click Stage Transitions or Locked Delivered State */}
+                              {stage.id === 'contract_signed' || app.status === 'contract_signed' ? (
+                                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                                  <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-900 text-[10px] font-black">
+                                    <Lock className="w-3 h-3 text-indigo-600 shrink-0" />
+                                    <span className="truncate">Delivered & Active • Locked</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActivePage('drivers')}
+                                    className="w-full py-1.5 px-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-cyan-300 text-[10px] font-black transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
+                                  >
+                                    <UserCheck className="w-3 h-3 text-cyan-400" />
+                                    <span>View in Approved Customers →</span>
+                                  </button>
                                 </div>
+                              ) : (
+                                <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5">
+                                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+                                    Move Stage:
+                                  </label>
+                                
+                                  <div className="grid grid-cols-2 gap-1">
+                                    {stage.id !== 'approved_for_collection' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMoveStatus(app, 'approved_for_collection')}
+                                        className="px-1.5 py-1 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-600 hover:text-white border border-emerald-200 transition-colors flex items-center justify-center gap-0.5"
+                                        title="Approve for Showroom Handover"
+                                      >
+                                        <Check className="w-2.5 h-2.5" />
+                                        <span>Approve</span>
+                                      </button>
+                                    )}
+
+                                    {stage.id !== 'needs_more_info' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMoveStatus(app, 'needs_more_info')}
+                                        className="px-1.5 py-1 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 hover:bg-amber-500 hover:text-slate-950 border border-amber-200 transition-colors flex items-center justify-center gap-0.5"
+                                        title="Request Missing TRN or Info"
+                                      >
+                                        <AlertTriangle className="w-2.5 h-2.5" />
+                                        <span>Needs TRN</span>
+                                      </button>
+                                    )}
+
+                                    {(stage.id as string) !== 'contract_signed' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMoveStatus(app, 'contract_signed')}
+                                        className="px-1.5 py-1 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-800 hover:bg-indigo-600 hover:text-white border border-indigo-200 transition-colors flex items-center justify-center gap-0.5"
+                                        title="Mark Contract Signed & Handed Over"
+                                      >
+                                        <ShieldCheck className="w-2.5 h-2.5" />
+                                        <span>Delivered</span>
+                                      </button>
+                                    )}
+
+                                    {stage.id !== 'declined' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMoveStatus(app, 'declined')}
+                                        className="px-1.5 py-1 rounded-md text-[10px] font-bold bg-rose-50 text-rose-800 hover:bg-rose-600 hover:text-white border border-rose-200 transition-colors flex items-center justify-center gap-0.5"
+                                        title="Decline application"
+                                      >
+                                        <X className="w-2.5 h-2.5" />
+                                        <span>Decline</span>
+                                      </button>
+                                    )}
+
+                                    {stage.id !== 'pending_review' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMoveStatus(app, 'pending_review')}
+                                        className="px-1.5 py-1 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-colors flex items-center justify-center gap-0.5 col-span-2"
+                                        title="Move back to Pending Review"
+                                      >
+                                        <RefreshCw className="w-2.5 h-2.5" />
+                                        <span>Reset to Pending</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
 
                                 {/* Quick WhatsApp & Inspector Open */}
                                 <div className="flex items-center justify-between pt-1">
@@ -1936,7 +2140,6 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                                   </button>
                                 </div>
                               </div>
-                            </div>
                           ))
                         )}
                       </div>
@@ -2079,32 +2282,67 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
 
                     {/* Visual Stage Progression Stepper */}
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-3">
-                        Pipeline Stage Tracker:
-                      </label>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                        {PIPELINE_STAGES.map((st) => {
-                          const isCurrent = activeApp.status === st.id;
-                          const StageIcon = st.icon;
-
-                          return (
-                            <button
-                              key={st.id}
-                              type="button"
-                              onClick={() => handleMoveStatus(activeApp, st.id)}
-                              className={`p-2.5 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center text-center gap-1 border ${
-                                isCurrent
-                                  ? `${st.bgClass} ${st.textClass} border-${st.color}-400 ring-2 ring-${st.color}-400 shadow-sm`
-                                  : 'bg-white text-slate-600 hover:bg-slate-100 border-slate-200'
-                              }`}
-                            >
-                              <StageIcon className="w-4 h-4" />
-                              <span className="text-[11px] leading-tight">{st.shortLabel}</span>
-                            </button>
-                          );
-                        })}
+                      <div className="flex items-center justify-between mb-3">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                          Pipeline Stage Tracker:
+                        </label>
+                        {activeApp.status === 'contract_signed' && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-100 px-2.5 py-0.5 rounded-full">
+                            <Lock className="w-3 h-3 text-indigo-600" />
+                            Locked in Delivered Stage
+                          </span>
+                        )}
                       </div>
+
+                      {activeApp.status === 'contract_signed' ? (
+                        <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <CheckCircle2 className="w-5 h-5 text-indigo-600 shrink-0" />
+                            <div>
+                              <p className="text-xs font-bold text-indigo-950">
+                                Handover Complete • Lease Active
+                              </p>
+                              <p className="text-[11px] text-indigo-700">
+                                Driver record is active in the Approved Customers directory. Stage transitions are locked to prevent duplicates.
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedAppId(null);
+                              setActivePage('drivers');
+                            }}
+                            className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors whitespace-nowrap shadow-xs flex items-center gap-1.5"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" />
+                            <span>Approved Customers →</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                          {PIPELINE_STAGES.map((st) => {
+                            const isCurrent = activeApp.status === st.id;
+                            const StageIcon = st.icon;
+
+                            return (
+                              <button
+                                key={st.id}
+                                type="button"
+                                onClick={() => handleMoveStatus(activeApp, st.id)}
+                                className={`p-2.5 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center text-center gap-1 border ${
+                                  isCurrent
+                                    ? `${st.bgClass} ${st.textClass} border-${st.color}-400 ring-2 ring-${st.color}-400 shadow-sm`
+                                    : 'bg-white text-slate-600 hover:bg-slate-100 border-slate-200'
+                                }`}
+                              >
+                                <StageIcon className="w-4 h-4" />
+                                <span className="text-[11px] leading-tight">{st.shortLabel}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     {/* Lease Details Summary */}
@@ -2458,6 +2696,7 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
             agreements={agreementsState}
             referrals={referralsState}
             vehicles={vehiclesState}
+            applications={applications}
             activeSubTab={
               activePage === 'driver_risk_registry' 
                 ? 'risk_registry' 
@@ -2467,6 +2706,8 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
             }
             onUpdateDriver={handleUpdateDriver}
             onAddDriver={handleAddDriver}
+            onChangeBike={handleChangeDriverBike}
+            onRemoveBike={handleRemoveDriverBike}
             onUpdateReferral={(updatedRef) => {
               setReferralsState((prev) => {
                 const next = prev.map((r) => (r.id === updatedRef.id ? updatedRef : r));
@@ -3062,6 +3303,22 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
         onClose={() => setIsWalkinModalOpen(false)}
         bikes={bikes}
         onSubmit={handleWalkInSubmit}
+      />
+
+      {/* DELIVERED PIPELINE & MOTORBIKE ASSIGNMENT MODAL */}
+      <DeliverAndAssignModal
+        isOpen={!!assigningDeliveryApp}
+        application={assigningDeliveryApp}
+        vehicles={vehiclesState}
+        onClose={() => setAssigningDeliveryApp(null)}
+        onConfirmAssignment={handleConfirmDeliveryAndAssignment}
+      />
+
+      {/* SUPABASE DATABASE CONFIG MODAL */}
+      <SupabaseConfigModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
+        onDataRefreshed={reloadAllFleetFromDb}
       />
     </div>
   );

@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
-import { Upload, Camera, CheckCircle2, X, FileText, Image as ImageIcon } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Upload, Camera, CheckCircle2, X, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { compressImageFile } from '../lib/imageUtils';
 
 interface FileUploadBoxProps {
   label: string;
@@ -27,32 +28,52 @@ export const FileUploadBox: React.FC<FileUploadBoxProps> = ({
   id,
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+
+  const processFile = async (file: File) => {
+    setIsProcessing(true);
+    try {
+      if (file.type.startsWith('image/')) {
+        const compressed = await compressImageFile(file, {
+          maxWidth: 1200,
+          maxHeight: 900,
+          quality: 0.8,
+        });
+        onChange(compressed);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (typeof event.target?.result === 'string') {
+            onChange(event.target.result);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch (err) {
+      console.warn('File processing error:', err);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (typeof event.target?.result === 'string') {
+          onChange(event.target.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (typeof event.target?.result === 'string') {
-        onChange(event.target.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    processFile(file);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (typeof event.target?.result === 'string') {
-        onChange(event.target.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    processFile(file);
   };
 
   return (
@@ -132,31 +153,41 @@ export const FileUploadBox: React.FC<FileUploadBoxProps> = ({
         <div
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
-          onClick={() => inputRef.current?.click()}
+          onClick={() => !isProcessing && inputRef.current?.click()}
           className="border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50/60 hover:bg-blue-50/30 rounded-xl p-4 cursor-pointer transition-all flex flex-col items-center justify-center text-center group"
         >
-          <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-            <Upload className="w-5 h-5" />
-          </div>
-          <div className="text-xs font-medium text-slate-800 mb-1">
-            <span className="text-blue-600 font-bold underline underline-offset-2">Click to take photo / upload</span> or drag file here
-          </div>
-          <p className="text-[11px] text-slate-500 mb-2">
-            PNG, JPG, PDF (Max 10MB)
-          </p>
+          {isProcessing ? (
+            <div className="flex flex-col items-center justify-center py-2">
+              <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-2" />
+              <div className="text-xs font-bold text-slate-800">Compressing & optimizing document photo...</div>
+              <span className="text-[10px] text-slate-500">Fast-tracking for instant upload</span>
+            </div>
+          ) : (
+            <>
+              <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                <Upload className="w-5 h-5" />
+              </div>
+              <div className="text-xs font-medium text-slate-800 mb-1">
+                <span className="text-blue-600 font-bold underline underline-offset-2">Click to take photo / upload</span> or drag file here
+              </div>
+              <p className="text-[11px] text-slate-500 mb-2">
+                PNG, JPG, PDF (Max 10MB)
+              </p>
 
-          {samplePlaceholderUrl && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onChange(samplePlaceholderUrl);
-              }}
-              className="mt-1 inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-white hover:bg-blue-50 text-blue-700 rounded border border-blue-200 shadow-xs transition-colors"
-            >
-              <ImageIcon className="w-3.5 h-3.5" />
-              <span>{sampleLabel}</span>
-            </button>
+              {samplePlaceholderUrl && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange(samplePlaceholderUrl);
+                  }}
+                  className="mt-1 inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-white hover:bg-blue-50 text-blue-700 rounded border border-blue-200 shadow-xs transition-colors"
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  <span>{sampleLabel}</span>
+                </button>
+              )}
+            </>
           )}
         </div>
       )}

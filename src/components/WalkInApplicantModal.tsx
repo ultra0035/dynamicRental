@@ -74,16 +74,8 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
   if (!isOpen) return null;
 
   // Selected bike model
-  const defaultBike = bikes.find(b => b.isAvailable) || bikes[0] || {
-    id: 'bajaj-boxer-150',
-    name: 'Bajaj Boxer 150 HD',
-    pricing: {
-      new: { weeklyPayment: 750, deposit: 1000, termMonthsOptions: [15, 18] },
-      used: { weeklyPayment: 650, deposit: 650, termMonths: 20 }
-    }
-  };
-
-  const [selectedBikeId, setSelectedBikeId] = useState<string>(defaultBike.id);
+  const [selectedBikeId, setSelectedBikeId] = useState<string>(bikes[0]?.id || 'custom-bike');
+  const [customBikeName, setCustomBikeName] = useState<string>('Commercial Delivery Motorbike (150cc)');
   const [bikeCondition, setBikeCondition] = useState<BikeCondition>('new');
   const [termMonths, setTermMonths] = useState<number>(18);
 
@@ -143,7 +135,15 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string>('');
 
   // Active bike calculation
-  const activeBike = bikes.find(b => b.id === selectedBikeId) || defaultBike;
+  const foundBike = bikes.find(b => b.id === selectedBikeId);
+  const activeBike = foundBike || {
+    id: 'custom-bike',
+    name: customBikeName || 'Commercial Delivery Motorbike (150cc)',
+    pricing: {
+      new: { weeklyPayment: 750, deposit: 1000, termMonthsOptions: [15, 18] },
+      used: { weeklyPayment: 650, deposit: 650, termMonths: 20 }
+    }
+  };
   const weeklyRate = bikeCondition === 'new' 
     ? (activeBike.pricing?.new?.weeklyPayment || 750) 
     : (activeBike.pricing?.used?.weeklyPayment || 650);
@@ -724,17 +724,27 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Motorbike Model
                 </label>
-                <select
-                  value={selectedBikeId}
-                  onChange={(e) => setSelectedBikeId(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
-                >
-                  {bikes.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
+                {bikes.length > 0 ? (
+                  <select
+                    value={selectedBikeId}
+                    onChange={(e) => setSelectedBikeId(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                  >
+                    {bikes.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={customBikeName}
+                    onChange={(e) => setCustomBikeName(e.target.value)}
+                    placeholder="e.g. Commercial Delivery Motorbike (150cc)"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                  />
+                )}
               </div>
 
               {/* Condition */}

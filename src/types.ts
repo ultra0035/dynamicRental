@@ -143,6 +143,9 @@ export interface RiderApplication {
   
   // Admin Notes & Collection schedule
   collectionDate?: string;
+  collectionPhotoUrl?: string;
+  handoverPhotos?: string[];
+  handoverOdometerKm?: number;
   assignedBikeVinOrPlate?: string;
   adminNotes?: string;
   
@@ -197,6 +200,12 @@ export interface Driver {
   yocoCustomerToken?: string;
   referredBy?: string;
   notes?: string;
+  documents?: ApplicationDocuments;
+  verification?: DocumentCheckState;
+  signatureDataUrl?: string;
+  collectionPhotoUrl?: string;
+  handoverPhotos?: string[];
+  handoverOdometerKm?: number;
 }
 
 export type VehicleStatus = 'available' | 'assigned' | 'in_maintenance' | 'impounded' | 'retired';

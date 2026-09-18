@@ -1,7 +1,7 @@
 import { Bike } from '../types';
 
-// Default initial state for showroom/dealership bikes.
-// Clean empty array - populated directly from your Supabase/PostgreSQL database or via Admin Portal.
+// Showroom & Dealership Motorbike Inventory
+// Clean initial state - all data is loaded exclusively from your Supabase/PostgreSQL database or added via the Admin Portal.
 export const BIKES: Bike[] = [];
 
 export const COMPANY_DETAILS = {

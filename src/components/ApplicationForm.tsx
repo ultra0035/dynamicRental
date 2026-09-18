@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { COMPANY_DETAILS } from '../data/bikes';
 import { 
@@ -53,9 +53,18 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
   const [step, setStep] = useState<number>(1);
 
   // Form State
-  const [bikeId, setBikeId] = useState<string>(initialBikeId);
+  const [bikeId, setBikeId] = useState<string>(initialBikeId || (bikes[0]?.id || 'custom-bike'));
+  const [customBikeName, setCustomBikeName] = useState<string>('Standard Delivery Motorbike (150cc)');
   const [condition, setCondition] = useState<BikeCondition>(initialCondition);
   const [termMonths, setTermMonths] = useState<number>(initialTerm);
+
+  useEffect(() => {
+    if (initialBikeId && bikes.some(b => b.id === initialBikeId)) {
+      setBikeId(initialBikeId);
+    } else if (bikes.length > 0 && !bikes.some(b => b.id === bikeId)) {
+      setBikeId(bikes[0].id);
+    }
+  }, [initialBikeId, bikes]);
 
   // Applicant info
   const [fullName, setFullName] = useState<string>('');
@@ -86,7 +95,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  const selectedBike = bikes.find((b) => b.id === bikeId) || bikes[0];
+  const selectedBike = bikes.find((b) => b.id === bikeId);
   const isElectric = selectedBike?.category === 'electric';
   const weeklyRate = condition === 'new' 
     ? (selectedBike?.pricing?.new?.weeklyPayment || 750) 
@@ -120,7 +129,7 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
     setErrorMsg('');
 
     if (step === 1) {
-      if (!bikeId) {
+      if (bikes.length > 0 && !bikeId) {
         setErrorMsg('Please select a bike to continue.');
         return;
       }
@@ -216,8 +225,8 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       status: 'pending_review',
-      bikeId,
-      bikeName: selectedBike?.name || 'Bajaj Boxer 150 HD',
+      bikeId: selectedBike?.id || 'custom-delivery-bike',
+      bikeName: selectedBike?.name || customBikeName || 'Standard Delivery Motorbike (150cc)',
       bikeCondition: condition,
       termMonths,
       weeklyRate,
@@ -407,45 +416,63 @@ All my documents & signature are uploaded. Please let me know once approved for 
             </p>
 
             {/* Bike Grid Picker */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-              {bikes.filter(b => !b.isComingSoon).map((b) => {
-                const isSelected = bikeId === b.id;
-                return (
-                  <div
-                    key={b.id}
-                    onClick={() => handleBikeChange(b.id)}
-                    className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between gap-3 ${
-                      isSelected
-                        ? 'border-blue-500 bg-blue-50/60 ring-2 ring-blue-500/20 shadow-sm'
-                        : 'border-slate-200 bg-slate-50 hover:bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={b.image}
-                        alt={b.name}
-                        className="w-16 h-16 rounded-xl object-cover border border-slate-200"
-                        referrerPolicy="no-referrer"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-800">
-                          {b.brand}
+            {bikes.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                {bikes.filter(b => !b.isComingSoon).map((b) => {
+                  const isSelected = bikeId === b.id;
+                  return (
+                    <div
+                      key={b.id}
+                      onClick={() => handleBikeChange(b.id)}
+                      className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between gap-3 ${
+                        isSelected
+                          ? 'border-blue-500 bg-blue-50/60 ring-2 ring-blue-500/20 shadow-sm'
+                          : 'border-slate-200 bg-slate-50 hover:bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={b.image}
+                          alt={b.name}
+                          className="w-16 h-16 rounded-xl object-cover border border-slate-200"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                            {b.brand}
+                          </span>
+                          <div className="text-sm font-bold text-slate-900 truncate mt-1">{b.name}</div>
+                          <div className="text-xs text-slate-500">{b.engineCapacity}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200">
+                        <span className="text-slate-500">Weekly:</span>
+                        <span className="font-bold text-blue-600 font-mono">
+                          R{condition === 'new' ? (b.pricing?.new?.weeklyPayment || 750) : (b.pricing?.used?.weeklyPayment || 650)}/wk
                         </span>
-                        <div className="text-sm font-bold text-slate-900 truncate mt-1">{b.name}</div>
-                        <div className="text-xs text-slate-500">{b.engineCapacity}</div>
                       </div>
                     </div>
-
-                    <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200">
-                      <span className="text-slate-500">Weekly:</span>
-                      <span className="font-bold text-blue-600 font-mono">
-                        R{condition === 'new' ? 750 : 650}/wk
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-5 rounded-2xl border border-blue-200 bg-blue-50/40 mb-6">
+                <label className="text-xs font-bold text-slate-800 mb-1.5 block">
+                  Preferred Delivery Motorbike Model / Make:
+                </label>
+                <input
+                  type="text"
+                  value={customBikeName}
+                  onChange={(e) => setCustomBikeName(e.target.value)}
+                  placeholder="e.g. 150cc Delivery Motorbike (Bajaj / Big Boy / TVS / Hero)"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white font-semibold text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                />
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  Select your desired condition and payment terms below.
+                </p>
+              </div>
+            )}
 
             {/* Condition Toggle */}
             <div className="mb-6">
@@ -565,7 +592,7 @@ All my documents & signature are uploaded. Please let me know once approved for 
               <div>
                 <span className="text-xs text-slate-500 font-medium">Selected Package:</span>
                 <div className="text-base font-black text-slate-900">
-                  {selectedBike?.name} ({condition.toUpperCase()}) · {termMonths} Months
+                  {selectedBike?.name || customBikeName || 'Standard Delivery Motorbike'} ({condition.toUpperCase()}) · {termMonths} Months
                 </div>
               </div>
               <div className="flex items-center gap-4 text-right">
@@ -1031,7 +1058,7 @@ All my documents & signature are uploaded. Please let me know once approved for 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
                 <div className="bg-white p-3 rounded-xl border border-slate-200">
                   <span className="text-slate-500">Selected Bike:</span>
-                  <div className="font-bold text-slate-900 text-sm mt-0.5">{selectedBike?.name}</div>
+                  <div className="font-bold text-slate-900 text-sm mt-0.5">{selectedBike?.name || customBikeName || 'Standard Delivery Motorbike'}</div>
                   <span className="text-[11px] text-blue-600 font-semibold">{condition.toUpperCase()}</span>
                 </div>
 

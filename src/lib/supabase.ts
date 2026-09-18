@@ -1,380 +1,256 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { RiderApplication, Bike } from '../types';
-import { INITIAL_APPLICATIONS } from '../data/initialApplications';
-import { BIKES } from '../data/bikes';
+import { 
+  RiderApplication, 
+  Bike, 
+  Vehicle, 
+  Driver, 
+  PartsInventoryItem, 
+  RepairAndService, 
+  TrafficFine, 
+  YocoTransaction, 
+  RentalAgreement, 
+  DriverReferral 
+} from '../types';
+import { STATIC_BRANDING } from '../config/branding';
 
-// Safely obtain env variables without crashing
-const envObj = typeof import.meta !== 'undefined' ? (import.meta as { env?: Record<string, string> }).env || {} : {};
-const SUPABASE_URL = envObj.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = envObj.VITE_SUPABASE_ANON_KEY || '';
-
-export const isSupabaseConfigured = Boolean(
-  SUPABASE_URL &&
-  SUPABASE_ANON_KEY &&
-  SUPABASE_URL.startsWith('http') &&
-  !SUPABASE_URL.includes('your-project')
-);
-
-export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-  : null;
-
+const SUPABASE_CONFIG_KEY = 'dynamic_rental_supabase_config_v2';
 const LOCAL_APPS_KEY = 'dynamic_rental_applications_v1';
 const LOCAL_BIKES_KEY = 'dynamic_rental_bikes_v1';
+const LOCAL_VEHICLES_KEY = 'dyn_fleet_vehicles_v1';
+const LOCAL_DRIVERS_KEY = 'dyn_fleet_drivers_v1';
+const LOCAL_PARTS_KEY = 'dyn_fleet_parts_v1';
+const LOCAL_SERVICES_KEY = 'dyn_fleet_services_v1';
+const LOCAL_FINES_KEY = 'dyn_fleet_fines_v1';
+const LOCAL_TRANSACTIONS_KEY = 'dyn_fleet_transactions_v1';
+const LOCAL_AGREEMENTS_KEY = 'dyn_fleet_agreements_v1';
+const LOCAL_REFERRALS_KEY = 'dyn_fleet_referrals_v1';
+const LOCAL_CUSTOMIZATION_KEY = 'dynamic_rental_customization_v2';
 
-// SQL Setup Schema for Supabase
-export const SUPABASE_SQL_SCHEMA = `-- Dynamic Rental Supabase PostgreSQL Full Fleet Schema
--- Run this in your Supabase SQL Editor to initialize all tables & policies
+export interface SupabaseConfig {
+  url: string;
+  anonKey: string;
+}
 
--- 1. Applicants / Onboarding Pipeline
-CREATE TABLE IF NOT EXISTS public.applications (
-  id TEXT PRIMARY KEY,
-  ref_number TEXT UNIQUE NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  status TEXT NOT NULL DEFAULT 'pending_review',
-  bike_id TEXT NOT NULL,
-  bike_name TEXT NOT NULL,
-  bike_condition TEXT NOT NULL,
-  term_months INT NOT NULL,
-  weekly_rate NUMERIC NOT NULL,
-  deposit_amount NUMERIC NOT NULL,
-  full_name TEXT NOT NULL,
-  phone TEXT NOT NULL,
-  whatsapp_number TEXT NOT NULL,
-  email TEXT,
-  citizenship TEXT NOT NULL,
-  id_or_passport_number TEXT NOT NULL,
-  nationality_country TEXT,
-  address TEXT,
-  suburb TEXT,
-  city TEXT DEFAULT 'Randburg',
-  province TEXT DEFAULT 'Gauteng',
-  postal_code TEXT,
-  alternative_contact_name TEXT,
-  alternative_contact_phone TEXT,
-  primary_platform TEXT,
-  delivery_apps JSONB DEFAULT '[]'::jsonb,
-  delivery_experience TEXT,
-  approx_weekly_earnings NUMERIC,
-  referred_by TEXT,
-  credit_score TEXT,
-  documents JSONB DEFAULT '{}'::jsonb,
-  verification JSONB DEFAULT '{"idVerified":false,"licenseVerified":false}'::jsonb,
-  signature_data_url TEXT,
-  deposit_acknowledged BOOLEAN DEFAULT true,
-  terms_agreed BOOLEAN DEFAULT true,
-  collection_date TEXT,
-  assigned_bike_vin_or_plate TEXT,
-  admin_notes TEXT,
-  timeline JSONB DEFAULT '[]'::jsonb
-);
+// 1. Resolve configuration from localStorage or environment variables
+export function getSupabaseConfig(): SupabaseConfig {
+  let url = '';
+  let anonKey = '';
 
--- 2. Motorbike Catalog / Stock Master
-CREATE TABLE IF NOT EXISTS public.bikes (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  subtitle TEXT,
-  brand TEXT NOT NULL,
-  category TEXT NOT NULL,
-  is_available BOOLEAN DEFAULT true,
-  is_coming_soon BOOLEAN DEFAULT false,
-  image TEXT,
-  badge TEXT,
-  fuel_type TEXT,
-  engine_capacity TEXT,
-  tank_capacity TEXT,
-  range_per_charge TEXT,
-  delivery_box_ready BOOLEAN DEFAULT true,
-  pricing JSONB NOT NULL,
-  key_features JSONB DEFAULT '[]'::jsonb,
-  recommended_for TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+  // Check localStorage first
+  try {
+    const saved = localStorage.getItem(SUPABASE_CONFIG_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.url && parsed.anonKey) {
+        url = parsed.url.trim();
+        anonKey = parsed.anonKey.trim();
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
 
--- 3. Active Drivers & Risk Directory
-CREATE TABLE IF NOT EXISTS public.drivers (
-  id TEXT PRIMARY KEY,
-  application_id TEXT REFERENCES public.applications(id) ON DELETE SET NULL,
-  ref_number TEXT UNIQUE NOT NULL,
-  full_name TEXT NOT NULL,
-  phone TEXT NOT NULL,
-  whatsapp_number TEXT NOT NULL,
-  email TEXT,
-  id_or_passport_number TEXT NOT NULL,
-  citizenship TEXT NOT NULL,
-  nationality_country TEXT,
-  address TEXT,
-  suburb TEXT,
-  city TEXT DEFAULT 'Randburg',
-  status TEXT NOT NULL DEFAULT 'active', -- 'active', 'suspended', 'completed', 'in_arrears', 'defaulted'
-  assigned_vehicle_id TEXT,
-  assigned_bike_vin_or_plate TEXT,
-  assigned_bike_name TEXT,
-  weekly_rate NUMERIC NOT NULL DEFAULT 650,
-  balance_due NUMERIC NOT NULL DEFAULT 0, -- positive = overdue, negative = credit
-  deposit_paid NUMERIC NOT NULL DEFAULT 0,
-  contract_start_date DATE DEFAULT CURRENT_DATE,
-  contract_end_date DATE,
-  term_months INT DEFAULT 18,
-  primary_platform TEXT,
-  delivery_apps JSONB DEFAULT '[]'::jsonb,
-  risk_tier TEXT DEFAULT 'low', -- 'low', 'medium', 'high', 'critical'
-  risk_score INT DEFAULT 85, -- 0 to 100
-  payment_score INT DEFAULT 95, -- percentage on-time
-  incident_count INT DEFAULT 0,
-  total_paid NUMERIC DEFAULT 0,
-  yoco_customer_token TEXT,
-  referred_by TEXT,
-  notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+  // Fallback to environment variables
+  if (!url || !anonKey) {
+    const envObj = typeof import.meta !== 'undefined' ? (import.meta as { env?: Record<string, string> }).env || {} : {};
+    url = url || envObj.VITE_SUPABASE_URL || '';
+    anonKey = anonKey || envObj.VITE_SUPABASE_ANON_KEY || '';
+  }
 
--- 4. Vehicles & Asset Register
-CREATE TABLE IF NOT EXISTS public.vehicles (
-  id TEXT PRIMARY KEY,
-  vin TEXT UNIQUE NOT NULL,
-  engine_number TEXT UNIQUE NOT NULL,
-  registration_plate TEXT UNIQUE NOT NULL,
-  bike_model_id TEXT REFERENCES public.bikes(id) ON DELETE RESTRICT,
-  make TEXT NOT NULL,
-  model TEXT NOT NULL,
-  year INT NOT NULL,
-  category TEXT NOT NULL,
-  condition TEXT NOT NULL DEFAULT 'new',
-  status TEXT NOT NULL DEFAULT 'available', -- 'available', 'assigned', 'in_maintenance', 'impounded', 'retired'
-  assigned_driver_id TEXT REFERENCES public.drivers(id) ON DELETE SET NULL,
-  assigned_driver_name TEXT,
-  odometer_km INT NOT NULL DEFAULT 0,
-  next_service_km INT NOT NULL DEFAULT 5000,
-  last_service_date DATE,
-  tracker_device_id TEXT,
-  tracker_provider TEXT DEFAULT 'Cartrack SA',
-  battery_health_percent INT DEFAULT 100,
-  fuel_level_percent INT DEFAULT 100,
-  is_ignition_on BOOLEAN DEFAULT false,
-  latitude NUMERIC,
-  longitude NUMERIC,
-  last_location_address TEXT,
-  last_ping_time TIMESTAMPTZ,
-  insurance_policy_number TEXT,
-  license_disk_expiry_date DATE,
-  image_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+  return { url, anonKey };
+}
 
--- 5. Parts & Consumables Inventory
-CREATE TABLE IF NOT EXISTS public.parts_inventory (
-  id TEXT PRIMARY KEY,
-  sku TEXT UNIQUE NOT NULL,
-  name TEXT NOT NULL,
-  category TEXT NOT NULL, -- 'helmets', 'delivery_boxes', 'phone_mounts', 'brake_pads', 'chains_sprockets', 'tires_tubes', 'engine_oil'
-  quantity_in_stock INT NOT NULL DEFAULT 0,
-  min_threshold INT NOT NULL DEFAULT 5,
-  cost_price_zar NUMERIC NOT NULL,
-  selling_price_zar NUMERIC NOT NULL,
-  compatible_models JSONB DEFAULT '[]'::jsonb,
-  supplier_name TEXT,
-  last_restocked_date DATE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+let activeClient: SupabaseClient | null = null;
+let lastClientUrl = '';
+let lastClientKey = '';
 
--- 6. Maintenance, Repairs & Service History
-CREATE TABLE IF NOT EXISTS public.repairs_and_services (
-  id TEXT PRIMARY KEY,
-  vehicle_id TEXT NOT NULL REFERENCES public.vehicles(id) ON DELETE CASCADE,
-  vehicle_plate TEXT NOT NULL,
-  driver_id TEXT REFERENCES public.drivers(id) ON DELETE SET NULL,
-  driver_name TEXT,
-  service_type TEXT NOT NULL, -- 'routine_5000km', 'major_overhaul', 'brake_replacement', 'tire_change', 'accident_repair'
-  odometer_km INT NOT NULL,
-  cost_zar NUMERIC NOT NULL,
-  technician_name TEXT NOT NULL,
-  garage_location TEXT DEFAULT 'Randburg Workshop - 304 Tungsten Rd',
-  service_date DATE DEFAULT CURRENT_DATE,
-  status TEXT NOT NULL DEFAULT 'completed', -- 'scheduled', 'in_progress', 'completed', 'cancelled'
-  parts_used JSONB DEFAULT '[]'::jsonb,
-  notes TEXT,
-  invoice_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+export function getSupabaseClient(): SupabaseClient | null {
+  const config = getSupabaseConfig();
+  const isValid = Boolean(
+    config.url &&
+    config.anonKey &&
+    config.url.startsWith('http') &&
+    !config.url.includes('your-project')
+  );
 
--- 7. Traffic Fines & AARTO Infringements
-CREATE TABLE IF NOT EXISTS public.traffic_fines (
-  id TEXT PRIMARY KEY,
-  notice_number TEXT UNIQUE NOT NULL,
-  infringement_date DATE NOT NULL,
-  vehicle_plate TEXT NOT NULL,
-  driver_id TEXT REFERENCES public.drivers(id) ON DELETE SET NULL,
-  driver_name TEXT,
-  location TEXT NOT NULL,
-  municipality TEXT DEFAULT 'JMPD - City of Johannesburg',
-  infringement_type TEXT NOT NULL,
-  amount_zar NUMERIC NOT NULL,
-  discounted_amount_zar NUMERIC,
-  due_date DATE NOT NULL,
-  aarto_status TEXT NOT NULL DEFAULT 'notice_issued', -- 'notice_issued', 'courtesy_letter', 'enforcement_order', 'paid', 'transferred_to_driver'
-  payment_status TEXT NOT NULL DEFAULT 'unpaid', -- 'unpaid', 'allocated_to_driver', 'deducted_from_earnings', 'paid_by_company'
-  document_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+  if (!isValid) {
+    activeClient = null;
+    return null;
+  }
 
--- 8. Yoco Payment Transactions & Bank Reconciliation
-CREATE TABLE IF NOT EXISTS public.yoco_transactions (
-  id TEXT PRIMARY KEY,
-  yoco_charge_id TEXT UNIQUE NOT NULL,
-  yoco_payment_link_id TEXT,
-  driver_id TEXT REFERENCES public.drivers(id) ON DELETE SET NULL,
-  driver_name TEXT NOT NULL,
-  amount_zar NUMERIC NOT NULL,
-  currency TEXT NOT NULL DEFAULT 'ZAR',
-  payment_method TEXT NOT NULL, -- 'yoco_card_terminal', 'yoco_payment_link', 'yoco_recurring_token', 'instant_eft'
-  allocation TEXT NOT NULL DEFAULT 'weekly_rental', -- 'weekly_rental', 'security_deposit', 'traffic_fine', 'repair_deductible'
-  status TEXT NOT NULL DEFAULT 'successful', -- 'successful', 'pending', 'failed', 'refunded'
-  yoco_fee_zar NUMERIC DEFAULT 0,
-  net_amount_zar NUMERIC NOT NULL,
-  card_last4 TEXT,
-  card_brand TEXT,
-  reconciliation_status TEXT NOT NULL DEFAULT 'reconciled', -- 'reconciled', 'unallocated', 'disputed'
-  transaction_date TIMESTAMPTZ DEFAULT NOW(),
-  yoco_metadata JSONB DEFAULT '{}'::jsonb
-);
+  if (activeClient && lastClientUrl === config.url && lastClientKey === config.anonKey) {
+    return activeClient;
+  }
 
--- 9. Rental & Sales Agreements
-CREATE TABLE IF NOT EXISTS public.rental_agreements (
-  id TEXT PRIMARY KEY,
-  agreement_number TEXT UNIQUE NOT NULL,
-  driver_id TEXT NOT NULL REFERENCES public.drivers(id) ON DELETE CASCADE,
-  driver_name TEXT NOT NULL,
-  vehicle_id TEXT NOT NULL REFERENCES public.vehicles(id) ON DELETE RESTRICT,
-  vehicle_plate TEXT NOT NULL,
-  agreement_type TEXT NOT NULL DEFAULT 'rent_to_own',
-  term_months INT NOT NULL DEFAULT 18,
-  weekly_rate_zar NUMERIC NOT NULL,
-  deposit_amount_zar NUMERIC NOT NULL,
-  deposit_paid BOOLEAN DEFAULT true,
-  start_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  expected_end_date DATE NOT NULL,
-  actual_end_date DATE,
-  total_contract_value_zar NUMERIC NOT NULL,
-  total_paid_zar NUMERIC DEFAULT 0,
-  remaining_balance_zar NUMERIC NOT NULL,
-  is_completed BOOLEAN DEFAULT false,
-  signature_data_url TEXT,
-  contract_pdf_url TEXT,
-  terms_version TEXT DEFAULT 'v2026.1',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+  try {
+    activeClient = createClient(config.url, config.anonKey);
+    lastClientUrl = config.url;
+    lastClientKey = config.anonKey;
+    return activeClient;
+  } catch (err) {
+    console.error('Failed to initialize Supabase client:', err);
+    activeClient = null;
+    return null;
+  }
+}
 
--- 10. Driver Referral Program
-CREATE TABLE IF NOT EXISTS public.driver_referrals (
-  id TEXT PRIMARY KEY,
-  referrer_driver_id TEXT NOT NULL REFERENCES public.drivers(id) ON DELETE CASCADE,
-  referrer_driver_name TEXT NOT NULL,
-  referred_applicant_name TEXT NOT NULL,
-  referred_phone TEXT NOT NULL,
-  referral_date DATE DEFAULT CURRENT_DATE,
-  status TEXT NOT NULL DEFAULT 'pending_onboarding', -- 'pending_onboarding', 'active_driving', 'bonus_eligible', 'paid_out'
-  reward_amount_zar NUMERIC NOT NULL DEFAULT 350,
-  paid_date DATE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+export function saveSupabaseConfig(url: string, anonKey: string): void {
+  try {
+    localStorage.setItem(
+      SUPABASE_CONFIG_KEY,
+      JSON.stringify({ url: url.trim(), anonKey: anonKey.trim() })
+    );
+    activeClient = null; // force recreation
+    getSupabaseClient();
+  } catch (e) {
+    console.error('Failed to save Supabase config to local storage:', e);
+  }
+}
 
--- 11. Site Settings & Branding
-CREATE TABLE IF NOT EXISTS public.site_settings (
-  id TEXT PRIMARY KEY,
-  logo_url TEXT,
-  hero_image_url TEXT,
-  hero_title TEXT,
-  hero_subtitle TEXT,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+export function isSupabaseConnected(): boolean {
+  return getSupabaseClient() !== null;
+}
 
--- Enable Row Level Security (RLS) on all tables
-ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.bikes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.drivers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.vehicles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.parts_inventory ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.repairs_and_services ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.traffic_fines ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.yoco_transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.rental_agreements ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.driver_referrals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
+export const isSupabaseConfigured = isSupabaseConnected();
+export const supabase = getSupabaseClient();
 
--- Public / Authenticated Access Policies
-CREATE POLICY "Allow read-write on applications" ON public.applications FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow read-write on bikes" ON public.bikes FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow read-write on drivers" ON public.drivers FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow read-write on vehicles" ON public.vehicles FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow read-write on parts_inventory" ON public.parts_inventory FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow read-write on repairs_and_services" ON public.repairs_and_services FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow read-write on traffic_fines" ON public.traffic_fines FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow read-write on yoco_transactions" ON public.yoco_transactions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow read-write on rental_agreements" ON public.rental_agreements FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow read-write on driver_referrals" ON public.driver_referrals FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow read-write on site_settings" ON public.site_settings FOR ALL USING (true) WITH CHECK (true);
+// Purge any legacy demo/mock data stored in localStorage
+export function clearAllLocalFleetCache(): void {
+  const keysToClear = [
+    LOCAL_APPS_KEY,
+    LOCAL_BIKES_KEY,
+    LOCAL_VEHICLES_KEY,
+    LOCAL_DRIVERS_KEY,
+    LOCAL_PARTS_KEY,
+    LOCAL_SERVICES_KEY,
+    LOCAL_FINES_KEY,
+    LOCAL_TRANSACTIONS_KEY,
+    LOCAL_AGREEMENTS_KEY,
+    LOCAL_REFERRALS_KEY,
+  ];
 
--- Indexes for lightning fast queries
-CREATE INDEX IF NOT EXISTS idx_applications_status ON public.applications(status);
-CREATE INDEX IF NOT EXISTS idx_drivers_status ON public.drivers(status);
-CREATE INDEX IF NOT EXISTS idx_drivers_assigned_vehicle ON public.drivers(assigned_vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_vehicles_status ON public.vehicles(status);
-CREATE INDEX IF NOT EXISTS idx_vehicles_plate ON public.vehicles(registration_plate);
-CREATE INDEX IF NOT EXISTS idx_repairs_vehicle ON public.repairs_and_services(vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_traffic_fines_driver ON public.traffic_fines(driver_id);
-CREATE INDEX IF NOT EXISTS idx_yoco_tx_driver ON public.yoco_transactions(driver_id);
-CREATE INDEX IF NOT EXISTS idx_rental_agreements_driver ON public.rental_agreements(driver_id);
-`;
+  keysToClear.forEach((key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  });
+}
 
-// Helper: Map application DB snake_case to frontend camelCase
+// Test live database connectivity across all 11 tables
+export async function testSupabaseConnection(): Promise<{
+  success: boolean;
+  message: string;
+  tableCounts?: Record<string, number>;
+}> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return {
+      success: false,
+      message: 'Supabase URL or public anon key is missing or invalid.',
+    };
+  }
+
+  try {
+    const tableCounts: Record<string, number> = {};
+    const tables = [
+      'applications',
+      'bikes',
+      'vehicles',
+      'drivers',
+      'parts_inventory',
+      'repairs_and_services',
+      'traffic_fines',
+      'yoco_transactions',
+      'rental_agreements',
+      'driver_referrals',
+      'site_settings',
+    ];
+
+    for (const table of tables) {
+      try {
+        const { count, error } = await client
+          .from(table)
+          .select('*', { count: 'exact', head: true });
+        if (!error && count !== null && count !== undefined) {
+          tableCounts[table] = count;
+        } else {
+          tableCounts[table] = 0;
+        }
+      } catch {
+        tableCounts[table] = 0;
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Successfully connected to Supabase live database.',
+      tableCounts,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `Connection test failed: ${err?.message || String(err)}`,
+    };
+  }
+}
+
+// ==============================================================================
+// 1. APPLICATIONS REPOSITORY
+// ==============================================================================
+
 function mapDbToApplication(row: any): RiderApplication {
   return {
     id: row.id,
-    refNumber: row.ref_number || row.refNumber,
-    createdAt: row.created_at || row.createdAt,
-    updatedAt: row.updated_at || row.updatedAt,
-    status: row.status,
-    bikeId: row.bike_id || row.bikeId,
-    bikeName: row.bike_name || row.bikeName,
-    bikeCondition: row.bike_condition || row.bikeCondition,
-    termMonths: Number(row.term_months || row.termMonths),
-    weeklyRate: Number(row.weekly_rate || row.weeklyRate),
-    depositAmount: Number(row.deposit_amount || row.depositAmount),
-    fullName: row.full_name || row.fullName,
-    phone: row.phone,
-    whatsappNumber: row.whatsapp_number || row.whatsappNumber,
-    email: row.email,
-    citizenship: row.citizenship,
-    idOrPassportNumber: row.id_or_passport_number || row.idOrPassportNumber,
-    nationalityCountry: row.nationality_country || row.nationalityCountry,
-    address: row.address,
-    suburb: row.suburb,
+    refNumber: row.ref_number || row.refNumber || `DR-${row.id.slice(-4)}`,
+    createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+    updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
+    status: row.status || 'pending_review',
+    bikeId: row.bike_id || row.bikeId || '',
+    bikeName: row.bike_name || row.bikeName || '',
+    bikeCondition: row.bike_condition || row.bikeCondition || 'new',
+    termMonths: Number(row.term_months || row.termMonths || 18),
+    weeklyRate: Number(row.weekly_rate || row.weeklyRate || 750),
+    depositAmount: Number(row.deposit_amount || row.depositAmount || 1000),
+    fullName: row.full_name || row.fullName || '',
+    phone: row.phone || row.phone_number || '',
+    whatsappNumber: row.whatsapp_number || row.whatsappNumber || '',
+    email: row.email || '',
+    citizenship: row.citizenship || 'south_african',
+    idOrPassportNumber: row.id_or_passport_number || row.idOrPassportNumber || '',
+    nationalityCountry: row.nationality_country || row.nationalityCountry || '',
+    address: row.address || row.residential_address || '',
+    suburb: row.suburb || '',
     city: row.city || 'Randburg',
-    primaryPlatform: row.primary_platform || row.primaryPlatform,
-    deliveryExperience: row.delivery_experience || row.deliveryExperience,
-    approxWeeklyEarnings: Number(row.approx_weekly_earnings || row.approxWeeklyEarnings || 3500),
-    documents: row.documents || {},
-    verification: row.verification || { idVerified: false, licenseVerified: false },
-    signatureDataUrl: row.signature_data_url || row.signatureDataUrl,
-    depositAcknowledged: Boolean(row.deposit_acknowledged ?? row.depositAcknowledged),
-    termsAgreed: Boolean(row.terms_agreed ?? row.termsAgreed),
-    assignedBikeVinOrPlate: row.assigned_bike_vin_or_plate || row.assignedBikeVinOrPlate,
-    adminNotes: row.admin_notes || row.adminNotes,
-    timeline: row.timeline || [],
+    province: row.province || 'Gauteng',
+    postalCode: row.postal_code || row.postalCode || '',
+    alternativeContactName: row.alternative_contact_name || row.emergency_contact_name || '',
+    alternativeContactPhone: row.alternative_contact_phone || row.emergency_contact_phone || '',
+    primaryPlatform: row.primary_platform || row.delivery_platform || '',
+    deliveryApps: Array.isArray(row.delivery_apps) ? row.delivery_apps : [],
+    deliveryExperience: row.delivery_experience || '',
+    approxWeeklyEarnings: Number(row.approx_weekly_earnings || 0),
+    referredBy: row.referred_by || '',
+    creditScore: row.credit_score ? String(row.credit_score) : undefined,
+    documents: typeof row.documents === 'object' && row.documents !== null ? row.documents : {},
+    verification: typeof row.verification === 'object' && row.verification !== null ? row.verification : { idVerified: false, licenseVerified: false },
+    signatureDataUrl: row.signature_data_url || undefined,
+    depositAcknowledged: Boolean(row.deposit_acknowledged ?? row.deposit_paid ?? true),
+    termsAgreed: Boolean(row.terms_agreed ?? row.contract_signed ?? true),
+    collectionDate: row.collection_date || undefined,
+    assignedBikeVinOrPlate: row.assigned_bike_vin_or_plate || row.assigned_vehicle_reg || undefined,
+    adminNotes: row.admin_notes || row.internal_notes || undefined,
+    timeline: Array.isArray(row.timeline) ? row.timeline : [],
   };
 }
 
-// Helper: Map frontend camelCase to DB snake_case
 function mapApplicationToDb(app: RiderApplication) {
   return {
     id: app.id,
     ref_number: app.refNumber,
     created_at: app.createdAt,
-    updated_at: app.updatedAt,
+    updated_at: new Date().toISOString(),
     status: app.status,
     bike_id: app.bikeId,
     bike_name: app.bikeName,
@@ -392,28 +268,33 @@ function mapApplicationToDb(app: RiderApplication) {
     address: app.address,
     suburb: app.suburb,
     city: app.city,
+    province: app.province,
+    postal_code: app.postalCode,
+    alternative_contact_name: app.alternativeContactName,
+    alternative_contact_phone: app.alternativeContactPhone,
     primary_platform: app.primaryPlatform,
+    delivery_apps: app.deliveryApps || [],
     delivery_experience: app.deliveryExperience,
     approx_weekly_earnings: app.approxWeeklyEarnings,
-    documents: app.documents,
-    verification: app.verification,
+    referred_by: app.referredBy,
+    credit_score: app.creditScore,
+    documents: app.documents || {},
+    verification: app.verification || { idVerified: false, licenseVerified: false },
     signature_data_url: app.signatureDataUrl,
     deposit_acknowledged: app.depositAcknowledged,
     terms_agreed: app.termsAgreed,
+    collection_date: app.collectionDate,
     assigned_bike_vin_or_plate: app.assignedBikeVinOrPlate,
     admin_notes: app.adminNotes,
-    timeline: app.timeline,
+    timeline: app.timeline || [],
   };
 }
 
-// -------------------------------------------------------------
-// APPLICATIONS REPOSITORY API
-// -------------------------------------------------------------
-
 export async function fetchApplications(): Promise<RiderApplication[]> {
-  if (supabase) {
+  const client = getSupabaseClient();
+  if (client) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from('applications')
         .select('*')
         .order('created_at', { ascending: false });
@@ -422,7 +303,7 @@ export async function fetchApplications(): Promise<RiderApplication[]> {
         const mapped = data.map(mapDbToApplication);
         try {
           localStorage.setItem(LOCAL_APPS_KEY, JSON.stringify(mapped));
-        } catch (e) {
+        } catch {
           // ignore
         }
         return mapped;
@@ -431,22 +312,21 @@ export async function fetchApplications(): Promise<RiderApplication[]> {
         console.warn('Supabase fetch applications error:', error);
       }
     } catch (err) {
-      console.warn('Supabase fetch failed, fallback to local storage:', err);
+      console.warn('Supabase fetch failed, fallback to local cache:', err);
     }
   }
 
-  // Fallback to localStorage
+  // Fallback to local cache (strictly user's real saved applications)
   try {
     const cached = localStorage.getItem(LOCAL_APPS_KEY);
     if (cached) {
       const parsed = JSON.parse(cached);
       if (Array.isArray(parsed)) {
-        // Filter out legacy mock data if any exists in local storage
         const cleaned = parsed.filter((a: any) => !a.id?.startsWith('app-00'));
         return cleaned;
       }
     }
-  } catch (e) {
+  } catch {
     // ignore
   }
 
@@ -454,7 +334,7 @@ export async function fetchApplications(): Promise<RiderApplication[]> {
 }
 
 export async function saveApplication(app: RiderApplication): Promise<void> {
-  // 1. Always update localStorage cache
+  // Update local cache
   try {
     const cached = localStorage.getItem(LOCAL_APPS_KEY);
     let list: RiderApplication[] = cached ? JSON.parse(cached) : [];
@@ -465,15 +345,16 @@ export async function saveApplication(app: RiderApplication): Promise<void> {
       list = [app, ...list];
     }
     localStorage.setItem(LOCAL_APPS_KEY, JSON.stringify(list));
-  } catch (e) {
+  } catch {
     // ignore
   }
 
-  // 2. Persist to Supabase if configured
-  if (supabase) {
+  // Sync with Supabase
+  const client = getSupabaseClient();
+  if (client) {
     try {
       const dbRecord = mapApplicationToDb(app);
-      const { error } = await supabase
+      const { error } = await client
         .from('applications')
         .upsert(dbRecord, { onConflict: 'id' });
       if (error) {
@@ -487,14 +368,37 @@ export async function saveApplication(app: RiderApplication): Promise<void> {
 
 export const saveApplicationToDb = saveApplication;
 
-// -------------------------------------------------------------
-// BIKES REPOSITORY API
-// -------------------------------------------------------------
+export async function deleteApplication(appId: string): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_APPS_KEY);
+    if (cached) {
+      const list: RiderApplication[] = JSON.parse(cached);
+      const filtered = list.filter((a) => a.id !== appId);
+      localStorage.setItem(LOCAL_APPS_KEY, JSON.stringify(filtered));
+    }
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      await client.from('applications').delete().eq('id', appId);
+    } catch (err) {
+      console.warn('Supabase delete application error:', err);
+    }
+  }
+}
+
+// ==============================================================================
+// 2. BIKES REPOSITORY
+// ==============================================================================
 
 export async function fetchBikes(): Promise<Bike[]> {
-  if (supabase) {
+  const client = getSupabaseClient();
+  if (client) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from('bikes')
         .select('*')
         .order('created_at', { ascending: true });
@@ -503,25 +407,28 @@ export async function fetchBikes(): Promise<Bike[]> {
         const mapped = data.map((b: any) => ({
           id: b.id,
           name: b.name,
-          subtitle: b.subtitle,
+          subtitle: b.subtitle || '',
           brand: b.brand,
           category: b.category,
-          isAvailable: b.is_available ?? b.isAvailable,
-          isComingSoon: b.is_coming_soon ?? b.isComingSoon,
-          image: b.image,
-          badge: b.badge,
-          fuelType: b.fuel_type || b.fuelType,
-          engineCapacity: b.engine_capacity || b.engineCapacity,
-          tankCapacity: b.tank_capacity || b.tankCapacity,
-          rangePerCharge: b.range_per_charge || b.rangePerCharge,
-          deliveryBoxReady: b.delivery_box_ready ?? b.deliveryBoxReady,
-          pricing: b.pricing,
-          keyFeatures: b.key_features || b.keyFeatures || [],
+          isAvailable: b.is_available ?? b.isAvailable ?? true,
+          isComingSoon: b.is_coming_soon ?? b.isComingSoon ?? false,
+          image: b.image || b.image_url || '',
+          badge: b.badge || '',
+          fuelType: b.fuel_type || b.fuelType || 'Petrol 4-Stroke',
+          engineCapacity: b.engine_capacity || b.engineCapacity || '150cc',
+          tankCapacity: b.tank_capacity || b.tankCapacity || '',
+          rangePerCharge: b.range_per_charge || b.rangePerCharge || '',
+          deliveryBoxReady: b.delivery_box_ready ?? b.deliveryBoxReady ?? true,
+          pricing: typeof b.pricing === 'object' && b.pricing !== null ? b.pricing : {
+            used: { available: true, deposit: 650, weeklyPayment: 650, termMonths: 20 },
+            new: { available: true, deposit: 1000, weeklyPayment: 750, termMonthsOptions: [15, 18] },
+          },
+          keyFeatures: Array.isArray(b.key_features) ? b.key_features : Array.isArray(b.keyFeatures) ? b.keyFeatures : [],
           recommendedFor: b.recommended_for || b.recommendedFor || '',
         }));
         try {
           localStorage.setItem(LOCAL_BIKES_KEY, JSON.stringify(mapped));
-        } catch (e) {
+        } catch {
           // ignore
         }
         return mapped;
@@ -540,7 +447,7 @@ export async function fetchBikes(): Promise<Bike[]> {
         return parsed;
       }
     }
-  } catch (e) {
+  } catch {
     // ignore
   }
 
@@ -548,10 +455,9 @@ export async function fetchBikes(): Promise<Bike[]> {
 }
 
 export async function saveBike(bike: Bike): Promise<void> {
-  // 1. Update localStorage
   try {
     const cached = localStorage.getItem(LOCAL_BIKES_KEY);
-    let list: Bike[] = cached ? JSON.parse(cached) : BIKES;
+    let list: Bike[] = cached ? JSON.parse(cached) : [];
     const exists = list.some((b) => b.id === bike.id);
     if (exists) {
       list = list.map((b) => (b.id === bike.id ? bike : b));
@@ -559,12 +465,12 @@ export async function saveBike(bike: Bike): Promise<void> {
       list = [bike, ...list];
     }
     localStorage.setItem(LOCAL_BIKES_KEY, JSON.stringify(list));
-  } catch (e) {
+  } catch {
     // ignore
   }
 
-  // 2. Supabase Cloud sync
-  if (supabase) {
+  const client = getSupabaseClient();
+  if (client) {
     try {
       const dbRecord = {
         id: bike.id,
@@ -585,7 +491,7 @@ export async function saveBike(bike: Bike): Promise<void> {
         key_features: bike.keyFeatures,
         recommended_for: bike.recommendedFor,
       };
-      await supabase.from('bikes').upsert(dbRecord, { onConflict: 'id' });
+      await client.from('bikes').upsert(dbRecord, { onConflict: 'id' });
     } catch (err) {
       console.warn('Supabase bike save error:', err);
     }
@@ -602,13 +508,14 @@ export async function deleteBike(bikeId: string): Promise<void> {
       const filtered = list.filter((b) => b.id !== bikeId);
       localStorage.setItem(LOCAL_BIKES_KEY, JSON.stringify(filtered));
     }
-  } catch (e) {
+  } catch {
     // ignore
   }
 
-  if (supabase) {
+  const client = getSupabaseClient();
+  if (client) {
     try {
-      await supabase.from('bikes').delete().eq('id', bikeId);
+      await client.from('bikes').delete().eq('id', bikeId);
     } catch (err) {
       console.warn('Supabase delete bike error:', err);
     }
@@ -617,14 +524,995 @@ export async function deleteBike(bikeId: string): Promise<void> {
 
 export const deleteBikeFromDb = deleteBike;
 
-// -------------------------------------------------------------
-// SITE SETTINGS & BRANDING REPOSITORY API
-// -------------------------------------------------------------
+// ==============================================================================
+// 3. VEHICLES REPOSITORY
+// ==============================================================================
 
-import { STATIC_BRANDING } from '../config/branding';
+function mapDbToVehicle(row: any): Vehicle {
+  return {
+    id: row.id,
+    vin: row.vin || '',
+    engineNumber: row.engine_number || row.engineNumber || '',
+    registrationPlate: row.registration_plate || row.vehicle_reg || row.registrationPlate || '',
+    bikeModelId: row.bike_model_id || row.bike_id || row.bikeModelId || 'boxer-150',
+    make: row.make || 'Bajaj',
+    model: row.model || row.model_name || 'Boxer 150 HD',
+    year: Number(row.year || 2025),
+    category: row.category || 'boxer',
+    condition: row.condition || 'new',
+    status: row.status || 'available',
+    assignedDriverId: row.assigned_driver_id || row.current_driver_id || row.assignedDriverId || undefined,
+    assignedDriverName: row.assigned_driver_name || row.current_driver_name || row.assignedDriverName || undefined,
+    odometerKm: Number(row.odometer_km || row.current_mileage_km || row.mileage_km || 0),
+    nextServiceKm: Number(row.next_service_km || row.next_service_mileage_km || 5000),
+    lastServiceDate: row.last_service_date || row.last_service_mileage_km ? String(row.last_service_date || '') : undefined,
+    trackerDeviceId: row.tracker_device_id || row.gps_device_imei || row.telematics_imei || '',
+    trackerProvider: row.tracker_provider || 'Cartrack SA',
+    batteryHealthPercent: Number(row.battery_health_percent || row.telematics_battery_health || 100),
+    fuelLevelPercent: Number(row.fuel_level_percent || 100),
+    isIgnitionOn: Boolean(row.is_ignition_on || row.ignition_status || row.ignition_state || false),
+    latitude: row.latitude ? Number(row.latitude) : row.current_lat ? Number(row.current_lat) : undefined,
+    longitude: row.longitude ? Number(row.longitude) : row.current_lng ? Number(row.current_lng) : undefined,
+    lastLocationAddress: row.last_location_address || row.last_known_location || '',
+    lastPingTime: row.last_ping_time || row.last_ping_at || row.last_telematics_ping || new Date().toISOString(),
+    insurancePolicyNumber: row.insurance_policy_number || '',
+    licenseDiskExpiryDate: row.license_disk_expiry_date || '',
+    imageUrl: row.image_url || '',
+  };
+}
 
-const LOCAL_CUSTOMIZATION_KEY = 'dynamic_rental_customization_v2';
-const DEFAULT_HERO_IMAGE = STATIC_BRANDING.heroImageUrl || '';
+function mapVehicleToDb(veh: Vehicle) {
+  return {
+    id: veh.id,
+    vin: veh.vin,
+    engine_number: veh.engineNumber,
+    registration_plate: veh.registrationPlate,
+    bike_model_id: veh.bikeModelId,
+    make: veh.make,
+    model: veh.model,
+    year: veh.year,
+    category: veh.category,
+    condition: veh.condition,
+    status: veh.status,
+    assigned_driver_id: veh.assignedDriverId || null,
+    assigned_driver_name: veh.assignedDriverName || null,
+    odometer_km: veh.odometerKm,
+    next_service_km: veh.nextServiceKm,
+    last_service_date: veh.lastServiceDate || null,
+    tracker_device_id: veh.trackerDeviceId || null,
+    tracker_provider: veh.trackerProvider || 'Cartrack SA',
+    battery_health_percent: veh.batteryHealthPercent || 100,
+    fuel_level_percent: veh.fuelLevelPercent || 100,
+    is_ignition_on: veh.isIgnitionOn || false,
+    latitude: veh.latitude || null,
+    longitude: veh.longitude || null,
+    last_location_address: veh.lastLocationAddress || null,
+    last_ping_time: veh.lastPingTime || new Date().toISOString(),
+    insurance_policy_number: veh.insurancePolicyNumber || null,
+    license_disk_expiry_date: veh.licenseDiskExpiryDate || null,
+    image_url: veh.imageUrl || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export async function fetchVehicles(): Promise<Vehicle[]> {
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('vehicles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        const mapped = data.map(mapDbToVehicle);
+        try {
+          localStorage.setItem(LOCAL_VEHICLES_KEY, JSON.stringify(mapped));
+        } catch {
+          // ignore
+        }
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Supabase vehicles fetch error:', err);
+    }
+  }
+
+  try {
+    const cached = localStorage.getItem(LOCAL_VEHICLES_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((v: any) => !v.id?.startsWith('veh-00'));
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
+}
+
+export async function saveVehicle(vehicle: Vehicle): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_VEHICLES_KEY);
+    let list: Vehicle[] = cached ? JSON.parse(cached) : [];
+    const exists = list.some((v) => v.id === vehicle.id);
+    if (exists) {
+      list = list.map((v) => (v.id === vehicle.id ? vehicle : v));
+    } else {
+      list = [vehicle, ...list];
+    }
+    localStorage.setItem(LOCAL_VEHICLES_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const dbRecord = mapVehicleToDb(vehicle);
+      await client.from('vehicles').upsert(dbRecord, { onConflict: 'id' });
+    } catch (err) {
+      console.warn('Supabase vehicle save error:', err);
+    }
+  }
+}
+
+export async function deleteVehicle(vehicleId: string): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_VEHICLES_KEY);
+    if (cached) {
+      const list: Vehicle[] = JSON.parse(cached);
+      const filtered = list.filter((v) => v.id !== vehicleId);
+      localStorage.setItem(LOCAL_VEHICLES_KEY, JSON.stringify(filtered));
+    }
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      await client.from('vehicles').delete().eq('id', vehicleId);
+    } catch (err) {
+      console.warn('Supabase delete vehicle error:', err);
+    }
+  }
+}
+
+// ==============================================================================
+// 4. DRIVERS REPOSITORY
+// ==============================================================================
+
+function mapDbToDriver(row: any): Driver {
+  return {
+    id: row.id,
+    applicationId: row.application_id || row.applicationId || undefined,
+    refNumber: row.ref_number || row.refNumber || `DRV-${row.id.slice(-4)}`,
+    fullName: row.full_name || row.fullName || '',
+    phone: row.phone || row.phone_number || '',
+    whatsappNumber: row.whatsapp_number || row.whatsappNumber || '',
+    email: row.email || '',
+    idOrPassportNumber: row.id_or_passport_number || row.id_number || row.idOrPassportNumber || '',
+    citizenship: row.citizenship || 'south_african',
+    nationalityCountry: row.nationality_country || row.nationalityCountry || '',
+    address: row.address || '',
+    suburb: row.suburb || '',
+    city: row.city || 'Randburg',
+    status: row.status || 'active',
+    assignedVehicleId: row.assigned_vehicle_id || row.assignedVehicleId || undefined,
+    assignedBikeVinOrPlate: row.assigned_bike_vin_or_plate || row.assigned_vehicle_reg || row.assignedBikeVinOrPlate || undefined,
+    assignedBikeName: row.assigned_bike_name || row.vehicle_model || row.assignedBikeName || undefined,
+    weeklyRate: Number(row.weekly_rate || row.weekly_rate_zar || row.weeklyRate || 750),
+    balanceDue: Number(row.balance_due || row.balanceDue || 0),
+    depositPaid: Number(row.deposit_paid || row.depositPaid || 1000),
+    contractStartDate: row.contract_start_date || row.contractStartDate || new Date().toISOString().split('T')[0],
+    contractEndDate: row.contract_end_date || row.contractEndDate || undefined,
+    termMonths: Number(row.term_months || row.termMonths || 18),
+    primaryPlatform: row.primary_platform || row.delivery_platform || 'Checkers Sixty60',
+    deliveryApps: Array.isArray(row.delivery_apps) ? row.delivery_apps : [],
+    riskTier: row.risk_tier || row.riskTier || 'low',
+    riskScore: Number(row.risk_score ?? row.riskScore ?? 90),
+    paymentScore: Number(row.payment_score ?? row.paymentScore ?? 100),
+    incidentCount: Number(row.incident_count ?? row.incidentCount ?? 0),
+    totalPaid: Number(row.total_paid || row.totalPaid || 0),
+    yocoCustomerToken: row.yoco_customer_token || row.yocoCustomerToken || undefined,
+    referredBy: row.referred_by || row.referredBy || undefined,
+    notes: row.notes || undefined,
+  };
+}
+
+function mapDriverToDb(drv: Driver) {
+  return {
+    id: drv.id,
+    application_id: drv.applicationId || null,
+    ref_number: drv.refNumber,
+    full_name: drv.fullName,
+    phone: drv.phone,
+    whatsapp_number: drv.whatsappNumber,
+    email: drv.email || null,
+    id_or_passport_number: drv.idOrPassportNumber,
+    citizenship: drv.citizenship,
+    nationality_country: drv.nationalityCountry || null,
+    address: drv.address,
+    suburb: drv.suburb,
+    city: drv.city,
+    status: drv.status,
+    assigned_vehicle_id: drv.assignedVehicleId || null,
+    assigned_bike_vin_or_plate: drv.assignedBikeVinOrPlate || null,
+    assigned_bike_name: drv.assignedBikeName || null,
+    weekly_rate: drv.weeklyRate,
+    balance_due: drv.balanceDue,
+    deposit_paid: drv.depositPaid,
+    contract_start_date: drv.contractStartDate,
+    contract_end_date: drv.contractEndDate || null,
+    term_months: drv.termMonths,
+    primary_platform: drv.primaryPlatform,
+    delivery_apps: drv.deliveryApps || [],
+    risk_tier: drv.riskTier,
+    risk_score: drv.riskScore,
+    payment_score: drv.paymentScore,
+    incident_count: drv.incidentCount,
+    total_paid: drv.totalPaid,
+    yoco_customer_token: drv.yocoCustomerToken || null,
+    referred_by: drv.referredBy || null,
+    notes: drv.notes || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export async function fetchDrivers(): Promise<Driver[]> {
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('drivers')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        const mapped = data.map(mapDbToDriver);
+        try {
+          localStorage.setItem(LOCAL_DRIVERS_KEY, JSON.stringify(mapped));
+        } catch {
+          // ignore
+        }
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Supabase drivers fetch error:', err);
+    }
+  }
+
+  try {
+    const cached = localStorage.getItem(LOCAL_DRIVERS_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((d: any) => !d.id?.startsWith('drv-00'));
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
+}
+
+export async function saveDriver(driver: Driver): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_DRIVERS_KEY);
+    let list: Driver[] = cached ? JSON.parse(cached) : [];
+    const exists = list.some((d) => d.id === driver.id);
+    if (exists) {
+      list = list.map((d) => (d.id === driver.id ? driver : d));
+    } else {
+      list = [driver, ...list];
+    }
+    localStorage.setItem(LOCAL_DRIVERS_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const dbRecord = mapDriverToDb(driver);
+      await client.from('drivers').upsert(dbRecord, { onConflict: 'id' });
+    } catch (err) {
+      console.warn('Supabase driver save error:', err);
+    }
+  }
+}
+
+export async function deleteDriver(driverId: string): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_DRIVERS_KEY);
+    if (cached) {
+      const list: Driver[] = JSON.parse(cached);
+      const filtered = list.filter((d) => d.id !== driverId);
+      localStorage.setItem(LOCAL_DRIVERS_KEY, JSON.stringify(filtered));
+    }
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      await client.from('drivers').delete().eq('id', driverId);
+    } catch (err) {
+      console.warn('Supabase delete driver error:', err);
+    }
+  }
+}
+
+// ==============================================================================
+// 5. PARTS INVENTORY REPOSITORY
+// ==============================================================================
+
+export async function fetchParts(): Promise<PartsInventoryItem[]> {
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('parts_inventory')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        const mapped: PartsInventoryItem[] = data.map((p: any) => ({
+          id: p.id,
+          sku: p.sku || p.part_number || '',
+          name: p.name,
+          category: p.category,
+          quantityInStock: Number(p.quantity_in_stock || p.quantityInStock || 0),
+          minThreshold: Number(p.min_threshold || p.minimum_threshold || p.min_reorder_level || 5),
+          costPriceZar: Number(p.cost_price_zar || p.unit_cost || p.unit_cost_zar || 0),
+          sellingPriceZar: Number(p.selling_price_zar || p.retail_price || p.retail_price_zar || 0),
+          compatibleModels: Array.isArray(p.compatible_models) ? p.compatible_models : [],
+          supplierName: p.supplier_name || p.supplier || '',
+          lastRestockedDate: p.last_restocked_date || '',
+        }));
+        try {
+          localStorage.setItem(LOCAL_PARTS_KEY, JSON.stringify(mapped));
+        } catch {
+          // ignore
+        }
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Supabase parts fetch error:', err);
+    }
+  }
+
+  try {
+    const cached = localStorage.getItem(LOCAL_PARTS_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((p: any) => !p.id?.startsWith('prt-00'));
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
+}
+
+export async function savePart(part: PartsInventoryItem): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_PARTS_KEY);
+    let list: PartsInventoryItem[] = cached ? JSON.parse(cached) : [];
+    const exists = list.some((p) => p.id === part.id);
+    if (exists) {
+      list = list.map((p) => (p.id === part.id ? part : p));
+    } else {
+      list = [part, ...list];
+    }
+    localStorage.setItem(LOCAL_PARTS_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const dbRecord = {
+        id: part.id,
+        sku: part.sku,
+        name: part.name,
+        category: part.category,
+        quantity_in_stock: part.quantityInStock,
+        min_threshold: part.minThreshold,
+        cost_price_zar: part.costPriceZar,
+        selling_price_zar: part.sellingPriceZar,
+        compatible_models: part.compatibleModels,
+        supplier_name: part.supplierName,
+        last_restocked_date: part.lastRestockedDate,
+      };
+      await client.from('parts_inventory').upsert(dbRecord, { onConflict: 'id' });
+    } catch (err) {
+      console.warn('Supabase part save error:', err);
+    }
+  }
+}
+
+export async function deletePart(partId: string): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_PARTS_KEY);
+    if (cached) {
+      const list: PartsInventoryItem[] = JSON.parse(cached);
+      const filtered = list.filter((p) => p.id !== partId);
+      localStorage.setItem(LOCAL_PARTS_KEY, JSON.stringify(filtered));
+    }
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      await client.from('parts_inventory').delete().eq('id', partId);
+    } catch (err) {
+      console.warn('Supabase delete part error:', err);
+    }
+  }
+}
+
+// ==============================================================================
+// 6. SERVICES & REPAIRS REPOSITORY
+// ==============================================================================
+
+export async function fetchServices(): Promise<RepairAndService[]> {
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('repairs_and_services')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        const mapped: RepairAndService[] = data.map((s: any) => ({
+          id: s.id,
+          vehicleId: s.vehicle_id || '',
+          vehiclePlate: s.vehicle_plate || s.vehicle_reg || '',
+          driverId: s.driver_id || undefined,
+          driverName: s.driver_name || undefined,
+          serviceType: s.service_type || 'routine_5000km',
+          odometerKm: Number(s.odometer_km || s.mileage_at_service_km || 0),
+          costZar: Number(s.cost_zar || s.total_cost_zar || 0),
+          technicianName: s.technician_name || '',
+          garageLocation: s.garage_location || 'Randburg Workshop',
+          serviceDate: s.service_date || new Date().toISOString().split('T')[0],
+          status: s.status || 'completed',
+          partsUsed: Array.isArray(s.parts_used) ? s.parts_used : [],
+          notes: s.notes || '',
+          invoiceUrl: s.invoice_url || '',
+        }));
+        try {
+          localStorage.setItem(LOCAL_SERVICES_KEY, JSON.stringify(mapped));
+        } catch {
+          // ignore
+        }
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Supabase services fetch error:', err);
+    }
+  }
+
+  try {
+    const cached = localStorage.getItem(LOCAL_SERVICES_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((s: any) => !s.id?.startsWith('srv-00'));
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
+}
+
+export async function saveService(service: RepairAndService): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_SERVICES_KEY);
+    let list: RepairAndService[] = cached ? JSON.parse(cached) : [];
+    const exists = list.some((s) => s.id === service.id);
+    if (exists) {
+      list = list.map((s) => (s.id === service.id ? service : s));
+    } else {
+      list = [service, ...list];
+    }
+    localStorage.setItem(LOCAL_SERVICES_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const dbRecord = {
+        id: service.id,
+        vehicle_id: service.vehicleId,
+        vehicle_plate: service.vehiclePlate,
+        driver_id: service.driverId || null,
+        driver_name: service.driverName || null,
+        service_type: service.serviceType,
+        odometer_km: service.odometerKm,
+        cost_zar: service.costZar,
+        technician_name: service.technicianName,
+        garage_location: service.garageLocation,
+        service_date: service.serviceDate,
+        status: service.status,
+        parts_used: service.partsUsed || [],
+        notes: service.notes || null,
+        invoice_url: service.invoiceUrl || null,
+      };
+      await client.from('repairs_and_services').upsert(dbRecord, { onConflict: 'id' });
+    } catch (err) {
+      console.warn('Supabase service save error:', err);
+    }
+  }
+}
+
+export async function deleteService(serviceId: string): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_SERVICES_KEY);
+    if (cached) {
+      const list: RepairAndService[] = JSON.parse(cached);
+      const filtered = list.filter((s) => s.id !== serviceId);
+      localStorage.setItem(LOCAL_SERVICES_KEY, JSON.stringify(filtered));
+    }
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      await client.from('repairs_and_services').delete().eq('id', serviceId);
+    } catch (err) {
+      console.warn('Supabase delete service error:', err);
+    }
+  }
+}
+
+// ==============================================================================
+// 7. TRAFFIC FINES REPOSITORY
+// ==============================================================================
+
+export async function fetchFines(): Promise<TrafficFine[]> {
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('traffic_fines')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        const mapped: TrafficFine[] = data.map((f: any) => ({
+          id: f.id,
+          noticeNumber: f.notice_number || f.noticeNumber || '',
+          infringementDate: f.infringement_date || f.violation_date || new Date().toISOString().split('T')[0],
+          vehiclePlate: f.vehicle_plate || f.vehicle_reg || '',
+          driverId: f.driver_id || undefined,
+          driverName: f.driver_name || undefined,
+          location: f.location || '',
+          municipality: f.municipality || f.issuing_authority || 'JMPD',
+          infringementType: f.infringement_type || 'Speeding',
+          amountZar: Number(f.amount_zar || f.fine_amount || 0),
+          discountedAmountZar: Number(f.discounted_amount_zar || f.discounted_amount || 0),
+          dueDate: f.due_date || new Date().toISOString().split('T')[0],
+          aartoStatus: f.aarto_status || 'notice_issued',
+          paymentStatus: f.payment_status || f.status || 'unpaid',
+          documentUrl: f.document_url || '',
+        }));
+        try {
+          localStorage.setItem(LOCAL_FINES_KEY, JSON.stringify(mapped));
+        } catch {
+          // ignore
+        }
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Supabase fines fetch error:', err);
+    }
+  }
+
+  try {
+    const cached = localStorage.getItem(LOCAL_FINES_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((f: any) => !f.id?.startsWith('fine-00'));
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
+}
+
+export async function saveFine(fine: TrafficFine): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_FINES_KEY);
+    let list: TrafficFine[] = cached ? JSON.parse(cached) : [];
+    const exists = list.some((f) => f.id === fine.id);
+    if (exists) {
+      list = list.map((f) => (f.id === fine.id ? fine : f));
+    } else {
+      list = [fine, ...list];
+    }
+    localStorage.setItem(LOCAL_FINES_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const dbRecord = {
+        id: fine.id,
+        notice_number: fine.noticeNumber,
+        infringement_date: fine.infringementDate,
+        vehicle_plate: fine.vehiclePlate,
+        driver_id: fine.driverId || null,
+        driver_name: fine.driverName || null,
+        location: fine.location,
+        municipality: fine.municipality,
+        infringement_type: fine.infringementType,
+        amount_zar: fine.amountZar,
+        discounted_amount_zar: fine.discountedAmountZar || fine.amountZar / 2,
+        due_date: fine.dueDate,
+        aarto_status: fine.aartoStatus,
+        payment_status: fine.paymentStatus,
+        document_url: fine.documentUrl || null,
+      };
+      await client.from('traffic_fines').upsert(dbRecord, { onConflict: 'id' });
+    } catch (err) {
+      console.warn('Supabase fine save error:', err);
+    }
+  }
+}
+
+export async function deleteFine(fineId: string): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_FINES_KEY);
+    if (cached) {
+      const list: TrafficFine[] = JSON.parse(cached);
+      const filtered = list.filter((f) => f.id !== fineId);
+      localStorage.setItem(LOCAL_FINES_KEY, JSON.stringify(filtered));
+    }
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      await client.from('traffic_fines').delete().eq('id', fineId);
+    } catch (err) {
+      console.warn('Supabase delete fine error:', err);
+    }
+  }
+}
+
+// ==============================================================================
+// 8. YOCO TRANSACTIONS REPOSITORY
+// ==============================================================================
+
+export async function fetchTransactions(): Promise<YocoTransaction[]> {
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('yoco_transactions')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        const mapped: YocoTransaction[] = data.map((t: any) => ({
+          id: t.id,
+          yocoChargeId: t.yoco_charge_id || t.yocoChargeId || '',
+          yocoPaymentLinkId: t.yoco_payment_link_id || t.yocoPaymentLinkId || undefined,
+          driverId: t.driver_id || '',
+          driverName: t.driver_name || '',
+          amountZar: Number(t.amount_zar || 0),
+          currency: 'ZAR',
+          paymentMethod: t.payment_method || t.channel || 'yoco_payment_link',
+          allocation: t.allocation || 'weekly_rental',
+          status: t.status || 'successful',
+          yocoFeeZar: Number(t.yoco_fee_zar || t.fee_zar || 0),
+          netAmountZar: Number(t.net_amount_zar || t.net_zar || 0),
+          cardLast4: t.card_last4 || undefined,
+          cardBrand: t.card_brand || undefined,
+          reconciliationStatus: t.reconciliation_status || 'reconciled',
+          transactionDate: t.transaction_date || t.created_at || new Date().toISOString(),
+          yocoMetadata: typeof t.yoco_metadata === 'object' ? t.yoco_metadata : {},
+        }));
+        try {
+          localStorage.setItem(LOCAL_TRANSACTIONS_KEY, JSON.stringify(mapped));
+        } catch {
+          // ignore
+        }
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Supabase transactions fetch error:', err);
+    }
+  }
+
+  try {
+    const cached = localStorage.getItem(LOCAL_TRANSACTIONS_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((t: any) => !t.id?.startsWith('tx-00'));
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
+}
+
+export async function saveTransaction(tx: YocoTransaction): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_TRANSACTIONS_KEY);
+    let list: YocoTransaction[] = cached ? JSON.parse(cached) : [];
+    const exists = list.some((t) => t.id === tx.id);
+    if (exists) {
+      list = list.map((t) => (t.id === tx.id ? tx : t));
+    } else {
+      list = [tx, ...list];
+    }
+    localStorage.setItem(LOCAL_TRANSACTIONS_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const dbRecord = {
+        id: tx.id,
+        yoco_charge_id: tx.yocoChargeId,
+        yoco_payment_link_id: tx.yocoPaymentLinkId || null,
+        driver_id: tx.driverId,
+        driver_name: tx.driverName,
+        amount_zar: tx.amountZar,
+        currency: tx.currency,
+        payment_method: tx.paymentMethod,
+        allocation: tx.allocation,
+        status: tx.status,
+        yoco_fee_zar: tx.yocoFeeZar,
+        net_amount_zar: tx.netAmountZar,
+        card_last4: tx.cardLast4 || null,
+        card_brand: tx.cardBrand || null,
+        reconciliation_status: tx.reconciliationStatus,
+        transaction_date: tx.transactionDate,
+        yoco_metadata: tx.yocoMetadata || {},
+      };
+      await client.from('yoco_transactions').upsert(dbRecord, { onConflict: 'id' });
+    } catch (err) {
+      console.warn('Supabase transaction save error:', err);
+    }
+  }
+}
+
+// ==============================================================================
+// 9. RENTAL AGREEMENTS REPOSITORY
+// ==============================================================================
+
+export async function fetchAgreements(): Promise<RentalAgreement[]> {
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('rental_agreements')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        const mapped: RentalAgreement[] = data.map((a: any) => ({
+          id: a.id,
+          agreementNumber: a.agreement_number || a.agreementNumber || '',
+          driverId: a.driver_id || '',
+          driverName: a.driver_name || '',
+          vehicleId: a.vehicle_id || '',
+          vehiclePlate: a.vehicle_plate || a.vehicle_reg || '',
+          agreementType: a.agreement_type || 'rent_to_own',
+          termMonths: Number(a.term_months || 18),
+          weeklyRateZar: Number(a.weekly_rate_zar || 0),
+          depositAmountZar: Number(a.deposit_amount_zar || a.deposit_held_zar || 0),
+          depositPaid: Boolean(a.deposit_paid ?? true),
+          startDate: a.start_date || new Date().toISOString().split('T')[0],
+          expectedEndDate: a.expected_end_date || new Date().toISOString().split('T')[0],
+          actualEndDate: a.actual_end_date || undefined,
+          totalContractValueZar: Number(a.total_contract_value_zar || 0),
+          totalPaidZar: Number(a.total_paid_zar || 0),
+          remainingBalanceZar: Number(a.remaining_balance_zar || 0),
+          isCompleted: Boolean(a.is_completed ?? false),
+          signatureDataUrl: a.signature_data_url || undefined,
+          contractPdfUrl: a.contract_pdf_url || undefined,
+          termsVersion: a.terms_version || 'v2026.1',
+        }));
+        try {
+          localStorage.setItem(LOCAL_AGREEMENTS_KEY, JSON.stringify(mapped));
+        } catch {
+          // ignore
+        }
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Supabase agreements fetch error:', err);
+    }
+  }
+
+  try {
+    const cached = localStorage.getItem(LOCAL_AGREEMENTS_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((a: any) => !a.id?.startsWith('agr-00'));
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
+}
+
+export async function saveAgreement(ag: RentalAgreement): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_AGREEMENTS_KEY);
+    let list: RentalAgreement[] = cached ? JSON.parse(cached) : [];
+    const exists = list.some((a) => a.id === ag.id);
+    if (exists) {
+      list = list.map((a) => (a.id === ag.id ? ag : a));
+    } else {
+      list = [ag, ...list];
+    }
+    localStorage.setItem(LOCAL_AGREEMENTS_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const dbRecord = {
+        id: ag.id,
+        agreement_number: ag.agreementNumber,
+        driver_id: ag.driverId,
+        driver_name: ag.driverName,
+        vehicle_id: ag.vehicleId,
+        vehicle_plate: ag.vehiclePlate,
+        agreement_type: ag.agreementType,
+        term_months: ag.termMonths,
+        weekly_rate_zar: ag.weeklyRateZar,
+        deposit_amount_zar: ag.depositAmountZar,
+        deposit_paid: ag.depositPaid,
+        start_date: ag.startDate,
+        expected_end_date: ag.expectedEndDate,
+        actual_end_date: ag.actualEndDate || null,
+        total_contract_value_zar: ag.totalContractValueZar,
+        total_paid_zar: ag.totalPaidZar,
+        remaining_balance_zar: ag.remainingBalanceZar,
+        is_completed: ag.isCompleted,
+        signature_data_url: ag.signatureDataUrl || null,
+        contract_pdf_url: ag.contractPdfUrl || null,
+        terms_version: ag.termsVersion,
+      };
+      await client.from('rental_agreements').upsert(dbRecord, { onConflict: 'id' });
+    } catch (err) {
+      console.warn('Supabase agreement save error:', err);
+    }
+  }
+}
+
+// ==============================================================================
+// 10. DRIVER REFERRALS REPOSITORY
+// ==============================================================================
+
+export async function fetchReferrals(): Promise<DriverReferral[]> {
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('driver_referrals')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        const mapped: DriverReferral[] = data.map((r: any) => ({
+          id: r.id,
+          referrerDriverId: r.referrer_driver_id || r.referring_driver_id || '',
+          referrerDriverName: r.referrer_driver_name || r.referring_driver_name || '',
+          referredApplicantName: r.referred_applicant_name || '',
+          referredPhone: r.referred_phone || r.referred_applicant_phone || '',
+          referralDate: r.referral_date || new Date().toISOString().split('T')[0],
+          status: r.status || 'pending_onboarding',
+          rewardAmountZar: Number(r.reward_amount_zar || r.bonus_amount_zar || 350),
+          paidDate: r.paid_date || undefined,
+        }));
+        try {
+          localStorage.setItem(LOCAL_REFERRALS_KEY, JSON.stringify(mapped));
+        } catch {
+          // ignore
+        }
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Supabase referrals fetch error:', err);
+    }
+  }
+
+  try {
+    const cached = localStorage.getItem(LOCAL_REFERRALS_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((r: any) => !r.id?.startsWith('ref-00'));
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
+}
+
+export async function saveReferral(ref: DriverReferral): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_REFERRALS_KEY);
+    let list: DriverReferral[] = cached ? JSON.parse(cached) : [];
+    const exists = list.some((r) => r.id === ref.id);
+    if (exists) {
+      list = list.map((r) => (r.id === ref.id ? ref : r));
+    } else {
+      list = [ref, ...list];
+    }
+    localStorage.setItem(LOCAL_REFERRALS_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const dbRecord = {
+        id: ref.id,
+        referrer_driver_id: ref.referrerDriverId,
+        referrer_driver_name: ref.referrerDriverName,
+        referred_applicant_name: ref.referredApplicantName,
+        referred_phone: ref.referredPhone,
+        referral_date: ref.referralDate,
+        status: ref.status,
+        reward_amount_zar: ref.rewardAmountZar,
+        paid_date: ref.paidDate || null,
+      };
+      await client.from('driver_referrals').upsert(dbRecord, { onConflict: 'id' });
+    } catch (err) {
+      console.warn('Supabase referral save error:', err);
+    }
+  }
+}
+
+// ==============================================================================
+// 11. SITE SETTINGS & BRANDING REPOSITORY
+// ==============================================================================
 
 export interface SiteCustomizationData {
   logoUrl: string;
@@ -634,10 +1522,10 @@ export interface SiteCustomizationData {
 }
 
 export async function fetchCustomizationFromDb(): Promise<SiteCustomizationData> {
-  // 1. Check Supabase first
-  if (supabase) {
+  const client = getSupabaseClient();
+  if (client) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from('site_settings')
         .select('*')
         .eq('id', 'global')
@@ -662,7 +1550,6 @@ export async function fetchCustomizationFromDb(): Promise<SiteCustomizationData>
     }
   }
 
-  // 2. Fallback to localStorage
   try {
     const cached = localStorage.getItem(LOCAL_CUSTOMIZATION_KEY);
     if (cached) {
@@ -674,7 +1561,7 @@ export async function fetchCustomizationFromDb(): Promise<SiteCustomizationData>
         heroSubtitle: parsed.heroSubtitle || STATIC_BRANDING.heroTagline,
       };
     }
-  } catch (e) {
+  } catch {
     // ignore
   }
 
@@ -689,7 +1576,6 @@ export async function fetchCustomizationFromDb(): Promise<SiteCustomizationData>
 export async function saveCustomizationToDb(
   customization: Partial<SiteCustomizationData>
 ): Promise<SiteCustomizationData> {
-  // 1. Update localStorage
   let current: SiteCustomizationData = {
     logoUrl: STATIC_BRANDING.logoUrl,
     heroImageUrl: STATIC_BRANDING.heroImageUrl,
@@ -717,8 +1603,8 @@ export async function saveCustomizationToDb(
     // ignore
   }
 
-  // 2. Persist to Supabase if available
-  if (supabase) {
+  const client = getSupabaseClient();
+  if (client) {
     try {
       const dbRecord = {
         id: 'global',
@@ -728,7 +1614,7 @@ export async function saveCustomizationToDb(
         hero_subtitle: updated.heroSubtitle,
         updated_at: new Date().toISOString(),
       };
-      await supabase.from('site_settings').upsert(dbRecord, { onConflict: 'id' });
+      await client.from('site_settings').upsert(dbRecord, { onConflict: 'id' });
     } catch (err) {
       console.warn('Supabase site_settings save error:', err);
     }
