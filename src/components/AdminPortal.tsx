@@ -11,7 +11,8 @@ import {
   TrafficFine,
   YocoTransaction,
   RentalAgreement,
-  DriverReferral
+  DriverReferral,
+  FlaggedRiskEntry
 } from '../types';
 import { COMPANY_DETAILS, BIKES } from '../data/bikes';
 import { ContractModal } from './ContractModal';
@@ -24,6 +25,7 @@ import { DeliverAndAssignModal } from './fleet/DeliverAndAssignModal';
 import { compressImageFile } from '../lib/imageUtils';
 import { SUPABASE_SQL_SCHEMA } from '../db/schemaSql';
 import { isSupabaseConnected } from '../lib/supabase';
+import { getFlaggedRiskEntries, fetchAllRiskEntriesAsync } from '../lib/riskStore';
 import {
   getFleetDrivers,
   saveFleetDrivers,
@@ -285,6 +287,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [transactionsState, setTransactionsState] = useState<YocoTransaction[]>(() => getFleetTransactions());
   const [agreementsState, setAgreementsState] = useState<RentalAgreement[]>(() => getFleetAgreements());
   const [referralsState, setReferralsState] = useState<DriverReferral[]>(() => getFleetReferrals());
+  const [riskEntriesState, setRiskEntriesState] = useState<FlaggedRiskEntry[]>(() => getFlaggedRiskEntries());
   const [yocoSettingsState, setYocoSettingsState] = useState<YocoSettings>(() => getYocoSettings());
   const [selectedDriverForYocoPayment, setSelectedDriverForYocoPayment] = useState<Driver | null>(null);
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
@@ -305,6 +308,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         setTransactionsState(data.transactions);
         setAgreementsState(data.agreements);
         setReferralsState(data.referrals);
+      }
+      const riskData = await fetchAllRiskEntriesAsync();
+      if (riskData) {
+        setRiskEntriesState(riskData);
       }
     } catch (e) {
       console.warn('Failed loading fleet data from DB:', e);
@@ -976,9 +983,13 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                     <span>Driver Risk Registry</span>
                   </div>
                   <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
-                    activePage === 'driver_risk_registry' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-slate-400'
+                    activePage === 'driver_risk_registry' 
+                      ? 'bg-slate-950 text-cyan-300' 
+                      : riskEntriesState.length > 0
+                      ? 'bg-rose-950 text-rose-300 border border-rose-800/60'
+                      : 'bg-slate-800 text-slate-400'
                   }`}>
-                    {driversState.length}
+                    {riskEntriesState.length}
                   </span>
                 </button>
 
@@ -2711,6 +2722,9 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
             onOpenYocoPaymentForDriver={(driver) => {
               setSelectedDriverForYocoPayment(driver);
               setActivePage('paystack_collections');
+            }}
+            onRiskEntriesChange={(updated) => {
+              setRiskEntriesState(updated);
             }}
           />
         )}

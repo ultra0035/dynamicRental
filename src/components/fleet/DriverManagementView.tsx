@@ -73,6 +73,7 @@ interface DriverManagementViewProps {
   onChangeBike?: (driverId: string, newVehicleId: string) => void;
   onRemoveBike?: (driverId: string) => void;
   activeSubTab?: DriverSubTab;
+  onRiskEntriesChange?: (entries: FlaggedRiskEntry[]) => void;
 }
 
 export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
@@ -91,6 +92,7 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
   onChangeBike,
   onRemoveBike,
   activeSubTab,
+  onRiskEntriesChange,
 }) => {
   const [subTab, setSubTab] = useState<DriverSubTab>(activeSubTab || 'directory');
 
@@ -107,6 +109,14 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
   const [flaggedEntries, setFlaggedEntries] = useState<FlaggedRiskEntry[]>(() => getFlaggedRiskEntries());
   const [riskStatusFilter, setRiskStatusFilter] = useState<'all' | 'blacklisted' | 'critical_high' | 'active_alerts' | 'resolved'>('all');
   const [riskSearchQuery, setRiskSearchQuery] = useState<string>('');
+
+  // Sync risk entries with parent callback
+  const updateRiskEntriesList = (newList: FlaggedRiskEntry[]) => {
+    setFlaggedEntries(newList);
+    if (onRiskEntriesChange) {
+      onRiskEntriesChange(newList);
+    }
+  };
 
   // Modals for Risk Management
   const [isAddFlagModalOpen, setIsAddFlagModalOpen] = useState<boolean>(false);
@@ -287,7 +297,7 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
         lastKnownAddress: newFlagForm.lastKnownAddress || editingFlagEntry.lastKnownAddress,
       };
       const list = updateFlaggedRiskEntry(updated);
-      setFlaggedEntries(list);
+      updateRiskEntriesList(list);
       setEditingFlagEntry(null);
     } else {
       const newEntry: FlaggedRiskEntry = {
@@ -310,7 +320,7 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
         lastKnownAddress: newFlagForm.lastKnownAddress,
       };
       const list = addFlaggedRiskEntry(newEntry);
-      setFlaggedEntries(list);
+      updateRiskEntriesList(list);
 
       // If this flag was linked to an active driver, sync their tier & penalty in the fleet
       if (selectedActiveDriverToFlag) {
@@ -337,13 +347,13 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
       status: entry.status === 'resolved' ? 'active_flag' : 'resolved',
     };
     const list = updateFlaggedRiskEntry(updated);
-    setFlaggedEntries(list);
+    updateRiskEntriesList(list);
   };
 
   const handleDeleteFlag = (entryId: string) => {
     if (window.confirm('Remove this record from the Driver Risk Registry?')) {
       const list = deleteFlaggedRiskEntry(entryId);
-      setFlaggedEntries(list);
+      updateRiskEntriesList(list);
       if (selectedFlagDossier?.id === entryId) {
         setSelectedFlagDossier(null);
       }
@@ -533,26 +543,80 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
           </div>
         </div>
 
-        {/* Quick KPI Row */}
+        {/* Quick KPI Row - Context Aware based on subTab */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-4 border-t border-slate-100">
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80">
-            <span className="text-[10px] font-bold uppercase text-slate-400 block">Active Couriers</span>
-            <span className="text-lg font-black text-slate-900">{activeCount}</span>
-          </div>
-          <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200/80">
-            <span className="text-[10px] font-bold uppercase text-amber-600 block">In Arrears / Due</span>
-            <span className="text-lg font-black text-amber-800">{inArrearsCount}</span>
-          </div>
-          <div className="bg-rose-50/60 p-3 rounded-xl border border-rose-200/80">
-            <span className="text-[10px] font-bold uppercase text-rose-600 block">Total Overdue (ZAR)</span>
-            <span className="text-lg font-black text-rose-800">R{totalArrearsZar.toLocaleString()}</span>
-          </div>
-          <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200/80">
-            <span className="text-[10px] font-bold uppercase text-emerald-600 block">Avg On-Time Score</span>
-            <span className="text-lg font-black text-emerald-800">
-              {drivers.length > 0 ? Math.round(drivers.reduce((acc, d) => acc + (d.paymentScore || 90), 0) / drivers.length) : 100}%
-            </span>
-          </div>
+          {subTab === 'risk_registry' ? (
+            <>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Total Risk Records</span>
+                <span className="text-lg font-black text-slate-900">{flaggedEntries.length} Profiles</span>
+              </div>
+              <div className="bg-rose-50/60 p-3 rounded-xl border border-rose-200/80">
+                <span className="text-[10px] font-bold uppercase text-rose-600 block">Blacklisted (Do Not Rent)</span>
+                <span className="text-lg font-black text-rose-800">
+                  {flaggedEntries.filter((e) => e.riskTier === 'critical' || e.status === 'blacklisted').length}
+                </span>
+              </div>
+              <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200/80">
+                <span className="text-[10px] font-bold uppercase text-amber-600 block">Recorded Arrears Debt</span>
+                <span className="text-lg font-black text-amber-800">
+                  R{flaggedEntries.reduce((sum, e) => sum + (e.outstandingBalanceZar || 0), 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200/80">
+                <span className="text-[10px] font-bold uppercase text-emerald-600 block">Resolved / Cleared</span>
+                <span className="text-lg font-black text-emerald-800">
+                  {flaggedEntries.filter((e) => e.status === 'resolved').length}
+                </span>
+              </div>
+            </>
+          ) : subTab === 'referrals' ? (
+            <>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Total Referrals</span>
+                <span className="text-lg font-black text-slate-900">{referrals.length}</span>
+              </div>
+              <div className="bg-purple-50/60 p-3 rounded-xl border border-purple-200/80">
+                <span className="text-[10px] font-bold uppercase text-purple-600 block">Onboarded Couriers</span>
+                <span className="text-lg font-black text-purple-800">
+                  {referrals.filter((r) => r.status === 'completed_onboarding' || r.status === 'reward_paid').length}
+                </span>
+              </div>
+              <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200/80">
+                <span className="text-[10px] font-bold uppercase text-amber-600 block">Pending Onboarding</span>
+                <span className="text-lg font-black text-amber-800">
+                  {referrals.filter((r) => r.status === 'pending_onboarding').length}
+                </span>
+              </div>
+              <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200/80">
+                <span className="text-[10px] font-bold uppercase text-emerald-600 block">Total Bonuses Paid</span>
+                <span className="text-lg font-black text-emerald-800">
+                  R{referrals.filter((r) => r.status === 'reward_paid').reduce((sum, r) => sum + (Number(r.rewardAmountZar) || 350), 0).toLocaleString()}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Active Couriers</span>
+                <span className="text-lg font-black text-slate-900">{activeCount}</span>
+              </div>
+              <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200/80">
+                <span className="text-[10px] font-bold uppercase text-amber-600 block">In Arrears / Due</span>
+                <span className="text-lg font-black text-amber-800">{inArrearsCount}</span>
+              </div>
+              <div className="bg-rose-50/60 p-3 rounded-xl border border-rose-200/80">
+                <span className="text-[10px] font-bold uppercase text-rose-600 block">Total Overdue (ZAR)</span>
+                <span className="text-lg font-black text-rose-800">R{totalArrearsZar.toLocaleString()}</span>
+              </div>
+              <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200/80">
+                <span className="text-[10px] font-bold uppercase text-emerald-600 block">Avg On-Time Score</span>
+                <span className="text-lg font-black text-emerald-800">
+                  {drivers.length > 0 ? Math.round(drivers.reduce((acc, d) => acc + (d.paymentScore || 90), 0) / drivers.length) : 100}%
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
