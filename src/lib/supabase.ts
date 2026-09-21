@@ -9,7 +9,8 @@ import {
   TrafficFine, 
   YocoTransaction, 
   RentalAgreement, 
-  DriverReferral 
+  DriverReferral,
+  FlaggedRiskEntry
 } from '../types';
 import { STATIC_BRANDING } from '../config/branding';
 
@@ -924,14 +925,19 @@ export async function savePart(part: PartsInventoryItem): Promise<void> {
       const dbRecord = {
         id: part.id,
         sku: part.sku,
+        part_number: part.sku,
         name: part.name,
         category: part.category,
         quantity_in_stock: part.quantityInStock,
         min_threshold: part.minThreshold,
+        minimum_threshold: part.minThreshold,
         cost_price_zar: part.costPriceZar,
+        unit_cost: part.costPriceZar,
         selling_price_zar: part.sellingPriceZar,
+        retail_price: part.sellingPriceZar,
         compatible_models: part.compatibleModels,
         supplier_name: part.supplierName,
+        supplier: part.supplierName,
         last_restocked_date: part.lastRestockedDate,
         image_url: part.imageUrl || null,
       };
@@ -1045,12 +1051,15 @@ export async function saveService(service: RepairAndService): Promise<void> {
         id: service.id,
         vehicle_id: service.vehicleId,
         vehicle_plate: service.vehiclePlate,
+        vehicle_reg: service.vehiclePlate,
         driver_id: service.driverId || null,
         driver_name: service.driverName || null,
         driver_phone: service.driverPhone || null,
         service_type: service.serviceType,
         odometer_km: service.odometerKm,
+        mileage_at_service_km: service.odometerKm,
         cost_zar: service.costZar,
+        total_cost_zar: service.costZar,
         technician_name: service.technicianName,
         garage_location: service.garageLocation,
         service_date: service.serviceDate,
@@ -1496,18 +1505,37 @@ export async function saveReferral(ref: DriverReferral): Promise<void> {
   const client = getSupabaseClient();
   if (client) {
     try {
-      const dbRecord = {
+      // Primary attempt: standard schema
+      const primaryRecord = {
         id: ref.id,
-        referrer_driver_id: ref.referrerDriverId,
-        referrer_driver_name: ref.referrerDriverName,
-        referred_applicant_name: ref.referredApplicantName,
-        referred_phone: ref.referredPhone,
-        referral_date: ref.referralDate,
-        status: ref.status,
-        reward_amount_zar: ref.rewardAmountZar,
+        referrer_driver_id: ref.referrerDriverId || null,
+        referrer_driver_name: ref.referrerDriverName || '',
+        referred_applicant_name: ref.referredApplicantName || '',
+        referred_phone: ref.referredPhone || '',
+        referral_date: ref.referralDate || new Date().toISOString().split('T')[0],
+        status: ref.status || 'pending_onboarding',
+        reward_amount_zar: Number(ref.rewardAmountZar) || 350,
         paid_date: ref.paidDate || null,
       };
-      await client.from('driver_referrals').upsert(dbRecord, { onConflict: 'id' });
+      const { error: err1 } = await client.from('driver_referrals').upsert(primaryRecord, { onConflict: 'id' });
+      
+      if (err1) {
+        // Fallback attempt: alternate column names
+        const fallbackRecord = {
+          id: ref.id,
+          referring_driver_id: ref.referrerDriverId || null,
+          referring_driver_name: ref.referrerDriverName || '',
+          referred_applicant_name: ref.referredApplicantName || '',
+          referred_applicant_phone: ref.referredPhone || '',
+          referral_date: ref.referralDate || new Date().toISOString().split('T')[0],
+          status: ref.status || 'pending_onboarding',
+          bonus_amount_zar: Number(ref.rewardAmountZar) || 350,
+        };
+        const { error: err2 } = await client.from('driver_referrals').upsert(fallbackRecord, { onConflict: 'id' });
+        if (err2) {
+          console.warn('Supabase referral save fallback error:', err2);
+        }
+      }
     } catch (err) {
       console.warn('Supabase referral save error:', err);
     }
@@ -1647,4 +1675,129 @@ export async function saveCustomizationToDb(
   }
 
   return updated;
+}
+
+// ==============================================================================
+// 12. FLAGGED RISK REGISTRY REPOSITORY
+// ==============================================================================
+const LOCAL_RISK_KEY = 'dyn_fleet_risk_registry_v1';
+
+export async function fetchRiskEntries(): Promise<FlaggedRiskEntry[]> {
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('flagged_risk_registry')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        const mapped: FlaggedRiskEntry[] = data.map((r: any) => ({
+          id: r.id,
+          driverId: r.driver_id || undefined,
+          fullName: r.full_name || '',
+          idOrPassportNumber: r.id_or_passport_number || '',
+          phone: r.phone || '',
+          whatsappNumber: r.whatsapp_number || r.phone || '',
+          nationalityCountry: r.nationality_country || 'South Africa',
+          riskTier: r.risk_tier || 'high',
+          flagReason: r.flag_reason || 'payment_default',
+          reasonDescription: r.reason_description || '',
+          outstandingBalanceZar: Number(r.outstanding_balance_zar || 0),
+          policeCaseNumber: r.police_case_number || undefined,
+          reportedByOperator: r.reported_by_operator || 'Randburg Workshop Hub',
+          reportedDate: r.reported_date || new Date().toISOString().split('T')[0],
+          status: r.status || 'active',
+          isCrossOperatorShared: Boolean(r.is_cross_operator_shared),
+        }));
+        try {
+          localStorage.setItem(LOCAL_RISK_KEY, JSON.stringify(mapped));
+        } catch {
+          // ignore
+        }
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Supabase risk registry fetch error:', err);
+    }
+  }
+
+  try {
+    const cached = localStorage.getItem(LOCAL_RISK_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((r: any) => !r.id?.startsWith('risk-flag-00'));
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
+}
+
+export async function saveRiskEntry(entry: FlaggedRiskEntry): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_RISK_KEY);
+    let list: FlaggedRiskEntry[] = cached ? JSON.parse(cached) : [];
+    const exists = list.some((r) => r.id === entry.id);
+    if (exists) {
+      list = list.map((r) => (r.id === entry.id ? entry : r));
+    } else {
+      list = [entry, ...list];
+    }
+    localStorage.setItem(LOCAL_RISK_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const dbRecord = {
+        id: entry.id,
+        driver_id: entry.driverId || null,
+        full_name: entry.fullName,
+        id_or_passport_number: entry.idOrPassportNumber,
+        phone: entry.phone || null,
+        whatsapp_number: entry.whatsappNumber || entry.phone || null,
+        nationality_country: entry.nationalityCountry || 'South Africa',
+        risk_tier: entry.riskTier,
+        flag_reason: entry.flagReason,
+        reason_description: entry.reasonDescription,
+        outstanding_balance_zar: entry.outstandingBalanceZar,
+        police_case_number: entry.policeCaseNumber || null,
+        reported_by_operator: entry.reportedByOperator || 'Randburg Workshop Hub',
+        reported_date: entry.reportedDate,
+        status: entry.status,
+        is_cross_operator_shared: entry.isCrossOperatorShared,
+      };
+      await client.from('flagged_risk_registry').upsert(dbRecord, { onConflict: 'id' });
+    } catch (err) {
+      console.warn('Supabase risk registry save error:', err);
+    }
+  }
+}
+
+export async function deleteRiskEntry(entryId: string): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_RISK_KEY);
+    if (cached) {
+      const list: FlaggedRiskEntry[] = JSON.parse(cached);
+      const filtered = list.filter((r) => r.id !== entryId);
+      localStorage.setItem(LOCAL_RISK_KEY, JSON.stringify(filtered));
+    }
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      await client.from('flagged_risk_registry').delete().eq('id', entryId);
+    } catch (err) {
+      console.warn('Supabase delete risk entry error:', err);
+    }
+  }
 }

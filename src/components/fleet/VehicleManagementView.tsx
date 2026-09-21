@@ -39,7 +39,13 @@ import {
   Receipt,
   Share2,
   RotateCcw,
-  Check
+  Check,
+  Image as ImageIcon,
+  Upload,
+  Camera,
+  MessageSquare,
+  Phone,
+  UserCheck
 } from 'lucide-react';
 
 export type VehicleSubTab = 'register' | 'live_telematics' | 'parts_inventory' | 'repairs_service' | 'traffic_fines';
@@ -137,6 +143,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     sellingPriceZar: 250,
     compatibleModels: ['Bajaj Boxer 150 HD', 'Big Boy Velocity 150'],
     supplierName: 'Midas Randburg Auto Spares',
+    imageUrl: '',
   });
 
   // Edit Part Modal
@@ -188,9 +195,12 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
   // Add Service Modal
   const [isAddServiceOpen, setIsAddServiceOpen] = useState<boolean>(false);
+  const [notifyDriverWhatsApp, setNotifyDriverWhatsApp] = useState<boolean>(true);
   const [newServiceForm, setNewServiceForm] = useState<Partial<RepairAndService>>({
     vehiclePlate: vehicles[0]?.registrationPlate || '',
-    driverName: 'Sipho Ndlovu',
+    driverId: vehicles[0]?.assignedDriverId || '',
+    driverName: vehicles[0]?.assignedDriverName || 'Sipho Ndlovu',
+    driverPhone: '',
     serviceType: 'routine_5000km',
     odometerKm: 5000,
     costZar: 350,
@@ -286,6 +296,22 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
   // -------------------------------------------------------------
   // PARTS INVENTORY & POINT OF SALE (POS) HANDLERS
   // -------------------------------------------------------------
+  const handlePartImageUpload = (e: React.ChangeEvent<HTMLInputElement>, isEditing = false) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        if (isEditing && editingPart) {
+          setEditingPart({ ...editingPart, imageUrl: reader.result });
+        } else {
+          setNewPartForm((prev) => ({ ...prev, imageUrl: reader.result as string }));
+        }
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleCreatePartSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPartForm.name || !newPartForm.sku) {
@@ -305,6 +331,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       compatibleModels: newPartForm.compatibleModels || ['Bajaj Boxer 150 HD', 'Big Boy Velocity 150'],
       supplierName: newPartForm.supplierName || 'Workshop Auto Spares',
       lastRestockedDate: new Date().toISOString().split('T')[0],
+      imageUrl: newPartForm.imageUrl || '',
     };
 
     onAddPart(createdPart);
@@ -319,6 +346,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       sellingPriceZar: 250,
       compatibleModels: ['Bajaj Boxer 150 HD', 'Big Boy Velocity 150'],
       supplierName: 'Midas Randburg Auto Spares',
+      imageUrl: '',
     });
   };
 
@@ -428,17 +456,94 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     setRestockPart(null);
   };
 
+  // -------------------------------------------------------------
+  // REPAIRS & SERVICE SYNCHRONIZATION HANDLERS
+  // -------------------------------------------------------------
+  const handleOpenAddService = (defaultPlate?: string) => {
+    const plate = defaultPlate || (vehicles[0]?.registrationPlate ?? '');
+    const matchedVeh = vehicles.find((v) => v.registrationPlate === plate);
+    const matchedDriver = drivers.find(
+      (d) => d.id === matchedVeh?.assignedDriverId || d.fullName === matchedVeh?.assignedDriverName
+    );
+
+    setNewServiceForm({
+      vehiclePlate: plate,
+      driverId: matchedDriver?.id || matchedVeh?.assignedDriverId || '',
+      driverName: matchedDriver?.fullName || matchedVeh?.assignedDriverName || 'Unassigned / Showroom Stock',
+      driverPhone: matchedDriver?.phone || '',
+      serviceType: 'routine_5000km',
+      odometerKm: matchedVeh?.odometerKm || 5000,
+      costZar: 350,
+      technicianName: 'Master Siphesihle',
+      garageLocation: 'Randburg Hub Workshop - 304 Tungsten Rd',
+      status: 'completed',
+      notes: 'Routine 5,000 km oil replacement, spark plug inspect, chain tensioned.',
+    });
+    setNotifyDriverWhatsApp(Boolean(matchedDriver?.phone));
+    setIsAddServiceOpen(true);
+  };
+
+  const handleServiceVehicleChange = (plate: string) => {
+    const matchedVeh = vehicles.find((v) => v.registrationPlate === plate);
+    const matchedDriver = drivers.find(
+      (d) => d.id === matchedVeh?.assignedDriverId || d.fullName === matchedVeh?.assignedDriverName
+    );
+    setNewServiceForm((prev) => ({
+      ...prev,
+      vehiclePlate: plate,
+      driverId: matchedDriver?.id || matchedVeh?.assignedDriverId || '',
+      driverName: matchedDriver?.fullName || matchedVeh?.assignedDriverName || 'Unassigned / Showroom Stock',
+      driverPhone: matchedDriver?.phone || '',
+      odometerKm: matchedVeh?.odometerKm || prev.odometerKm || 5000,
+    }));
+  };
+
+  const handleServiceDriverChange = (driverId: string) => {
+    if (driverId === 'none') {
+      setNewServiceForm((prev) => ({
+        ...prev,
+        driverId: undefined,
+        driverName: 'Unassigned / Showroom Stock',
+        driverPhone: undefined,
+      }));
+      return;
+    }
+    const d = drivers.find((drv) => drv.id === driverId);
+    if (d) {
+      setNewServiceForm((prev) => ({
+        ...prev,
+        driverId: d.id,
+        driverName: d.fullName,
+        driverPhone: d.phone,
+      }));
+    }
+  };
+
+  const sendServiceWhatsApp = (srv: RepairAndService, phoneOverride?: string) => {
+    const phone = phoneOverride || srv.driverPhone || drivers.find(d => d.id === srv.driverId || d.fullName === srv.driverName)?.phone;
+    if (!phone) {
+      alert('No phone number found for this driver.');
+      return;
+    }
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const msg = `Good day ${srv.driverName || 'Rider'}! 🏍️\n\nYour motorbike (*${srv.vehiclePlate}*) service record has been logged by *Dynamic Rental Workshop*:\n\n🔧 *Service Type:* ${srv.serviceType.replace(/_/g, ' ').toUpperCase()}\n📍 *Workshop:* ${srv.garageLocation}\n👨‍🔧 *Technician:* ${srv.technicianName}\n⏱️ *Odometer:* ${(srv.odometerKm || 0).toLocaleString()} KM\n📝 *Notes:* ${srv.notes || 'Routine 5,000 km maintenance completed.'}\n💰 *Cost:* R${srv.costZar}\n\nYour motorbike is roadworthy and cleared for operations! Safe riding!`;
+    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
   // Submit Service Log
   const handleCreateService = (e: React.FormEvent) => {
     e.preventDefault();
     const matchedVeh = vehicles.find((v) => v.registrationPlate === newServiceForm.vehiclePlate);
+    const assignedDrv = drivers.find((d) => d.id === newServiceForm.driverId || d.fullName === newServiceForm.driverName) || 
+      drivers.find((d) => d.id === matchedVeh?.assignedDriverId || d.fullName === matchedVeh?.assignedDriverName);
 
     const srv: RepairAndService = {
       id: `srv-${Date.now()}`,
       vehicleId: matchedVeh?.id || '',
       vehiclePlate: newServiceForm.vehiclePlate || '',
-      driverId: matchedVeh?.assignedDriverId,
-      driverName: newServiceForm.driverName,
+      driverId: newServiceForm.driverId || assignedDrv?.id || matchedVeh?.assignedDriverId,
+      driverName: newServiceForm.driverName || assignedDrv?.fullName || matchedVeh?.assignedDriverName || 'Unassigned / Showroom Stock',
+      driverPhone: newServiceForm.driverPhone || assignedDrv?.phone,
       serviceType: newServiceForm.serviceType || 'routine_5000km',
       odometerKm: Number(newServiceForm.odometerKm) || 0,
       costZar: Number(newServiceForm.costZar) || 0,
@@ -462,6 +567,11 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
         odometerKm: Number(newServiceForm.odometerKm) || matchedVeh.odometerKm,
         status: matchedVeh.status === 'in_maintenance' ? 'assigned' : matchedVeh.status,
       });
+    }
+
+    // Broadcast WhatsApp if enabled
+    if (notifyDriverWhatsApp && srv.driverPhone) {
+      sendServiceWhatsApp(srv, srv.driverPhone);
     }
 
     setIsAddServiceOpen(false);
@@ -1116,7 +1226,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   return (
                     <div
                       key={part.id}
-                      className={`bg-white rounded-2xl border p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow ${
+                      className={`bg-white rounded-2xl border overflow-hidden shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow ${
                         isOutOfStock 
                           ? 'border-rose-300 bg-rose-50/10' 
                           : isLowStock 
@@ -1125,52 +1235,75 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       }`}
                     >
                       <div>
-                        {/* SKU & Category Header */}
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 font-mono text-[10px] font-bold">
-                            SKU: {part.sku}
-                          </span>
-                          {isOutOfStock ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-200">
-                              Out of Stock
-                            </span>
-                          ) : isLowStock ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
-                              Low Stock ({part.quantityInStock} left)
-                            </span>
+                        {/* Part Image / Visual Header */}
+                        <div className="relative h-36 bg-slate-100 border-b border-slate-100 flex items-center justify-center overflow-hidden">
+                          {part.imageUrl ? (
+                            <img
+                              src={part.imageUrl}
+                              alt={part.name}
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
                           ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
-                              In Stock
-                            </span>
+                            <div className="flex flex-col items-center justify-center text-slate-400 gap-1.5 p-4 text-center">
+                              <Package className="w-8 h-8 text-slate-300" />
+                              <span className="text-[11px] font-medium text-slate-400">Workshop Spares</span>
+                            </div>
                           )}
-                        </div>
 
-                        {/* Title & Category */}
-                        <h4 className="font-bold text-slate-900 text-sm mt-2">{part.name}</h4>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[11px] text-slate-500 capitalize">
-                            {part.category.replace(/_/g, ' ')}
-                          </span>
-                          {part.supplierName && (
-                            <span className="text-[10px] text-slate-400 font-medium truncate">
-                              • {part.supplierName}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Compatible Bike Models */}
-                        {part.compatibleModels && part.compatibleModels.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2.5">
-                            {part.compatibleModels.map((model, idx) => (
-                              <span key={idx} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
-                                {model}
+                          {/* Stock Status Badge */}
+                          <div className="absolute top-2.5 right-2.5">
+                            {isOutOfStock ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-xs">
+                                Out of Stock
                               </span>
-                            ))}
+                            ) : isLowStock ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white shadow-xs">
+                                Low ({part.quantityInStock} left)
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white shadow-xs">
+                                In Stock ({part.quantityInStock})
+                              </span>
+                            )}
                           </div>
-                        )}
+
+                          {/* SKU Pill */}
+                          <div className="absolute bottom-2.5 left-2.5">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-xs text-white font-mono text-[10px] font-bold">
+                              SKU: {part.sku}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="p-4">
+                          {/* Title & Category */}
+                          <h4 className="font-bold text-slate-900 text-sm leading-snug">{part.name}</h4>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[11px] text-indigo-700 font-semibold uppercase tracking-wider">
+                              {part.category.replace(/_/g, ' ')}
+                            </span>
+                            {part.supplierName && (
+                              <span className="text-[10px] text-slate-400 font-medium truncate">
+                                • {part.supplierName}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Compatible Bike Models */}
+                          {part.compatibleModels && part.compatibleModels.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2.5">
+                              {part.compatibleModels.map((model, idx) => (
+                                <span key={idx} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                                  {model}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
 
                         {/* Inventory Metrics Grid */}
-                        <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-100 text-xs">
+                        <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-100 text-xs px-4">
                           <div>
                             <span className="text-[10px] text-slate-400 uppercase font-bold block">Current Stock</span>
                             <span className={`text-base font-black ${isOutOfStock ? 'text-rose-600' : isLowStock ? 'text-amber-700' : 'text-slate-900'}`}>
@@ -1271,7 +1404,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
             <button
               type="button"
-              onClick={() => setIsAddServiceOpen(true)}
+              onClick={() => handleOpenAddService()}
               className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
             >
               <Plus className="w-4 h-4" />
@@ -1284,52 +1417,84 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
               <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 uppercase text-[10px] tracking-wider">
                 <tr>
                   <th className="py-3 px-4">Plate & Service Type</th>
-                  <th className="py-3 px-4">Courier & Odometer</th>
+                  <th className="py-3 px-4">Assigned Driver & Phone</th>
+                  <th className="py-3 px-4">Odometer & Date</th>
                   <th className="py-3 px-4">Workshop & Technician</th>
                   <th className="py-3 px-4">Parts & Notes</th>
-                  <th className="py-3 px-4">Cost (ZAR)</th>
+                  <th className="py-3 px-4">Cost</th>
                   <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Driver Broadcast</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                {services.map((srv) => (
-                  <tr key={srv.id} className="hover:bg-slate-50">
-                    <td className="py-3.5 px-4">
-                      <div>
-                        <span className="font-mono font-bold text-slate-900 block">{srv.vehiclePlate}</span>
-                        <span className="text-[11px] text-slate-500 capitalize">{srv.serviceType.replace('_', ' ')}</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div>
-                        <span className="font-bold text-slate-900 block">{srv.driverName || 'Showroom Stock'}</span>
-                        <span className="text-[11px] text-slate-500">{srv.odometerKm.toLocaleString()} KM</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div>
-                        <span className="font-bold text-slate-900 block">{srv.technicianName}</span>
-                        <span className="text-[10px] text-slate-500">{srv.garageLocation}</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 max-w-xs">
-                      <p className="truncate text-slate-600">{srv.notes}</p>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">
-                        Parts: {srv.partsUsed?.join(', ')}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-slate-900">R{srv.costZar}</td>
-                    <td className="py-3.5 px-4">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                        srv.status === 'completed'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {srv.status.replace('_', ' ')}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {services.map((srv) => {
+                  const driverMatch = drivers.find(d => d.id === srv.driverId || d.fullName === srv.driverName);
+                  const driverPhone = srv.driverPhone || driverMatch?.phone;
+                  return (
+                    <tr key={srv.id} className="hover:bg-slate-50">
+                      <td className="py-3.5 px-4">
+                        <div>
+                          <span className="font-mono font-bold text-slate-900 block">{srv.vehiclePlate}</span>
+                          <span className="text-[11px] text-slate-500 capitalize">{srv.serviceType.replace(/_/g, ' ')}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div>
+                          <span className="font-bold text-slate-900 block flex items-center gap-1">
+                            {srv.driverName && srv.driverName !== 'Unassigned / Showroom Stock' ? (
+                              <UserCheck className="w-3.5 h-3.5 text-blue-600" />
+                            ) : null}
+                            {srv.driverName || 'Showroom Stock'}
+                          </span>
+                          {driverPhone ? (
+                            <span className="text-[10px] text-slate-500 font-mono">{driverPhone}</span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">No phone assigned</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div>
+                          <span className="font-bold text-slate-900 block">{srv.odometerKm.toLocaleString()} KM</span>
+                          <span className="text-[10px] text-slate-400">{srv.serviceDate}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div>
+                          <span className="font-bold text-slate-900 block">{srv.technicianName}</span>
+                          <span className="text-[10px] text-slate-500">{srv.garageLocation}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 max-w-xs">
+                        <p className="truncate text-slate-600">{srv.notes}</p>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          Parts: {srv.partsUsed?.join(', ') || 'Standard service'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 font-bold text-slate-900">R{srv.costZar}</td>
+                      <td className="py-3.5 px-4">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          srv.status === 'completed'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {srv.status.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => sendServiceWhatsApp(srv, driverPhone)}
+                          className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1.5"
+                          title="Broadcast Service Record via WhatsApp"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>WhatsApp</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1597,18 +1762,70 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
             <form onSubmit={handleCreateService} className="mt-4 space-y-3.5">
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Select Motorcycle</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Select Motorcycle *</label>
                 <select
                   value={newServiceForm.vehiclePlate}
-                  onChange={(e) => setNewServiceForm({ ...newServiceForm, vehiclePlate: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                  onChange={(e) => handleServiceVehicleChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold bg-slate-50 focus:bg-white"
                 >
                   {vehicles.map((v) => (
                     <option key={v.id} value={v.registrationPlate}>
-                      {v.registrationPlate} ({v.make} {v.model}) - {v.assignedDriverName || 'Showroom Stock'}
+                      {v.registrationPlate} ({v.make} {v.model}) — Assigned: {v.assignedDriverName || 'Showroom Stock'}
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Driver Linkage */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <UserCheck className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Courier / Assigned Driver</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">Auto-synced from bike</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <select
+                      value={newServiceForm.driverId || 'none'}
+                      onChange={(e) => handleServiceDriverChange(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold bg-white"
+                    >
+                      <option value="none">Unassigned / Showroom Stock</option>
+                      {drivers.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.fullName} ({d.phone || 'No phone'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Driver Phone (e.g. +27 82 123 4567)"
+                      value={newServiceForm.driverPhone || ''}
+                      onChange={(e) => setNewServiceForm({ ...newServiceForm, driverPhone: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-mono bg-white"
+                    />
+                  </div>
+                </div>
+
+                {newServiceForm.driverPhone && (
+                  <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={notifyDriverWhatsApp}
+                      onChange={(e) => setNotifyDriverWhatsApp(e.target.checked)}
+                      className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                    />
+                    <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
+                      <MessageSquare className="w-3 h-3 text-emerald-600" />
+                      Broadcast WhatsApp clearance receipt to driver upon save
+                    </span>
+                  </label>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1619,11 +1836,11 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                     onChange={(e) => setNewServiceForm({ ...newServiceForm, serviceType: e.target.value as any })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
                   >
-                    <option value="routine_5000km">Routine 5,000 KM</option>
-                    <option value="oil_change">Oil Change</option>
+                    <option value="routine_5000km">Routine 5,000 KM Maintenance</option>
+                    <option value="oil_change">Oil Change & Filter</option>
                     <option value="brake_replacement">Brake Shoes / Pads</option>
-                    <option value="chain_sprocket">Chain & Sprocket</option>
-                    <option value="tyre_replacement">Tyre Replacement</option>
+                    <option value="chain_sprocket">Chain & Sprocket Replacement</option>
+                    <option value="tyre_replacement">Tyre & Tube Replacement</option>
                     <option value="major_overhaul">Major 10,000 KM Overhaul</option>
                   </select>
                 </div>
@@ -1661,7 +1878,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Service Notes</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Service Notes & Completed Work</label>
                 <textarea
                   rows={2}
                   value={newServiceForm.notes}
@@ -1809,6 +2026,60 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 />
               </div>
 
+              {/* Part Image Upload / URL */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Part Image / Photo</span>
+                </label>
+                
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 rounded-xl border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0">
+                    {newPartForm.imageUrl ? (
+                      <img
+                        src={newPartForm.imageUrl}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <Camera className="w-6 h-6 text-slate-300" />
+                    )}
+                  </div>
+
+                  <div className="flex-1 space-y-1.5">
+                    <input
+                      type="url"
+                      placeholder="Image URL (https://...)"
+                      value={newPartForm.imageUrl || ''}
+                      onChange={(e) => setNewPartForm({ ...newPartForm, imageUrl: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                    />
+                    <div className="flex items-center gap-2">
+                      <label className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold cursor-pointer inline-flex items-center gap-1">
+                        <Upload className="w-3 h-3 text-slate-500" />
+                        <span>Upload File</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handlePartImageUpload(e, false)}
+                          className="hidden"
+                        />
+                      </label>
+                      {newPartForm.imageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setNewPartForm({ ...newPartForm, imageUrl: '' })}
+                          className="text-[10px] text-rose-600 font-bold hover:underline"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">SKU Code *</label>
@@ -1950,6 +2221,60 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   onChange={(e) => setEditingPart({ ...editingPart, name: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
                 />
+              </div>
+
+              {/* Edit Part Image Upload / URL */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Part Image / Photo</span>
+                </label>
+                
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 rounded-xl border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0">
+                    {editingPart.imageUrl ? (
+                      <img
+                        src={editingPart.imageUrl}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <Camera className="w-6 h-6 text-slate-300" />
+                    )}
+                  </div>
+
+                  <div className="flex-1 space-y-1.5">
+                    <input
+                      type="url"
+                      placeholder="Image URL (https://...)"
+                      value={editingPart.imageUrl || ''}
+                      onChange={(e) => setEditingPart({ ...editingPart, imageUrl: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                    />
+                    <div className="flex items-center gap-2">
+                      <label className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold cursor-pointer inline-flex items-center gap-1">
+                        <Upload className="w-3 h-3 text-slate-500" />
+                        <span>Upload File</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handlePartImageUpload(e, true)}
+                          className="hidden"
+                        />
+                      </label>
+                      {editingPart.imageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingPart({ ...editingPart, imageUrl: '' })}
+                          className="text-[10px] text-rose-600 font-bold hover:underline"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

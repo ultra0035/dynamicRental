@@ -2838,17 +2838,17 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
               <div className="p-5 rounded-2xl bg-emerald-50/70 border border-emerald-200">
                 <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">Active Fleet Deployment</span>
                 <div className="text-2xl font-black text-slate-900 mt-1">
-                  {vehiclesState.length > 0 ? Math.round((vehiclesState.filter(v => v.status === 'assigned_active').length / vehiclesState.length) * 100) : 0}%
+                  {vehiclesState.length > 0 ? Math.round((vehiclesState.filter(v => v.status === 'assigned' || Boolean(v.assignedDriverId)).length / vehiclesState.length) * 100) : 0}%
                 </div>
                 <span className="text-[11px] text-emerald-700 font-semibold mt-1 block">
-                  {vehiclesState.filter(v => v.status === 'assigned_active').length} of {vehiclesState.length} motorbikes deployed
+                  {vehiclesState.filter(v => v.status === 'assigned' || Boolean(v.assignedDriverId)).length} of {vehiclesState.length} motorbikes deployed
                 </span>
               </div>
 
               <div className="p-5 rounded-2xl bg-amber-50/70 border border-amber-200">
                 <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block">Outstanding Arrears</span>
                 <div className="text-2xl font-black text-slate-900 mt-1">
-                  R{driversState.reduce((sum, d) => sum + (d.balanceDue || 0), 0).toLocaleString()}
+                  R{driversState.reduce((sum, d) => sum + (d.balanceDue > 0 ? d.balanceDue : 0), 0).toLocaleString()}
                 </div>
                 <span className="text-[11px] text-amber-700 font-semibold mt-1 block">
                   {driversState.filter(d => (d.balanceDue || 0) > 0).length} drivers with overdue balance
@@ -2875,11 +2875,11 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
                       <span className="font-bold text-emerald-700">🟢 Active on Road</span>
-                      <span className="font-black text-slate-900">{vehiclesState.filter(v => v.status === 'assigned_active').length} Bikes</span>
+                      <span className="font-black text-slate-900">{vehiclesState.filter(v => v.status === 'assigned' || Boolean(v.assignedDriverId)).length} Bikes</span>
                     </div>
                     <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
                       <span className="font-bold text-blue-700">🔵 Available in Hub</span>
-                      <span className="font-black text-slate-900">{vehiclesState.filter(v => v.status === 'available_in_stock').length} Bikes</span>
+                      <span className="font-black text-slate-900">{vehiclesState.filter(v => v.status === 'in_stock' || (!v.assignedDriverId && v.status !== 'in_maintenance' && v.status !== 'impounded' && v.status !== 'decommissioned')).length} Bikes</span>
                     </div>
                     <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
                       <span className="font-bold text-amber-700">🟡 In Workshop / Maintenance</span>
@@ -2908,11 +2908,11 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                     </div>
                     <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
                       <span className="text-slate-700 font-bold">Parts Inventory Asset Value</span>
-                      <span className="font-black text-slate-900">R{partsState.reduce((sum, p) => sum + (p.unitCost * p.quantityInStock), 0).toLocaleString()}</span>
+                      <span className="font-black text-slate-900">R{partsState.reduce((sum, p) => sum + ((p.costPriceZar || 0) * (p.quantityInStock || 0)), 0).toLocaleString()}</span>
                     </div>
                     <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
                       <span className="text-slate-700 font-bold">Traffic Fines Incurred</span>
-                      <span className="font-black text-amber-600">R{finesState.reduce((sum, f) => sum + (f.fineAmount || 0), 0).toLocaleString()}</span>
+                      <span className="font-black text-amber-600">R{finesState.reduce((sum, f) => sum + (f.amountZar || 0), 0).toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
@@ -2928,8 +2928,8 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                       <span className="font-black text-slate-900">{driversState.length} Drivers</span>
                     </div>
                     <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
-                      <span className="font-bold text-rose-700">Flagged Risk / Blacklisted</span>
-                      <span className="font-black text-slate-900">{driversState.filter(d => d.riskTier === 'high_risk' || d.accountStatus === 'blacklisted').length} Drivers</span>
+                      <span className="font-bold text-rose-700">Flagged Risk / Suspended</span>
+                      <span className="font-black text-slate-900">{driversState.filter(d => d.riskTier === 'critical' || d.riskTier === 'high' || d.status === 'suspended').length} Drivers</span>
                     </div>
                     <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
                       <span className="text-slate-700 font-bold">Total Referrals Logged</span>
@@ -2937,7 +2937,7 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                     </div>
                     <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
                       <span className="text-slate-700 font-bold">Referral Payouts Earned</span>
-                      <span className="font-black text-cyan-700">R{referralsState.reduce((sum, r) => sum + (r.rewardAmount || 0), 0).toLocaleString()}</span>
+                      <span className="font-black text-cyan-700">R{referralsState.reduce((sum, r) => sum + (r.rewardAmountZar || 0), 0).toLocaleString()}</span>
                     </div>
                   </div>
                 </div>

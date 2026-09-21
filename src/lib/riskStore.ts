@@ -1,10 +1,24 @@
 import { FlaggedRiskEntry } from '../types';
+import { fetchRiskEntries, saveRiskEntry, deleteRiskEntry } from './supabase';
 
 const RISK_STORAGE_KEY = 'dyn_fleet_risk_registry_v1';
 const CROSS_OPERATOR_ENABLED_KEY = 'dyn_fleet_cross_operator_sharing_v1';
 
 // Clean initial state - all risk and defaulter entries are managed live via Admin Portal or Supabase
 export const INITIAL_RISK_REGISTRY: FlaggedRiskEntry[] = [];
+
+export async function fetchAllRiskEntriesAsync(): Promise<FlaggedRiskEntry[]> {
+  try {
+    const fromDb = await fetchRiskEntries();
+    if (Array.isArray(fromDb) && fromDb.length > 0) {
+      saveFlaggedRiskEntries(fromDb);
+      return fromDb;
+    }
+  } catch (err) {
+    console.warn('Error fetching risk entries from database:', err);
+  }
+  return getFlaggedRiskEntries();
+}
 
 export function getFlaggedRiskEntries(): FlaggedRiskEntry[] {
   try {
@@ -46,6 +60,7 @@ export function addFlaggedRiskEntry(entry: FlaggedRiskEntry): FlaggedRiskEntry[]
   const filtered = current.filter((e) => e.id !== entry.id);
   const updated = [entry, ...filtered];
   saveFlaggedRiskEntries(updated);
+  saveRiskEntry(entry).catch((err) => console.warn('Supabase add risk error:', err));
   return updated;
 }
 
@@ -53,6 +68,7 @@ export function updateFlaggedRiskEntry(entry: FlaggedRiskEntry): FlaggedRiskEntr
   const current = getFlaggedRiskEntries();
   const updated = current.map((e) => (e.id === entry.id ? entry : e));
   saveFlaggedRiskEntries(updated);
+  saveRiskEntry(entry).catch((err) => console.warn('Supabase update risk error:', err));
   return updated;
 }
 
@@ -60,6 +76,7 @@ export function deleteFlaggedRiskEntry(entryId: string): FlaggedRiskEntry[] {
   const current = getFlaggedRiskEntries();
   const updated = current.filter((e) => e.id !== entryId);
   saveFlaggedRiskEntries(updated);
+  deleteRiskEntry(entryId).catch((err) => console.warn('Supabase delete risk error:', err));
   return updated;
 }
 

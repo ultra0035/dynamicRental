@@ -110,14 +110,22 @@ CREATE TABLE IF NOT EXISTS vehicles (
 -- 5. PARTS INVENTORY TABLE
 CREATE TABLE IF NOT EXISTS parts_inventory (
     id TEXT PRIMARY KEY,
-    part_number TEXT UNIQUE NOT NULL,
+    sku TEXT,
+    part_number TEXT,
     name TEXT NOT NULL,
     category TEXT NOT NULL,
     quantity_in_stock INTEGER DEFAULT 0,
+    min_threshold INTEGER DEFAULT 5,
     minimum_threshold INTEGER DEFAULT 5,
+    cost_price_zar NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     unit_cost NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    selling_price_zar NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     retail_price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    compatible_models JSONB DEFAULT '[]'::jsonb,
+    supplier_name TEXT,
     supplier TEXT,
+    last_restocked_date DATE,
+    image_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -126,16 +134,23 @@ CREATE TABLE IF NOT EXISTS parts_inventory (
 CREATE TABLE IF NOT EXISTS repairs_and_services (
     id TEXT PRIMARY KEY,
     vehicle_id TEXT NOT NULL,
-    vehicle_reg TEXT NOT NULL,
+    vehicle_plate TEXT,
+    vehicle_reg TEXT,
     driver_id TEXT,
     driver_name TEXT,
+    driver_phone TEXT,
     service_type TEXT NOT NULL,
-    mileage_at_service_km INTEGER NOT NULL,
-    total_cost_zar NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    odometer_km INTEGER,
+    mileage_at_service_km INTEGER,
+    cost_zar NUMERIC(10, 2) DEFAULT 0.00,
+    total_cost_zar NUMERIC(10, 2) DEFAULT 0.00,
     technician_name TEXT,
+    garage_location TEXT,
     status TEXT NOT NULL DEFAULT 'completed',
     service_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    parts_used JSONB DEFAULT '[]'::jsonb,
     notes TEXT,
+    invoice_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -145,15 +160,24 @@ CREATE TABLE IF NOT EXISTS traffic_fines (
     id TEXT PRIMARY KEY,
     notice_number TEXT UNIQUE NOT NULL,
     vehicle_id TEXT NOT NULL,
-    vehicle_reg TEXT NOT NULL,
+    vehicle_plate TEXT,
+    vehicle_reg TEXT,
     driver_id TEXT NOT NULL,
     driver_name TEXT NOT NULL,
     issuing_authority TEXT NOT NULL DEFAULT 'JMPD',
-    fine_amount NUMERIC(10, 2) NOT NULL,
-    discounted_amount NUMERIC(10, 2) NOT NULL,
-    violation_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    infringement_type TEXT,
+    location TEXT,
+    municipality TEXT,
+    amount_zar NUMERIC(10, 2),
+    fine_amount NUMERIC(10, 2),
+    discounted_amount_zar NUMERIC(10, 2),
+    discounted_amount NUMERIC(10, 2),
+    violation_date TIMESTAMP WITH TIME ZONE,
+    infringement_date TIMESTAMP WITH TIME ZONE,
     due_date TIMESTAMP WITH TIME ZONE NOT NULL,
     status TEXT NOT NULL DEFAULT 'issued_to_driver',
+    aarto_status TEXT DEFAULT 'notice_issued',
+    payment_status TEXT DEFAULT 'allocated_to_driver',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -170,6 +194,10 @@ CREATE TABLE IF NOT EXISTS yoco_transactions (
     channel TEXT NOT NULL DEFAULT 'payment_link',
     yoco_charge_id TEXT,
     status TEXT NOT NULL DEFAULT 'successful',
+    reconciliation_status TEXT DEFAULT 'reconciled_ledger',
+    transaction_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    card_last4 TEXT,
+    card_brand TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -177,18 +205,31 @@ CREATE TABLE IF NOT EXISTS yoco_transactions (
 -- 9. RENTAL AGREEMENTS TABLE
 CREATE TABLE IF NOT EXISTS rental_agreements (
     id TEXT PRIMARY KEY,
+    agreement_number TEXT,
     driver_id TEXT NOT NULL,
     driver_name TEXT NOT NULL,
     vehicle_id TEXT NOT NULL,
-    vehicle_reg TEXT NOT NULL,
+    vehicle_plate TEXT,
+    vehicle_reg TEXT,
     agreement_type TEXT NOT NULL DEFAULT 'rent_to_own',
+    term_months INTEGER DEFAULT 18,
     weekly_rate_zar NUMERIC(10, 2) NOT NULL,
-    deposit_held_zar NUMERIC(10, 2) NOT NULL,
-    contract_term_weeks INTEGER NOT NULL DEFAULT 52,
-    weeks_elapsed INTEGER NOT NULL DEFAULT 0,
+    deposit_amount_zar NUMERIC(10, 2) DEFAULT 0.00,
+    deposit_held_zar NUMERIC(10, 2) DEFAULT 0.00,
+    deposit_paid BOOLEAN DEFAULT TRUE,
+    contract_term_weeks INTEGER DEFAULT 52,
+    weeks_elapsed INTEGER DEFAULT 0,
     start_date DATE NOT NULL,
-    status TEXT NOT NULL DEFAULT 'active',
+    expected_end_date DATE,
+    actual_end_date DATE,
+    total_contract_value_zar NUMERIC(10, 2) DEFAULT 0.00,
+    total_paid_zar NUMERIC(10, 2) DEFAULT 0.00,
+    remaining_balance_zar NUMERIC(10, 2) DEFAULT 0.00,
+    is_completed BOOLEAN DEFAULT FALSE,
+    signature_data_url TEXT,
     contract_pdf_url TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    terms_version TEXT DEFAULT 'v2026.1',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -196,20 +237,53 @@ CREATE TABLE IF NOT EXISTS rental_agreements (
 -- 10. DRIVER REFERRALS TABLE
 CREATE TABLE IF NOT EXISTS driver_referrals (
     id TEXT PRIMARY KEY,
-    referring_driver_id TEXT NOT NULL,
-    referring_driver_name TEXT NOT NULL,
+    referrer_driver_id TEXT,
+    referring_driver_id TEXT,
+    referrer_driver_name TEXT,
+    referring_driver_name TEXT,
     referred_applicant_name TEXT NOT NULL,
-    referred_applicant_phone TEXT NOT NULL,
-    bonus_amount_zar NUMERIC(10, 2) NOT NULL DEFAULT 350.00,
-    status TEXT NOT NULL DEFAULT 'pending',
+    referred_phone TEXT,
+    referred_applicant_phone TEXT,
+    referral_date DATE DEFAULT CURRENT_DATE,
+    reward_amount_zar NUMERIC(10, 2) NOT NULL DEFAULT 350.00,
+    bonus_amount_zar NUMERIC(10, 2) DEFAULT 350.00,
+    status TEXT NOT NULL DEFAULT 'pending_onboarding',
+    paid_date DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 11. SITE SETTINGS TABLE
+-- 11. FLAGGED RISK REGISTRY (Internal Company Defaulter & Incident Log)
+CREATE TABLE IF NOT EXISTS flagged_risk_registry (
+    id TEXT PRIMARY KEY,
+    driver_id TEXT,
+    full_name TEXT NOT NULL,
+    id_or_passport_number TEXT NOT NULL,
+    phone TEXT,
+    whatsapp_number TEXT,
+    nationality_country TEXT DEFAULT 'South Africa',
+    risk_tier TEXT NOT NULL DEFAULT 'high',
+    flag_reason TEXT NOT NULL,
+    reason_description TEXT NOT NULL,
+    outstanding_balance_zar NUMERIC(10, 2) DEFAULT 0.00,
+    police_case_number TEXT,
+    reported_by_operator TEXT DEFAULT 'Randburg Workshop Hub',
+    reported_date DATE DEFAULT CURRENT_DATE,
+    status TEXT NOT NULL DEFAULT 'active',
+    is_cross_operator_shared BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 12. SITE SETTINGS TABLE
 CREATE TABLE IF NOT EXISTS site_settings (
-    key TEXT PRIMARY KEY,
-    value JSONB NOT NULL,
+    id TEXT PRIMARY KEY DEFAULT 'global',
+    logo_url TEXT,
+    hero_image_url TEXT,
+    hero_title TEXT,
+    hero_subtitle TEXT,
+    key TEXT,
+    value JSONB,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -224,6 +298,7 @@ ALTER TABLE traffic_fines ENABLE ROW LEVEL SECURITY;
 ALTER TABLE yoco_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rental_agreements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE driver_referrals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE flagged_risk_registry ENABLE ROW LEVEL SECURITY;
 ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Public Read Bikes" ON bikes FOR SELECT USING (true);
@@ -238,5 +313,6 @@ CREATE POLICY "Authenticated Full Access Fines" ON traffic_fines FOR ALL USING (
 CREATE POLICY "Authenticated Full Access Transactions" ON yoco_transactions FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Authenticated Full Access Agreements" ON rental_agreements FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Authenticated Full Access Referrals" ON driver_referrals FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "Authenticated Full Access Risk Registry" ON flagged_risk_registry FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Authenticated Full Access Settings" ON site_settings FOR ALL USING (auth.role() = 'authenticated');
 `;
