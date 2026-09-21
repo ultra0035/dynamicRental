@@ -874,6 +874,7 @@ export async function fetchParts(): Promise<PartsInventoryItem[]> {
           compatibleModels: Array.isArray(p.compatible_models) ? p.compatible_models : [],
           supplierName: p.supplier_name || p.supplier || '',
           lastRestockedDate: p.last_restocked_date || '',
+          imageUrl: p.image_url || p.imageUrl || p.image || '',
         }));
         try {
           localStorage.setItem(LOCAL_PARTS_KEY, JSON.stringify(mapped));
@@ -932,6 +933,7 @@ export async function savePart(part: PartsInventoryItem): Promise<void> {
         compatible_models: part.compatibleModels,
         supplier_name: part.supplierName,
         last_restocked_date: part.lastRestockedDate,
+        image_url: part.imageUrl || null,
       };
       await client.from('parts_inventory').upsert(dbRecord, { onConflict: 'id' });
     } catch (err) {
@@ -982,6 +984,7 @@ export async function fetchServices(): Promise<RepairAndService[]> {
           vehiclePlate: s.vehicle_plate || s.vehicle_reg || '',
           driverId: s.driver_id || undefined,
           driverName: s.driver_name || undefined,
+          driverPhone: s.driver_phone || undefined,
           serviceType: s.service_type || 'routine_5000km',
           odometerKm: Number(s.odometer_km || s.mileage_at_service_km || 0),
           costZar: Number(s.cost_zar || s.total_cost_zar || 0),
@@ -1044,6 +1047,7 @@ export async function saveService(service: RepairAndService): Promise<void> {
         vehicle_plate: service.vehiclePlate,
         driver_id: service.driverId || null,
         driver_name: service.driverName || null,
+        driver_phone: service.driverPhone || null,
         service_type: service.serviceType,
         odometer_km: service.odometerKm,
         cost_zar: service.costZar,
@@ -1506,6 +1510,28 @@ export async function saveReferral(ref: DriverReferral): Promise<void> {
       await client.from('driver_referrals').upsert(dbRecord, { onConflict: 'id' });
     } catch (err) {
       console.warn('Supabase referral save error:', err);
+    }
+  }
+}
+
+export async function deleteReferral(referralId: string): Promise<void> {
+  try {
+    const cached = localStorage.getItem(LOCAL_REFERRALS_KEY);
+    if (cached) {
+      const list: DriverReferral[] = JSON.parse(cached);
+      const filtered = list.filter((r) => r.id !== referralId);
+      localStorage.setItem(LOCAL_REFERRALS_KEY, JSON.stringify(filtered));
+    }
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      await client.from('driver_referrals').delete().eq('id', referralId);
+    } catch (err) {
+      console.warn('Supabase delete referral error:', err);
     }
   }
 }

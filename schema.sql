@@ -170,9 +170,12 @@ CREATE TABLE IF NOT EXISTS public.parts_inventory (
   retail_price_zar NUMERIC(10,2) NOT NULL,
   supplier_name TEXT,
   location_bin TEXT DEFAULT 'Shelf A-1',
+  image_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.parts_inventory ADD COLUMN IF NOT EXISTS image_url TEXT;
 
 -- ==============================================================================
 -- 6. REPAIRS AND SERVICES TABLE (5,000 km Maintenance)
@@ -183,6 +186,7 @@ CREATE TABLE IF NOT EXISTS public.repairs_and_services (
   vehicle_plate TEXT NOT NULL,
   driver_id TEXT,
   driver_name TEXT,
+  driver_phone TEXT,
   service_type TEXT NOT NULL,
   description TEXT NOT NULL,
   mileage_at_service_km INT NOT NULL,
@@ -197,6 +201,8 @@ CREATE TABLE IF NOT EXISTS public.repairs_and_services (
   invoice_number TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.repairs_and_services ADD COLUMN IF NOT EXISTS driver_phone TEXT;
 
 -- ==============================================================================
 -- 7. TRAFFIC FINES TABLE (AARTO Infringements)

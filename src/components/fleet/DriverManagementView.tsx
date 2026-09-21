@@ -1,6 +1,23 @@
-import React, { useState } from 'react';
-import { Driver, DriverReferral, DriverRiskTier, DriverStatus, Vehicle, RiderApplication, RentalAgreement } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { 
+  Driver, 
+  DriverReferral, 
+  DriverRiskTier, 
+  DriverStatus, 
+  Vehicle, 
+  RiderApplication, 
+  RentalAgreement,
+  FlaggedRiskEntry,
+  FlaggedReasonCategory 
+} from '../../types';
 import { DriverDetailModal } from './DriverDetailModal';
+import { 
+  getFlaggedRiskEntries, 
+  addFlaggedRiskEntry, 
+  updateFlaggedRiskEntry, 
+  deleteFlaggedRiskEntry
+} from '../../lib/riskStore';
+import { saveReferral } from '../../lib/supabase';
 import { 
   Users, 
   ShieldAlert, 
@@ -23,7 +40,19 @@ import {
   AlertCircle,
   Eye,
   RefreshCw,
-  Trash2
+  Trash2,
+  Globe,
+  Shield,
+  ShieldCheck,
+  Check,
+  Edit2,
+  Share2,
+  Copy,
+  FileWarning,
+  ExternalLink,
+  Lock,
+  UserX,
+  UserCheck
 } from 'lucide-react';
 
 export type DriverSubTab = 'directory' | 'risk_registry' | 'referrals';
@@ -36,7 +65,10 @@ interface DriverManagementViewProps {
   agreements?: RentalAgreement[];
   onUpdateDriver: (driver: Driver) => void;
   onAddDriver: (driver: Driver) => void;
+  onDeleteDriver?: (driverId: string) => void;
   onUpdateReferral: (referral: DriverReferral) => void;
+  onAddReferral?: (referral: DriverReferral) => void;
+  onDeleteReferral?: (referralId: string) => void;
   onOpenYocoPaymentForDriver: (driver: Driver) => void;
   onChangeBike?: (driverId: string, newVehicleId: string) => void;
   onRemoveBike?: (driverId: string) => void;
@@ -51,7 +83,10 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
   agreements = [],
   onUpdateDriver,
   onAddDriver,
+  onDeleteDriver,
   onUpdateReferral,
+  onAddReferral,
+  onDeleteReferral,
   onOpenYocoPaymentForDriver,
   onChangeBike,
   onRemoveBike,
@@ -67,6 +102,46 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [riskFilter, setRiskFilter] = useState<string>('all');
+
+  // Internal Company Risk Registry State
+  const [flaggedEntries, setFlaggedEntries] = useState<FlaggedRiskEntry[]>(() => getFlaggedRiskEntries());
+  const [riskStatusFilter, setRiskStatusFilter] = useState<'all' | 'blacklisted' | 'critical_high' | 'active_alerts' | 'resolved'>('all');
+  const [riskSearchQuery, setRiskSearchQuery] = useState<string>('');
+
+  // Modals for Risk Management
+  const [isAddFlagModalOpen, setIsAddFlagModalOpen] = useState<boolean>(false);
+  const [selectedFlagDossier, setSelectedFlagDossier] = useState<FlaggedRiskEntry | null>(null);
+  const [editingFlagEntry, setEditingFlagEntry] = useState<FlaggedRiskEntry | null>(null);
+  const [selectedActiveDriverToFlag, setSelectedActiveDriverToFlag] = useState<string>('');
+
+  // New Flag Form
+  const [newFlagForm, setNewFlagForm] = useState<Partial<FlaggedRiskEntry>>({
+    fullName: '',
+    idOrPassportNumber: '',
+    phone: '',
+    whatsappNumber: '',
+    nationalityCountry: 'South Africa',
+    riskTier: 'critical',
+    flagReason: 'severe_payment_default',
+    reasonDescription: '',
+    outstandingBalanceZar: 0,
+    reportedByOperator: 'Dynamic Rental (Randburg Hub)',
+    isCrossOperatorShared: false,
+    status: 'active_flag',
+    policeCaseNumber: '',
+    lastKnownAddress: '',
+  });
+
+  // Referrals Modal State
+  const [isAddReferralOpen, setIsAddReferralOpen] = useState<boolean>(false);
+  const [newReferralForm, setNewReferralForm] = useState<Partial<DriverReferral>>({
+    referrerDriverId: '',
+    referrerDriverName: '',
+    referredApplicantName: '',
+    referredPhone: '',
+    rewardAmountZar: 350,
+    status: 'pending_onboarding',
+  });
 
   // Selected Driver for Details Modal
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
@@ -97,6 +172,229 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
     paymentScore: 100,
     status: 'active',
   });
+
+  // Filtered Flagged Entries for Internal Company Risk Registry
+  const filteredRiskEntries = flaggedEntries.filter((entry) => {
+    const q = riskSearchQuery.toLowerCase().trim();
+    const matchQuery =
+      !q ||
+      entry.fullName.toLowerCase().includes(q) ||
+      entry.idOrPassportNumber.toLowerCase().includes(q) ||
+      entry.phone.includes(q) ||
+      (entry.policeCaseNumber && entry.policeCaseNumber.toLowerCase().includes(q)) ||
+      entry.reasonDescription.toLowerCase().includes(q) ||
+      entry.flagReason.toLowerCase().includes(q);
+
+    if (!matchQuery) return false;
+
+    if (riskStatusFilter === 'blacklisted') {
+      return entry.riskTier === 'critical' || entry.status === 'blacklisted';
+    }
+    if (riskStatusFilter === 'critical_high') {
+      return entry.riskTier === 'critical' || entry.riskTier === 'high';
+    }
+    if (riskStatusFilter === 'active_alerts') {
+      return entry.status !== 'resolved';
+    }
+    if (riskStatusFilter === 'resolved') {
+      return entry.status === 'resolved';
+    }
+
+    return true;
+  });
+
+  // Handlers for Risk Registry
+  const handleOpenAddFlagModal = (prefillDriver?: Driver) => {
+    if (prefillDriver) {
+      setSelectedActiveDriverToFlag(prefillDriver.id);
+      setNewFlagForm({
+        fullName: prefillDriver.fullName,
+        idOrPassportNumber: prefillDriver.idOrPassportNumber,
+        phone: prefillDriver.phone,
+        whatsappNumber: prefillDriver.whatsappNumber || prefillDriver.phone,
+        nationalityCountry: prefillDriver.citizenship === 'south_african' ? 'South Africa' : 'Foreign National',
+        riskTier: prefillDriver.riskTier === 'critical' ? 'critical' : 'high',
+        flagReason: prefillDriver.balanceDue > 0 ? 'severe_payment_default' : 'tracker_tampering',
+        reasonDescription: prefillDriver.notes || `Driver balance due R${prefillDriver.balanceDue}. Low behavioral safety score (${prefillDriver.riskScore}/100).`,
+        outstandingBalanceZar: prefillDriver.balanceDue || 0,
+        reportedByOperator: 'Dynamic Rental (Randburg Hub)',
+        isCrossOperatorShared: false,
+        status: 'active_flag',
+        driverId: prefillDriver.id,
+        lastKnownAddress: prefillDriver.address || `${prefillDriver.suburb}, ${prefillDriver.city}`,
+      });
+    } else {
+      setSelectedActiveDriverToFlag('');
+      setNewFlagForm({
+        fullName: '',
+        idOrPassportNumber: '',
+        phone: '',
+        whatsappNumber: '',
+        nationalityCountry: 'South Africa',
+        riskTier: 'critical',
+        flagReason: 'severe_payment_default',
+        reasonDescription: '',
+        outstandingBalanceZar: 0,
+        reportedByOperator: 'Dynamic Rental (Randburg Hub)',
+        isCrossOperatorShared: false,
+        status: 'active_flag',
+        policeCaseNumber: '',
+        lastKnownAddress: '',
+      });
+    }
+    setIsAddFlagModalOpen(true);
+  };
+
+  const handleSelectActiveDriverChange = (driverId: string) => {
+    setSelectedActiveDriverToFlag(driverId);
+    if (!driverId) return;
+    const found = drivers.find((d) => d.id === driverId);
+    if (found) {
+      setNewFlagForm((prev) => ({
+        ...prev,
+        fullName: found.fullName,
+        idOrPassportNumber: found.idOrPassportNumber,
+        phone: found.phone,
+        whatsappNumber: found.whatsappNumber || found.phone,
+        nationalityCountry: found.citizenship === 'south_african' ? 'South Africa' : 'Foreign National',
+        outstandingBalanceZar: found.balanceDue || 0,
+        driverId: found.id,
+        lastKnownAddress: found.address || `${found.suburb}, ${found.city}`,
+      }));
+    }
+  };
+
+  const handleSaveFlagEntry = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFlagForm.fullName || !newFlagForm.idOrPassportNumber) return;
+
+    if (editingFlagEntry) {
+      const updated: FlaggedRiskEntry = {
+        ...editingFlagEntry,
+        fullName: newFlagForm.fullName || editingFlagEntry.fullName,
+        idOrPassportNumber: newFlagForm.idOrPassportNumber || editingFlagEntry.idOrPassportNumber,
+        phone: newFlagForm.phone || editingFlagEntry.phone,
+        whatsappNumber: newFlagForm.whatsappNumber || editingFlagEntry.whatsappNumber,
+        nationalityCountry: newFlagForm.nationalityCountry || editingFlagEntry.nationalityCountry,
+        riskTier: newFlagForm.riskTier || editingFlagEntry.riskTier,
+        flagReason: newFlagForm.flagReason || editingFlagEntry.flagReason,
+        reasonDescription: newFlagForm.reasonDescription || editingFlagEntry.reasonDescription,
+        outstandingBalanceZar: Number(newFlagForm.outstandingBalanceZar) || 0,
+        reportedByOperator: newFlagForm.reportedByOperator || editingFlagEntry.reportedByOperator,
+        isCrossOperatorShared: false,
+        status: newFlagForm.status || editingFlagEntry.status,
+        policeCaseNumber: newFlagForm.policeCaseNumber || editingFlagEntry.policeCaseNumber,
+        lastKnownAddress: newFlagForm.lastKnownAddress || editingFlagEntry.lastKnownAddress,
+      };
+      const list = updateFlaggedRiskEntry(updated);
+      setFlaggedEntries(list);
+      setEditingFlagEntry(null);
+    } else {
+      const newEntry: FlaggedRiskEntry = {
+        id: `risk-flag-${Date.now()}`,
+        fullName: newFlagForm.fullName || '',
+        idOrPassportNumber: newFlagForm.idOrPassportNumber || '',
+        phone: newFlagForm.phone || '',
+        whatsappNumber: newFlagForm.whatsappNumber || newFlagForm.phone || '',
+        nationalityCountry: newFlagForm.nationalityCountry || 'South Africa',
+        riskTier: newFlagForm.riskTier || 'critical',
+        flagReason: newFlagForm.flagReason || 'severe_payment_default',
+        reasonDescription: newFlagForm.reasonDescription || 'Flagged manually by fleet controller.',
+        outstandingBalanceZar: Number(newFlagForm.outstandingBalanceZar) || 0,
+        reportedByOperator: newFlagForm.reportedByOperator || 'Dynamic Rental (Randburg Hub)',
+        isCrossOperatorShared: false,
+        reportedDate: new Date().toISOString().split('T')[0],
+        status: newFlagForm.status || (newFlagForm.riskTier === 'critical' ? 'blacklisted' : 'active_flag'),
+        policeCaseNumber: newFlagForm.policeCaseNumber,
+        driverId: selectedActiveDriverToFlag || undefined,
+        lastKnownAddress: newFlagForm.lastKnownAddress,
+      };
+      const list = addFlaggedRiskEntry(newEntry);
+      setFlaggedEntries(list);
+
+      // If this flag was linked to an active driver, sync their tier & penalty in the fleet
+      if (selectedActiveDriverToFlag) {
+        const found = drivers.find((d) => d.id === selectedActiveDriverToFlag);
+        if (found) {
+          const newScore = newEntry.riskTier === 'critical' ? 15 : newEntry.riskTier === 'high' ? 35 : 55;
+          onUpdateDriver({
+            ...found,
+            riskTier: newEntry.riskTier,
+            riskScore: newScore,
+            status: newEntry.riskTier === 'critical' ? 'suspended' : found.status,
+            notes: `${found.notes || ''}\n[FLAGGED ON RISK REGISTRY]: ${newEntry.reasonDescription}`,
+          });
+        }
+      }
+    }
+
+    setIsAddFlagModalOpen(false);
+  };
+
+  const handleResolveFlag = (entry: FlaggedRiskEntry) => {
+    const updated: FlaggedRiskEntry = {
+      ...entry,
+      status: entry.status === 'resolved' ? 'active_flag' : 'resolved',
+    };
+    const list = updateFlaggedRiskEntry(updated);
+    setFlaggedEntries(list);
+  };
+
+  const handleDeleteFlag = (entryId: string) => {
+    if (window.confirm('Remove this record from the Driver Risk Registry?')) {
+      const list = deleteFlaggedRiskEntry(entryId);
+      setFlaggedEntries(list);
+      if (selectedFlagDossier?.id === entryId) {
+        setSelectedFlagDossier(null);
+      }
+    }
+  };
+
+  const handleCreateReferralSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const referrerName = newReferralForm.referrerDriverName?.trim() || 
+      drivers.find((d) => d.id === newReferralForm.referrerDriverId)?.fullName || 
+      'Active Fleet Courier';
+
+    if (!referrerName || !newReferralForm.referredApplicantName) {
+      alert('Please provide both the Referrer Driver and the Referred Applicant Name.');
+      return;
+    }
+
+    const newRef: DriverReferral = {
+      id: `ref-${Date.now()}`,
+      referrerDriverId: newReferralForm.referrerDriverId || `ref-driver-${Date.now()}`,
+      referrerDriverName: referrerName,
+      referredApplicantName: newReferralForm.referredApplicantName.trim(),
+      referredPhone: newReferralForm.referredPhone?.trim() || '',
+      referralDate: new Date().toISOString().split('T')[0],
+      status: (newReferralForm.status as any) || 'pending_onboarding',
+      rewardAmountZar: Number(newReferralForm.rewardAmountZar) || 350,
+    };
+
+    if (onAddReferral) {
+      onAddReferral(newRef);
+    } else {
+      onUpdateReferral(newRef);
+    }
+
+    // Direct persistence to Supabase backend
+    try {
+      await saveReferral(newRef);
+    } catch (err) {
+      console.warn('Direct referral Supabase save err:', err);
+    }
+
+    setIsAddReferralOpen(false);
+    setNewReferralForm({
+      referrerDriverId: '',
+      referrerDriverName: '',
+      referredApplicantName: '',
+      referredPhone: '',
+      rewardAmountZar: 350,
+      status: 'pending_onboarding',
+    });
+  };
 
   // Filtered Drivers
   const filteredDrivers = drivers.filter((d) => {
@@ -498,94 +796,251 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
       {/* SUBTAB 2: DRIVER RISK REGISTRY */}
       {/* ------------------------------------------------------------- */}
       {subTab === 'risk_registry' && (
-        <div className="space-y-6">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-2">
-              Automated Telematics & Risk Scoring Algorithm
-            </h3>
-            <p className="text-xs text-slate-600 leading-relaxed max-w-3xl">
-              Each driver receives an automated safety rating calculated from on-time Yoco settlements (50%), GPS over-speed alerts & geofence violations (25%), and AARTO traffic fines (25%). Scores below 60 trigger alert protocols; scores below 40 mandate bike lockdown.
-            </p>
+        <div className="space-y-5">
+          {/* Header Bar */}
+          <div className="bg-slate-900 text-white p-5 rounded-2xl border border-slate-800 shadow-md">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                    <ShieldAlert className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-base font-black tracking-tight text-white">
+                    Company Driver Risk Registry & Blacklist
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed max-w-2xl">
+                  Internal company record system to log defaulters, absconded motorbikes, GPS tampering, fake permits, and high-risk couriers.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddFlagModal()}
+                  className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Risk Record</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Metrics Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-800 text-xs">
+              <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/60">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Risk Records</span>
+                <span className="text-base font-black text-white">{flaggedEntries.length} Profiles</span>
+              </div>
+              <div className="bg-rose-950/40 p-2.5 rounded-xl border border-rose-900/40">
+                <span className="text-[10px] uppercase font-bold text-rose-400 block">Blacklisted (Do Not Rent)</span>
+                <span className="text-base font-black text-rose-300">
+                  {flaggedEntries.filter((e) => e.riskTier === 'critical' || e.status === 'blacklisted').length}
+                </span>
+              </div>
+              <div className="bg-amber-950/40 p-2.5 rounded-xl border border-amber-900/40">
+                <span className="text-[10px] uppercase font-bold text-amber-400 block">Recorded Arrears Debt</span>
+                <span className="text-base font-black text-amber-300">
+                  R{flaggedEntries.reduce((sum, e) => sum + (e.outstandingBalanceZar || 0), 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="bg-emerald-950/40 p-2.5 rounded-xl border border-emerald-900/40">
+                <span className="text-[10px] uppercase font-bold text-emerald-400 block">Resolved / Cleared</span>
+                <span className="text-base font-black text-emerald-300">
+                  {flaggedEntries.filter((e) => e.status === 'resolved').length}
+                </span>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {drivers.map((driver) => (
-              <div
-                key={driver.id}
-                className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow"
+          {/* Search & Filter Toolbar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search driver name, ID / Passport number, SAPS case #, reason..."
+                value={riskSearchQuery}
+                onChange={(e) => setRiskSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:bg-white focus:outline-none"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Filter className="w-3.5 h-3.5 text-slate-400" />
+              <select
+                value={riskStatusFilter}
+                onChange={(e) => setRiskStatusFilter(e.target.value as any)}
+                className="py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:bg-white focus:outline-none"
               >
-                <div>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <span className="text-sm font-black text-slate-900 block">{driver.fullName}</span>
-                      <span className="text-[11px] font-mono text-slate-500">{driver.refNumber}</span>
-                    </div>
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase border ${
-                        driver.riskTier === 'low'
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          : driver.riskTier === 'medium'
-                          ? 'bg-amber-50 text-amber-800 border-amber-200'
-                          : 'bg-rose-50 text-rose-800 border-rose-200'
-                      }`}
-                    >
-                      {driver.riskTier} Risk ({driver.riskScore}/100)
-                    </span>
-                  </div>
+                <option value="all">All Records ({flaggedEntries.length})</option>
+                <option value="active_alerts">Active Alerts Only</option>
+                <option value="blacklisted">🚫 Blacklisted (Critical)</option>
+                <option value="critical_high">⚠️ Critical & High Risk</option>
+                <option value="resolved">✅ Resolved / Cleared</option>
+              </select>
+            </div>
+          </div>
 
-                  <div className="mt-4 space-y-2.5 text-xs">
-                    <div className="flex justify-between items-center text-slate-600">
-                      <span>Payment Reliability</span>
-                      <span className="font-bold text-slate-900">{driver.paymentScore}% On-Time</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-cyan-500 h-full" style={{ width: `${driver.paymentScore}%` }} />
+          {/* Risk Records Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredRiskEntries.map((entry) => {
+              const isBlacklisted = entry.riskTier === 'critical' || entry.status === 'blacklisted';
+
+              return (
+                <div
+                  key={entry.id}
+                  className={`bg-white rounded-2xl border p-5 shadow-sm flex flex-col justify-between hover:shadow-md transition-all ${
+                    isBlacklisted ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200'
+                  }`}
+                >
+                  <div className="space-y-3.5">
+                    {/* Card Header */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-black text-slate-900">{entry.fullName}</span>
+                          {entry.nationalityCountry && (
+                            <span className="text-[10px] text-slate-500 font-semibold">
+                              ({entry.nationalityCountry})
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                          <span className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                            ID/Passport: {entry.idOrPassportNumber}
+                          </span>
+                          {entry.phone && (
+                            <>
+                              <span>•</span>
+                              <span className="font-mono text-slate-600">{entry.phone}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${
+                            isBlacklisted
+                              ? 'bg-rose-100 text-rose-900 border-rose-300'
+                              : entry.riskTier === 'high'
+                              ? 'bg-amber-100 text-amber-900 border-amber-300'
+                              : 'bg-slate-100 text-slate-800 border-slate-200'
+                          }`}
+                        >
+                          {isBlacklisted ? '🚫 Blacklisted' : `${entry.riskTier} Risk`}
+                        </span>
+
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          entry.status === 'resolved' 
+                            ? 'bg-emerald-100 text-emerald-800' 
+                            : 'bg-rose-50 text-rose-700'
+                        }`}>
+                          {entry.status === 'resolved' ? '✅ Resolved / Cleared' : '🚨 Active Alert'}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex justify-between items-center text-slate-600 pt-1">
-                      <span>Logged Incidents</span>
-                      <span className={`font-bold ${driver.incidentCount > 0 ? 'text-amber-700' : 'text-slate-900'}`}>
-                        {driver.incidentCount} events
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between items-center text-slate-600">
-                      <span>Current Arrears Balance</span>
-                      <span className={`font-bold ${driver.balanceDue > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                        {driver.balanceDue > 0 ? `R${driver.balanceDue.toFixed(2)}` : 'R0.00'}
-                      </span>
-                    </div>
-
-                    {driver.notes && (
-                      <div className="mt-3 p-2.5 bg-slate-50 rounded-xl text-[11px] text-slate-600 border border-slate-100">
-                        <span className="font-bold text-slate-800 block mb-0.5">Underwriting Notes:</span>
-                        {driver.notes}
+                    {/* Outstanding Balance */}
+                    {entry.outstandingBalanceZar > 0 && (
+                      <div className="flex items-center justify-between bg-rose-50 px-3 py-2 rounded-xl border border-rose-100">
+                        <span className="text-xs font-bold text-rose-800">Outstanding Arrears / Debt:</span>
+                        <span className="text-sm font-black text-rose-700 font-mono">
+                          R{entry.outstandingBalanceZar.toLocaleString()}
+                        </span>
                       </div>
                     )}
+
+                    {/* Violation Category & Description */}
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 text-xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 uppercase tracking-wider text-[10px] flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                          {entry.flagReason.replace(/_/g, ' ')}
+                        </span>
+                        <span className="text-[10px] text-slate-400">Date Logged: {entry.reportedDate}</span>
+                      </div>
+                      <p className="text-slate-600 leading-relaxed text-xs">
+                        {entry.reasonDescription}
+                      </p>
+
+                      {entry.policeCaseNumber && (
+                        <div className="pt-1.5 flex items-center gap-1.5 text-xs text-rose-800 font-bold font-mono">
+                          <Shield className="w-3.5 h-3.5 text-rose-600" />
+                          <span>SAPS Case Number: {entry.policeCaseNumber}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions Row */}
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFlagDossier(entry)}
+                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>View Details</span>
+                    </button>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleResolveFlag(entry)}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                          entry.status === 'resolved'
+                            ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                            : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                        }`}
+                      >
+                        {entry.status === 'resolved' ? 'Re-open' : 'Mark Resolved'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingFlagEntry(entry);
+                          setNewFlagForm({ ...entry });
+                          setIsAddFlagModalOpen(true);
+                        }}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                        title="Edit Risk Record"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFlag(entry.id)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                        title="Delete Risk Record"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
+              );
+            })}
 
-                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={() => setIncidentDriver(driver)}
-                    className="text-xs font-bold text-rose-700 hover:text-rose-900 flex items-center gap-1"
-                  >
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    <span>Log Incident</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onOpenYocoPaymentForDriver(driver)}
-                    className="px-3 py-1.5 bg-slate-900 text-white hover:bg-slate-800 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
-                  >
-                    <CreditCard className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>Collect Rent</span>
-                  </button>
-                </div>
+            {filteredRiskEntries.length === 0 && (
+              <div className="col-span-2 bg-white rounded-2xl border border-dashed border-slate-300 p-10 text-center text-slate-500 space-y-3">
+                <ShieldCheck className="w-10 h-10 text-emerald-500 mx-auto" />
+                <h4 className="text-sm font-bold text-slate-900">No Risk Records Found</h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  No risk or defaulter records match your search filter. Use the button below to add a new record.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddFlagModal()}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold"
+                >
+                  + Add Risk Record
+                </button>
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
@@ -604,69 +1059,589 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
                 Existing riders earn a R350 credit towards their weekly rent when their referred peer passes underwriting and completes 30 active days.
               </p>
             </div>
-            <div className="px-4 py-2 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-xl text-xs font-black text-center">
-              Total Bonus Pool: R{referrals.reduce((sum, r) => sum + r.rewardAmountZar, 0)}
+            
+            <div className="flex items-center gap-3">
+              <div className="px-4 py-2 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-xl text-xs font-black text-center">
+                Total Bonus Pool: R{referrals.reduce((sum, r) => sum + r.rewardAmountZar, 0)}
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddReferralOpen(true)}
+                className="px-3.5 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-xl text-xs font-black shadow-sm flex items-center gap-1"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Record Referral</span>
+              </button>
             </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 uppercase text-[10px] tracking-wider">
-                <tr>
-                  <th className="py-3 px-4">Referrer (Active Driver)</th>
-                  <th className="py-3 px-4">Referred Applicant</th>
-                  <th className="py-3 px-4">Referral Date</th>
-                  <th className="py-3 px-4">Reward Amount</th>
-                  <th className="py-3 px-4">Qualification Status</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                {referrals.map((ref) => (
-                  <tr key={ref.id} className="hover:bg-slate-50">
-                    <td className="py-3.5 px-4 font-bold text-slate-900">{ref.referrerDriverName}</td>
-                    <td className="py-3.5 px-4">
-                      <div>
-                        <span className="font-bold text-slate-900 block">{ref.referredApplicantName}</span>
-                        <span className="text-[11px] text-slate-500">{ref.referredPhone}</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-600">{ref.referralDate}</td>
-                    <td className="py-3.5 px-4 font-black text-emerald-700">R{ref.rewardAmountZar}</td>
-                    <td className="py-3.5 px-4">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                        ref.status === 'paid_out'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : ref.status === 'active_driving'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {ref.status.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      {ref.status !== 'paid_out' ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onUpdateReferral({
-                              ...ref,
-                              status: 'paid_out',
-                              paidDate: new Date().toISOString().split('T')[0],
-                            });
-                          }}
-                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors"
-                        >
-                          Mark R350 Paid
-                        </button>
-                      ) : (
-                        <span className="text-[11px] text-emerald-700 font-bold">Paid on {ref.paidDate}</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {referrals.length === 0 ? (
+              <div className="p-12 text-center flex flex-col items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 mb-3">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-black text-slate-900 mb-1">No Driver Referrals Logged Yet</h4>
+                <p className="text-xs text-slate-500 max-w-sm mb-4">
+                  Log peer referrals from existing couriers to track 30-day onboarding milestones and manage R350 bonus payouts.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsAddReferralOpen(true)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Record First Referral</span>
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 uppercase text-[10px] tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">Referrer (Active Driver)</th>
+                      <th className="py-3 px-4">Referred Applicant</th>
+                      <th className="py-3 px-4">Referral Date</th>
+                      <th className="py-3 px-4">Reward Amount</th>
+                      <th className="py-3 px-4">Qualification Status</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                    {referrals.map((ref) => (
+                      <tr key={ref.id} className="hover:bg-slate-50">
+                        <td className="py-3.5 px-4 font-bold text-slate-900">{ref.referrerDriverName}</td>
+                        <td className="py-3.5 px-4">
+                          <div>
+                            <span className="font-bold text-slate-900 block">{ref.referredApplicantName}</span>
+                            <span className="text-[11px] text-slate-500">{ref.referredPhone}</span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600">{ref.referralDate}</td>
+                        <td className="py-3.5 px-4 font-black text-emerald-700">R{ref.rewardAmountZar}</td>
+                        <td className="py-3.5 px-4">
+                          <select
+                            value={ref.status}
+                            onChange={(e) => {
+                              onUpdateReferral({
+                                ...ref,
+                                status: e.target.value as any,
+                                paidDate: e.target.value === 'paid_out' ? (ref.paidDate || new Date().toISOString().split('T')[0]) : ref.paidDate
+                              });
+                            }}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase border cursor-pointer ${
+                              ref.status === 'paid_out'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                : ref.status === 'active_driving'
+                                ? 'bg-blue-50 text-blue-800 border-blue-300'
+                                : 'bg-amber-50 text-amber-800 border-amber-300'
+                            }`}
+                          >
+                            <option value="pending_onboarding">Pending Onboarding</option>
+                            <option value="active_driving">Active Driving (30d)</option>
+                            <option value="bonus_eligible">Bonus Eligible</option>
+                            <option value="paid_out">Paid Out (R{ref.rewardAmountZar})</option>
+                          </select>
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {ref.status !== 'paid_out' ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onUpdateReferral({
+                                    ...ref,
+                                    status: 'paid_out',
+                                    paidDate: new Date().toISOString().split('T')[0],
+                                  });
+                                }}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition-colors shadow-2xs"
+                              >
+                                Mark Paid
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                Paid {ref.paidDate}
+                              </span>
+                            )}
+                            {onDeleteReferral && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (confirm(`Remove referral for ${ref.referredApplicantName}?`)) {
+                                    onDeleteReferral(ref.id);
+                                  }
+                                }}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                                title="Delete Referral"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: ADD / FLAG DRIVER TO RISK REGISTRY */}
+      {/* ------------------------------------------------------------- */}
+      {isAddFlagModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-rose-600" />
+                <h3 className="font-black text-slate-900 text-base">
+                  {editingFlagEntry ? 'Edit Risk Registry Entry' : 'Flag Driver / Add to Risk Registry'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddFlagModalOpen(false);
+                  setEditingFlagEntry(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-900"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveFlagEntry} className="mt-4 space-y-3.5">
+              {!editingFlagEntry && (
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Select from Current Fleet Drivers (Optional)
+                  </label>
+                  <select
+                    value={selectedActiveDriverToFlag}
+                    onChange={(e) => handleSelectActiveDriverChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold bg-slate-50"
+                  >
+                    <option value="">-- Or enter external / walk-in person below --</option>
+                    {drivers.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.fullName} ({d.refNumber}) - Plate: {d.assignedBikeVinOrPlate || 'No Bike'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Full Legal Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Blessing Moyo"
+                    value={newFlagForm.fullName}
+                    onChange={(e) => setNewFlagForm({ ...newFlagForm, fullName: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    SA ID / Passport / TRN *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. BN8829104 or 950412..."
+                    value={newFlagForm.idOrPassportNumber}
+                    onChange={(e) => setNewFlagForm({ ...newFlagForm, idOrPassportNumber: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Phone / WhatsApp</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="082 123 4567"
+                    value={newFlagForm.phone}
+                    onChange={(e) => setNewFlagForm({ ...newFlagForm, phone: e.target.value, whatsappNumber: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Nationality / Origin</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. South Africa, Zimbabwe, Mozambique"
+                    value={newFlagForm.nationalityCountry}
+                    onChange={(e) => setNewFlagForm({ ...newFlagForm, nationalityCountry: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Risk Severity Tier</label>
+                  <select
+                    value={newFlagForm.riskTier}
+                    onChange={(e) => setNewFlagForm({ ...newFlagForm, riskTier: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                  >
+                    <option value="critical">🚫 Critical (Blacklist / Do Not Rent)</option>
+                    <option value="high">⚠️ High Risk (Double Deposit Required)</option>
+                    <option value="medium">⚡ Medium Risk (Monitored)</option>
+                    <option value="low">ℹ️ Low Risk (Minor Record)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Violation Category</label>
+                  <select
+                    value={newFlagForm.flagReason}
+                    onChange={(e) => setNewFlagForm({ ...newFlagForm, flagReason: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                  >
+                    <option value="absconded_with_vehicle">Absconded with Motorbike / Stolen</option>
+                    <option value="tracker_tampering">GPS Tracker Tampering / Wire Cut</option>
+                    <option value="severe_payment_default">Severe Payment Default / Arrears</option>
+                    <option value="vehicle_severely_damaged">Vehicle Severely Damaged / Abandoned</option>
+                    <option value="fraudulent_kyc_permit">Fraudulent KYC / Fake Permit / Fake TRN</option>
+                    <option value="traffic_fine_evasion">AARTO Traffic Fine Evasion / Impoundment</option>
+                    <option value="reckless_dangerous_driving">Reckless & High Speed Infringements</option>
+                    <option value="violent_threatening_behavior">Violent / Threatening Behavior</option>
+                    <option value="subletting_unauthorized_rider">Unauthorized Subletting</option>
+                    <option value="other_violation">Other Serious Fleet Policy Violation</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Outstanding Balance (ZAR)</label>
+                  <input
+                    type="number"
+                    value={newFlagForm.outstandingBalanceZar}
+                    onChange={(e) => setNewFlagForm({ ...newFlagForm, outstandingBalanceZar: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">SAPS Police Case # (If Any)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. CAS-142/06/2026 (Sandton SAPS)"
+                    value={newFlagForm.policeCaseNumber || ''}
+                    onChange={(e) => setNewFlagForm({ ...newFlagForm, policeCaseNumber: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Reporting Operator / Branch</label>
+                <input
+                  type="text"
+                  value={newFlagForm.reportedByOperator}
+                  onChange={(e) => setNewFlagForm({ ...newFlagForm, reportedByOperator: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold bg-slate-50"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Incident Evidence & Violation Details *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Describe what occurred, bike registration plate involved, dates, tracker logs, or why this rider was flagged..."
+                  value={newFlagForm.reasonDescription}
+                  onChange={(e) => setNewFlagForm({ ...newFlagForm, reasonDescription: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-900 block">
+                    Broadcast to Gauteng Fleet Mesh
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Share alert with Sandton, Midrand, and Joburg courier operators
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={newFlagForm.isCrossOperatorShared}
+                  onChange={(e) => setNewFlagForm({ ...newFlagForm, isCrossOperatorShared: e.target.checked })}
+                  className="w-4 h-4 text-cyan-600 rounded"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddFlagModalOpen(false);
+                    setEditingFlagEntry(null);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-black shadow-md"
+                >
+                  {editingFlagEntry ? 'Update Risk Entry' : 'Save & Flag Profile'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: VIEW FULL RISK DOSSIER */}
+      {/* ------------------------------------------------------------- */}
+      {selectedFlagDossier && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 my-8 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-rose-600" />
+                <div>
+                  <h3 className="font-black text-slate-900 text-base">Driver Risk Dossier</h3>
+                  <span className="text-[11px] font-mono text-slate-500">ID: {selectedFlagDossier.id}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedFlagDossier(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Profile Overview */}
+            <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-2">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h4 className="text-lg font-black">{selectedFlagDossier.fullName}</h4>
+                  <p className="text-xs text-slate-400">
+                    {selectedFlagDossier.nationalityCountry} • ID: <strong className="text-cyan-300 font-mono">{selectedFlagDossier.idOrPassportNumber}</strong>
+                  </p>
+                </div>
+                <span className="px-3 py-1 rounded-full text-xs font-black uppercase bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                  {selectedFlagDossier.riskTier}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800 text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-400 block">Phone / WhatsApp</span>
+                  <span className="font-mono font-bold text-white">{selectedFlagDossier.phone}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block">Outstanding Arrears</span>
+                  <span className="font-mono font-bold text-rose-400">
+                    R{selectedFlagDossier.outstandingBalanceZar.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Detailed Violation Report */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2.5">
+              <div className="flex justify-between items-center">
+                <span className="font-black text-slate-900 uppercase text-[11px]">
+                  Violation: {selectedFlagDossier.flagReason.replace(/_/g, ' ')}
+                </span>
+                <span className="text-slate-500">Flagged: {selectedFlagDossier.reportedDate}</span>
+              </div>
+              <p className="text-slate-700 leading-relaxed">
+                {selectedFlagDossier.reasonDescription}
+              </p>
+
+              {selectedFlagDossier.policeCaseNumber && (
+                <div className="p-2.5 bg-rose-100/60 rounded-xl text-rose-900 font-bold border border-rose-200 flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-rose-600" />
+                  <span>SAPS Police Case: {selectedFlagDossier.policeCaseNumber}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Reporting Operator & Mesh Status */}
+            <div className="p-3 bg-cyan-50 rounded-xl border border-cyan-200 text-xs flex items-center justify-between">
+              <div>
+                <span className="text-slate-600 block text-[11px]">Reporting Operator:</span>
+                <strong className="text-cyan-900 font-bold">{selectedFlagDossier.reportedByOperator}</strong>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-cyan-100 text-cyan-800">
+                {selectedFlagDossier.isCrossOperatorShared ? '🌐 Shared in Mesh' : '🏢 Local Only'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  window.open(`https://wa.me/${selectedFlagDossier.phone.replace(/[^0-9]/g, '')}`, '_blank');
+                }}
+                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>Contact via WhatsApp</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedFlagDossier(null)}
+                className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold"
+              >
+                Close Dossier
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: ADD DRIVER REFERRAL */}
+      {/* ------------------------------------------------------------- */}
+      {isAddReferralOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="font-black text-slate-900 text-base">Record Driver Referral</h3>
+              <button
+                type="button"
+                onClick={() => setIsAddReferralOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-900"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateReferralSubmit} className="mt-4 space-y-3.5">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Referrer (Active Driver / Staff Member) *</label>
+                {drivers.length > 0 ? (
+                  <div className="space-y-2">
+                    <select
+                      value={newReferralForm.referrerDriverId}
+                      onChange={(e) => {
+                        const drv = drivers.find(d => d.id === e.target.value);
+                        setNewReferralForm({ 
+                          ...newReferralForm, 
+                          referrerDriverId: e.target.value,
+                          referrerDriverName: drv ? drv.fullName : ''
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                    >
+                      <option value="">-- Select Active Fleet Courier --</option>
+                      {drivers.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.fullName} ({d.refNumber})
+                        </option>
+                      ))}
+                    </select>
+                    <div className="text-[11px] text-slate-400 text-center font-medium">-- or enter referrer name manually below --</div>
+                    <input
+                      type="text"
+                      placeholder="e.g. Sipho Ndlovu or Staff Member Name"
+                      value={newReferralForm.referrerDriverName || ''}
+                      onChange={(e) => setNewReferralForm({ ...newReferralForm, referrerDriverName: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Sipho Ndlovu (Active Courier)"
+                    value={newReferralForm.referrerDriverName || ''}
+                    onChange={(e) => setNewReferralForm({ ...newReferralForm, referrerDriverName: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Referred Applicant Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Tendai Chikore"
+                  value={newReferralForm.referredApplicantName}
+                  onChange={(e) => setNewReferralForm({ ...newReferralForm, referredApplicantName: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Referred Phone Number</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="071 992 4810"
+                  value={newReferralForm.referredPhone}
+                  onChange={(e) => setNewReferralForm({ ...newReferralForm, referredPhone: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Bonus Reward (ZAR)</label>
+                  <input
+                    type="number"
+                    value={newReferralForm.rewardAmountZar}
+                    onChange={(e) => setNewReferralForm({ ...newReferralForm, rewardAmountZar: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Initial Status</label>
+                  <select
+                    value={newReferralForm.status}
+                    onChange={(e) => setNewReferralForm({ ...newReferralForm, status: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                  >
+                    <option value="pending_onboarding">Pending Onboarding</option>
+                    <option value="active_driving">Active Driving (30 Days)</option>
+                    <option value="bonus_eligible">Bonus Eligible</option>
+                    <option value="paid_out">Paid Out</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddReferralOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md"
+                >
+                  Save Referral
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -917,6 +1892,10 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
           setSelectedDriver(null);
           onOpenYocoPaymentForDriver(drv);
         }}
+        onDeleteDriver={onDeleteDriver ? (driverId) => {
+          onDeleteDriver(driverId);
+          setSelectedDriver(null);
+        } : undefined}
       />
     </div>
   );

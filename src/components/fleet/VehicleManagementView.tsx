@@ -30,7 +30,16 @@ import {
   AlertTriangle,
   Send,
   Radio,
-  ExternalLink
+  ExternalLink,
+  ShoppingCart,
+  Tag,
+  Trash2,
+  Edit,
+  Printer,
+  Receipt,
+  Share2,
+  RotateCcw,
+  Check
 } from 'lucide-react';
 
 export type VehicleSubTab = 'register' | 'live_telematics' | 'parts_inventory' | 'repairs_service' | 'traffic_fines';
@@ -43,8 +52,10 @@ interface VehicleManagementViewProps {
   fines: TrafficFine[];
   onUpdateVehicle: (vehicle: Vehicle) => void;
   onAddVehicle: (vehicle: Vehicle) => void;
+  onUpdateDriver?: (driver: Driver) => void;
   onUpdatePart: (part: PartsInventoryItem) => void;
   onAddPart: (part: PartsInventoryItem) => void;
+  onDeletePart?: (partId: string) => void;
   onAddService: (service: RepairAndService) => void;
   onUpdateFine: (fine: TrafficFine) => void;
   onAddFine: (fine: TrafficFine) => void;
@@ -59,8 +70,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
   fines,
   onUpdateVehicle,
   onAddVehicle,
+  onUpdateDriver,
   onUpdatePart,
   onAddPart,
+  onDeletePart,
   onAddService,
   onUpdateFine,
   onAddFine,
@@ -105,9 +118,73 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     licenseDiskExpiryDate: '2027-04-30',
   });
 
+  // -------------------------------------------------------------
+  // PARTS INVENTORY & POINT OF SALE (POS) STATE
+  // -------------------------------------------------------------
+  const [partsSearchQuery, setPartsSearchQuery] = useState<string>('');
+  const [partsCategoryFilter, setPartsCategoryFilter] = useState<string>('all');
+  const [partsStockStatusFilter, setPartsStockStatusFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all');
+
+  // Add New Part Modal
+  const [isAddPartOpen, setIsAddPartOpen] = useState<boolean>(false);
+  const [newPartForm, setNewPartForm] = useState<Partial<PartsInventoryItem>>({
+    name: '',
+    sku: '',
+    category: 'general',
+    quantityInStock: 10,
+    minThreshold: 3,
+    costPriceZar: 150,
+    sellingPriceZar: 250,
+    compatibleModels: ['Bajaj Boxer 150 HD', 'Big Boy Velocity 150'],
+    supplierName: 'Midas Randburg Auto Spares',
+  });
+
+  // Edit Part Modal
+  const [editingPart, setEditingPart] = useState<PartsInventoryItem | null>(null);
+
   // Restock Part Modal
   const [restockPart, setRestockPart] = useState<PartsInventoryItem | null>(null);
   const [restockQty, setRestockQty] = useState<number>(10);
+
+  // Point of Sale (POS) / Over-The-Counter Sell Part Modal
+  const [isSellPartOpen, setIsSellPartOpen] = useState<boolean>(false);
+  const [sellPartForm, setSellPartForm] = useState<{
+    partId: string;
+    quantity: number;
+    customerType: 'fleet_driver' | 'walk_in' | 'workshop';
+    driverId?: string;
+    customerName: string;
+    customerPhone: string;
+    unitPriceZar: number;
+    paymentMethod: 'cash' | 'yoco_card' | 'driver_balance' | 'instant_eft';
+    notes: string;
+  }>({
+    partId: '',
+    quantity: 1,
+    customerType: 'fleet_driver',
+    driverId: '',
+    customerName: '',
+    customerPhone: '',
+    unitPriceZar: 0,
+    paymentMethod: 'yoco_card',
+    notes: 'Counter sales - Randburg Hub Workshop',
+  });
+
+  // Completed Sale Receipt Modal (Printable & WhatsApp)
+  const [completedSaleReceipt, setCompletedSaleReceipt] = useState<{
+    receiptNumber: string;
+    date: string;
+    customerName: string;
+    customerPhone: string;
+    customerType: string;
+    partName: string;
+    partSku: string;
+    quantity: number;
+    unitPriceZar: number;
+    totalZar: number;
+    paymentMethod: string;
+    notes: string;
+  } | null>(null);
 
   // Add Service Modal
   const [isAddServiceOpen, setIsAddServiceOpen] = useState<boolean>(false);
@@ -204,6 +281,137 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
     onAddVehicle(created);
     setIsAddVehicleOpen(false);
+  };
+
+  // -------------------------------------------------------------
+  // PARTS INVENTORY & POINT OF SALE (POS) HANDLERS
+  // -------------------------------------------------------------
+  const handleCreatePartSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPartForm.name || !newPartForm.sku) {
+      alert('Please provide Part Name and SKU');
+      return;
+    }
+
+    const createdPart: PartsInventoryItem = {
+      id: `part-${Date.now()}`,
+      name: newPartForm.name.trim(),
+      sku: newPartForm.sku.trim().toUpperCase(),
+      category: newPartForm.category || 'general',
+      quantityInStock: Number(newPartForm.quantityInStock) || 0,
+      minThreshold: Number(newPartForm.minThreshold) || 1,
+      costPriceZar: Number(newPartForm.costPriceZar) || 0,
+      sellingPriceZar: Number(newPartForm.sellingPriceZar) || 0,
+      compatibleModels: newPartForm.compatibleModels || ['Bajaj Boxer 150 HD', 'Big Boy Velocity 150'],
+      supplierName: newPartForm.supplierName || 'Workshop Auto Spares',
+      lastRestockedDate: new Date().toISOString().split('T')[0],
+    };
+
+    onAddPart(createdPart);
+    setIsAddPartOpen(false);
+    setNewPartForm({
+      name: '',
+      sku: '',
+      category: 'general',
+      quantityInStock: 10,
+      minThreshold: 3,
+      costPriceZar: 150,
+      sellingPriceZar: 250,
+      compatibleModels: ['Bajaj Boxer 150 HD', 'Big Boy Velocity 150'],
+      supplierName: 'Midas Randburg Auto Spares',
+    });
+  };
+
+  const handleEditPartSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPart) return;
+    onUpdatePart(editingPart);
+    setEditingPart(null);
+  };
+
+  const handleDeletePartClick = (partId: string) => {
+    if (window.confirm('Are you sure you want to remove this part from workshop inventory?')) {
+      if (onDeletePart) {
+        onDeletePart(partId);
+      }
+    }
+  };
+
+  const handleOpenSellModalForPart = (part: PartsInventoryItem) => {
+    setSellPartForm({
+      partId: part.id,
+      quantity: 1,
+      customerType: 'fleet_driver',
+      driverId: drivers[0]?.id || '',
+      customerName: drivers[0]?.fullName || '',
+      customerPhone: drivers[0]?.phone || '',
+      unitPriceZar: part.sellingPriceZar,
+      paymentMethod: 'yoco_card',
+      notes: `Over-the-counter sale: ${part.name}`,
+    });
+    setIsSellPartOpen(true);
+  };
+
+  const handleExecutePartSale = (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetPart = parts.find((p) => p.id === sellPartForm.partId);
+    if (!targetPart) {
+      alert('Selected part not found.');
+      return;
+    }
+
+    const saleQty = Number(sellPartForm.quantity);
+    if (saleQty <= 0) {
+      alert('Sale quantity must be at least 1 unit.');
+      return;
+    }
+
+    if (targetPart.quantityInStock < saleQty) {
+      alert(`Insufficient stock! Only ${targetPart.quantityInStock} units available in workshop.`);
+      return;
+    }
+
+    // 1. Deduct Stock
+    const updatedPart: PartsInventoryItem = {
+      ...targetPart,
+      quantityInStock: targetPart.quantityInStock - saleQty,
+    };
+    onUpdatePart(updatedPart);
+
+    const totalZar = Number(sellPartForm.unitPriceZar) * saleQty;
+    const customerDisplayName = sellPartForm.customerType === 'fleet_driver'
+      ? drivers.find(d => d.id === sellPartForm.driverId)?.fullName || sellPartForm.customerName || 'Fleet Driver'
+      : sellPartForm.customerName || 'Walk-In Customer';
+
+    // 2. If charged to driver balance, update driver account
+    if (sellPartForm.customerType === 'fleet_driver' && sellPartForm.paymentMethod === 'driver_balance' && sellPartForm.driverId) {
+      const selectedDriver = drivers.find((d) => d.id === sellPartForm.driverId);
+      if (selectedDriver && onUpdateDriver) {
+        onUpdateDriver({
+          ...selectedDriver,
+          balanceDue: (selectedDriver.balanceDue || 0) + totalZar,
+        });
+      }
+    }
+
+    // 3. Generate Receipt
+    const receipt = {
+      receiptNumber: `REC-${Date.now().toString().slice(-6)}`,
+      date: new Date().toLocaleString(),
+      customerName: customerDisplayName,
+      customerPhone: sellPartForm.customerPhone || 'N/A',
+      customerType: sellPartForm.customerType === 'fleet_driver' ? 'Fleet Courier' : 'Direct Workshop Client',
+      partName: targetPart.name,
+      partSku: targetPart.sku,
+      quantity: saleQty,
+      unitPriceZar: Number(sellPartForm.unitPriceZar),
+      totalZar,
+      paymentMethod: sellPartForm.paymentMethod.replace(/_/g, ' ').toUpperCase(),
+      notes: sellPartForm.notes || 'Workshop parts counter sale',
+    };
+
+    setCompletedSaleReceipt(receipt);
+    setIsSellPartOpen(false);
   };
 
   // Restock Submit
@@ -712,79 +920,337 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       {/* ------------------------------------------------------------- */}
       {subTab === 'parts_inventory' && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          {/* Header & Main Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
             <div>
-              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-                Motorcycle Consumables & Fleet Maintenance Inventory
-              </h3>
-              <p className="text-xs text-slate-500">
-                Stock levels at Randburg Hub Workshop. Low stock notifications trigger automatically below minimum thresholds.
+              <div className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                  Parts & Consumables Workshop Inventory
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Manage spare parts, stock levels, over-the-counter counter sales, and repairs consumption for Randburg Hub.
               </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  if (parts.length === 0) {
+                    alert('Please add a part to inventory first before making a sale.');
+                    setIsAddPartOpen(true);
+                    return;
+                  }
+                  setSellPartForm({
+                    partId: parts[0]?.id || '',
+                    quantity: 1,
+                    customerType: 'fleet_driver',
+                    driverId: drivers[0]?.id || '',
+                    customerName: drivers[0]?.fullName || '',
+                    customerPhone: drivers[0]?.phone || '',
+                    unitPriceZar: parts[0]?.sellingPriceZar || 0,
+                    paymentMethod: 'yoco_card',
+                    notes: 'Over-the-counter sale - Workshop Counter',
+                  });
+                  setIsSellPartOpen(true);
+                }}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-xs transition-colors flex items-center gap-1.5"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                <span>🛒 Sell Part (Over-The-Counter)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsAddPartOpen(true)}
+                className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black shadow-xs transition-colors flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Add New Part / Stock Item</span>
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {parts.map((part) => {
-              const isLowStock = part.quantityInStock <= part.minThreshold;
+          {/* Metric Overview Strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Catalog Items</span>
+              <span className="text-lg font-black text-slate-900 mt-0.5 block">{parts.length} SKUs</span>
+            </div>
 
-              return (
-                <div
-                  key={part.id}
-                  className={`bg-white rounded-2xl border p-5 shadow-sm flex flex-col justify-between ${
-                    isLowStock ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200'
-                  }`}
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Units in Stock</span>
+              <span className="text-lg font-black text-slate-900 mt-0.5 block">
+                {parts.reduce((sum, p) => sum + (p.quantityInStock || 0), 0)} Units
+              </span>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Cost Value (ZAR)</span>
+              <span className="text-lg font-black text-slate-700 mt-0.5 block">
+                R{parts.reduce((sum, p) => sum + ((p.costPriceZar || 0) * (p.quantityInStock || 0)), 0).toLocaleString()}
+              </span>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-emerald-600 block">Retail Value (ZAR)</span>
+              <span className="text-lg font-black text-emerald-600 mt-0.5 block">
+                R{parts.reduce((sum, p) => sum + ((p.sellingPriceZar || 0) * (p.quantityInStock || 0)), 0).toLocaleString()}
+              </span>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-amber-600 block">Low Stock Alerts</span>
+              <span className="text-lg font-black text-amber-600 mt-0.5 block">
+                {parts.filter((p) => (p.quantityInStock || 0) <= (p.minThreshold || 0)).length} Items
+              </span>
+            </div>
+          </div>
+
+          {/* Search and Filters Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={partsSearchQuery}
+                onChange={(e) => setPartsSearchQuery(e.target.value)}
+                placeholder="Search by part name, SKU code, supplier..."
+                className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5 text-slate-400" />
+                <select
+                  value={partsCategoryFilter}
+                  onChange={(e) => setPartsCategoryFilter(e.target.value)}
+                  className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 bg-white"
                 >
-                  <div>
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase">
-                        SKU: {part.sku}
-                      </span>
-                      {isLowStock && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
-                          Low Stock Alert
-                        </span>
-                      )}
-                    </div>
+                  <option value="all">All Categories</option>
+                  <option value="engine_oil">Engine Oil & Fluids</option>
+                  <option value="brakes">Brakes & Pads</option>
+                  <option value="tires_tubes">Tires & Tubes</option>
+                  <option value="chain_sprockets">Chain & Sprockets</option>
+                  <option value="spark_plugs">Spark Plugs</option>
+                  <option value="cables">Clutch / Throttle Cables</option>
+                  <option value="electrical_bulbs">Electrical & Bulbs</option>
+                  <option value="filters">Air & Oil Filters</option>
+                  <option value="accessories">Helmets & Delivery Boxes</option>
+                  <option value="general">General Spares</option>
+                </select>
+              </div>
 
-                    <h4 className="font-bold text-slate-900 text-sm mt-1">{part.name}</h4>
-                    <span className="text-xs text-slate-500 capitalize">{part.category.replace('_', ' ')}</span>
+              <select
+                value={partsStockStatusFilter}
+                onChange={(e) => setPartsStockStatusFilter(e.target.value as any)}
+                className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 bg-white"
+              >
+                <option value="all">All Stock Statuses</option>
+                <option value="in_stock">In Stock (&gt; Min)</option>
+                <option value="low_stock">⚠️ Low Stock (≤ Min)</option>
+                <option value="out_of_stock">🚫 Out of Stock (0)</option>
+              </select>
+            </div>
+          </div>
 
-                    <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-100 text-xs">
-                      <div>
-                        <span className="text-[10px] text-slate-400 uppercase font-bold block">In Stock</span>
-                        <span className={`text-base font-black ${isLowStock ? 'text-amber-700' : 'text-slate-900'}`}>
-                          {part.quantityInStock} units
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Min Threshold</span>
-                        <span className="text-base font-bold text-slate-600">{part.minThreshold} units</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Cost Price</span>
-                        <span className="font-bold text-slate-800">R{part.costPriceZar}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Fleet Price</span>
-                        <span className="font-bold text-emerald-700">R{part.sellingPriceZar}</span>
-                      </div>
-                    </div>
-                  </div>
+          {/* Parts Grid */}
+          {(() => {
+            const filteredParts = parts.filter((part) => {
+              const q = partsSearchQuery.toLowerCase().trim();
+              const matchQuery =
+                !q ||
+                part.name.toLowerCase().includes(q) ||
+                part.sku.toLowerCase().includes(q) ||
+                (part.supplierName && part.supplierName.toLowerCase().includes(q)) ||
+                (part.compatibleModels && part.compatibleModels.some(m => m.toLowerCase().includes(q)));
 
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-400">Restocked: {part.lastRestockedDate}</span>
-                    <button
-                      type="button"
-                      onClick={() => setRestockPart(part)}
-                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors"
-                    >
-                      + Restock Stock
-                    </button>
-                  </div>
+              const matchCat = partsCategoryFilter === 'all' || part.category === partsCategoryFilter;
+
+              let matchStock = true;
+              if (partsStockStatusFilter === 'in_stock') {
+                matchStock = part.quantityInStock > part.minThreshold;
+              } else if (partsStockStatusFilter === 'low_stock') {
+                matchStock = part.quantityInStock > 0 && part.quantityInStock <= part.minThreshold;
+              } else if (partsStockStatusFilter === 'out_of_stock') {
+                matchStock = part.quantityInStock === 0;
+              }
+
+              return matchQuery && matchCat && matchStock;
+            });
+
+            if (filteredParts.length === 0) {
+              return (
+                <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center text-slate-500 space-y-3">
+                  <Package className="w-10 h-10 text-slate-400 mx-auto" />
+                  <h4 className="text-sm font-bold text-slate-900">No Parts Found</h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    {parts.length === 0
+                      ? 'No parts in inventory yet. Add your workshop spares and consumables to start tracking inventory and selling parts.'
+                      : 'No inventory items match your current search or category filter.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddPartOpen(true)}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold"
+                  >
+                    + Add Part to Workshop
+                  </button>
                 </div>
               );
-            })}
-          </div>
+            }
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredParts.map((part) => {
+                  const isLowStock = part.quantityInStock <= part.minThreshold && part.quantityInStock > 0;
+                  const isOutOfStock = part.quantityInStock === 0;
+                  const grossProfitZar = (part.sellingPriceZar || 0) - (part.costPriceZar || 0);
+                  const marginPct = part.costPriceZar > 0 
+                    ? Math.round((grossProfitZar / part.costPriceZar) * 100) 
+                    : 0;
+
+                  return (
+                    <div
+                      key={part.id}
+                      className={`bg-white rounded-2xl border p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow ${
+                        isOutOfStock 
+                          ? 'border-rose-300 bg-rose-50/10' 
+                          : isLowStock 
+                          ? 'border-amber-300 bg-amber-50/10' 
+                          : 'border-slate-200'
+                      }`}
+                    >
+                      <div>
+                        {/* SKU & Category Header */}
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 font-mono text-[10px] font-bold">
+                            SKU: {part.sku}
+                          </span>
+                          {isOutOfStock ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-200">
+                              Out of Stock
+                            </span>
+                          ) : isLowStock ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                              Low Stock ({part.quantityInStock} left)
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
+                              In Stock
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Title & Category */}
+                        <h4 className="font-bold text-slate-900 text-sm mt-2">{part.name}</h4>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[11px] text-slate-500 capitalize">
+                            {part.category.replace(/_/g, ' ')}
+                          </span>
+                          {part.supplierName && (
+                            <span className="text-[10px] text-slate-400 font-medium truncate">
+                              • {part.supplierName}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Compatible Bike Models */}
+                        {part.compatibleModels && part.compatibleModels.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2.5">
+                            {part.compatibleModels.map((model, idx) => (
+                              <span key={idx} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                                {model}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Inventory Metrics Grid */}
+                        <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-100 text-xs">
+                          <div>
+                            <span className="text-[10px] text-slate-400 uppercase font-bold block">Current Stock</span>
+                            <span className={`text-base font-black ${isOutOfStock ? 'text-rose-600' : isLowStock ? 'text-amber-700' : 'text-slate-900'}`}>
+                              {part.quantityInStock} units
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 uppercase font-bold block">Min Threshold</span>
+                            <span className="text-base font-bold text-slate-600">{part.minThreshold} units</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 uppercase font-bold block">Cost Price</span>
+                            <span className="font-bold text-slate-800">R{part.costPriceZar}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 uppercase font-bold block">Selling / Fleet</span>
+                            <span className="font-bold text-emerald-700">R{part.sellingPriceZar}</span>
+                            {marginPct > 0 && (
+                              <span className="text-[10px] text-emerald-600 font-bold ml-1">(+{marginPct}%)</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card Footer & Action Buttons */}
+                      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-[10px] text-slate-400">Restocked: {part.lastRestockedDate}</span>
+
+                        <div className="flex items-center gap-1.5">
+                          {/* Sell Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenSellModalForPart(part)}
+                            disabled={isOutOfStock}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 ${
+                              isOutOfStock
+                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-2xs'
+                            }`}
+                          >
+                            <ShoppingCart className="w-3.5 h-3.5" />
+                            <span>Sell</span>
+                          </button>
+
+                          {/* Restock Button */}
+                          <button
+                            type="button"
+                            onClick={() => setRestockPart(part)}
+                            className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors"
+                          >
+                            + Restock
+                          </button>
+
+                          {/* Edit Button */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingPart(part)}
+                            className="p-1.5 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors"
+                            title="Edit Part Details"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Delete Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePartClick(part.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                            title="Delete Part"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1306,6 +1772,611 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: ADD NEW PART / STOCK ITEM */}
+      {/* ------------------------------------------------------------- */}
+      {isAddPartOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-black text-slate-900 text-base">Add Part to Workshop Inventory</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddPartOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-900"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreatePartSubmit} className="mt-4 space-y-3.5">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Part / Consumable Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Motul 20W-50 4T 1L Engine Oil"
+                  value={newPartForm.name}
+                  onChange={(e) => setNewPartForm({ ...newPartForm, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">SKU Code *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. OIL-MOT-20W50"
+                    value={newPartForm.sku}
+                    onChange={(e) => setNewPartForm({ ...newPartForm, sku: e.target.value.toUpperCase() })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Category</label>
+                  <select
+                    value={newPartForm.category}
+                    onChange={(e) => setNewPartForm({ ...newPartForm, category: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-700"
+                  >
+                    <option value="general">General Spares</option>
+                    <option value="engine_oil">Engine Oil & Fluids</option>
+                    <option value="brakes">Brakes & Pads</option>
+                    <option value="tires_tubes">Tires & Tubes</option>
+                    <option value="chain_sprockets">Chain & Sprockets</option>
+                    <option value="spark_plugs">Spark Plugs</option>
+                    <option value="cables">Clutch / Throttle Cables</option>
+                    <option value="electrical_bulbs">Electrical & Bulbs</option>
+                    <option value="filters">Air & Oil Filters</option>
+                    <option value="accessories">Helmets & Delivery Boxes</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Cost Price (ZAR)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={newPartForm.costPriceZar}
+                    onChange={(e) => setNewPartForm({ ...newPartForm, costPriceZar: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Selling / Fleet Price (ZAR) *</label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={newPartForm.sellingPriceZar}
+                    onChange={(e) => setNewPartForm({ ...newPartForm, sellingPriceZar: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold font-mono text-emerald-700"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Initial Quantity in Stock</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={newPartForm.quantityInStock}
+                    onChange={(e) => setNewPartForm({ ...newPartForm, quantityInStock: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Low Stock Threshold</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={newPartForm.minThreshold}
+                    onChange={(e) => setNewPartForm({ ...newPartForm, minThreshold: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Supplier / Distributer</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Midas Randburg Auto Spares"
+                  value={newPartForm.supplierName}
+                  onChange={(e) => setNewPartForm({ ...newPartForm, supplierName: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddPartOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black shadow-md"
+                >
+                  Save Part to Catalog
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: EDIT PART */}
+      {/* ------------------------------------------------------------- */}
+      {editingPart && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Edit className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-black text-slate-900 text-base">Edit Part Details</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPart(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-900"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditPartSubmit} className="mt-4 space-y-3.5">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Part Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editingPart.name}
+                  onChange={(e) => setEditingPart({ ...editingPart, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">SKU</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingPart.sku}
+                    onChange={(e) => setEditingPart({ ...editingPart, sku: e.target.value.toUpperCase() })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Category</label>
+                  <select
+                    value={editingPart.category}
+                    onChange={(e) => setEditingPart({ ...editingPart, category: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-700"
+                  >
+                    <option value="general">General Spares</option>
+                    <option value="engine_oil">Engine Oil & Fluids</option>
+                    <option value="brakes">Brakes & Pads</option>
+                    <option value="tires_tubes">Tires & Tubes</option>
+                    <option value="chain_sprockets">Chain & Sprockets</option>
+                    <option value="spark_plugs">Spark Plugs</option>
+                    <option value="cables">Clutch / Throttle Cables</option>
+                    <option value="electrical_bulbs">Electrical & Bulbs</option>
+                    <option value="filters">Air & Oil Filters</option>
+                    <option value="accessories">Helmets & Delivery Boxes</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Cost Price (ZAR)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editingPart.costPriceZar}
+                    onChange={(e) => setEditingPart({ ...editingPart, costPriceZar: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Selling / Fleet Price (ZAR)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={editingPart.sellingPriceZar}
+                    onChange={(e) => setEditingPart({ ...editingPart, sellingPriceZar: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold font-mono text-emerald-700"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Quantity in Stock</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editingPart.quantityInStock}
+                    onChange={(e) => setEditingPart({ ...editingPart, quantityInStock: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Low Stock Threshold</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editingPart.minThreshold}
+                    onChange={(e) => setEditingPart({ ...editingPart, minThreshold: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Supplier</label>
+                <input
+                  type="text"
+                  value={editingPart.supplierName || ''}
+                  onChange={(e) => setEditingPart({ ...editingPart, supplierName: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingPart(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black shadow-md"
+                >
+                  Update Part
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: POINT OF SALE (POS) / OVER-THE-COUNTER PART SALE */}
+      {/* ------------------------------------------------------------- */}
+      {isSellPartOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 my-8 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-black text-slate-900 text-base">Point of Sale (POS) - Sell Part</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSellPartOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-900"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleExecutePartSale} className="space-y-4">
+              {/* Part Selection */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Select Part / Stock Item *</label>
+                <select
+                  value={sellPartForm.partId}
+                  onChange={(e) => {
+                    const selected = parts.find((p) => p.id === e.target.value);
+                    setSellPartForm({
+                      ...sellPartForm,
+                      partId: e.target.value,
+                      unitPriceZar: selected ? selected.sellingPriceZar : 0,
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold"
+                >
+                  {parts.map((p) => (
+                    <option key={p.id} value={p.id} disabled={p.quantityInStock <= 0}>
+                      {p.name} (SKU: {p.sku}) — R{p.sellingPriceZar} ({p.quantityInStock} in stock)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quantity & Unit Price */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Quantity to Sell</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={parts.find((p) => p.id === sellPartForm.partId)?.quantityInStock || 999}
+                    required
+                    value={sellPartForm.quantity}
+                    onChange={(e) => setSellPartForm({ ...sellPartForm, quantity: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-black text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Selling Price per Unit (ZAR)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={sellPartForm.unitPriceZar}
+                    onChange={(e) => setSellPartForm({ ...sellPartForm, unitPriceZar: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-black font-mono text-emerald-700"
+                  />
+                </div>
+              </div>
+
+              {/* Customer Type */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <div className="flex items-center gap-4 text-xs font-bold">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="custType"
+                      checked={sellPartForm.customerType === 'fleet_driver'}
+                      onChange={() => setSellPartForm({ ...sellPartForm, customerType: 'fleet_driver' })}
+                      className="text-emerald-600"
+                    />
+                    <span>Fleet Active Courier</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="custType"
+                      checked={sellPartForm.customerType === 'walk_in'}
+                      onChange={() => setSellPartForm({ ...sellPartForm, customerType: 'walk_in' })}
+                      className="text-emerald-600"
+                    />
+                    <span>Walk-In / External Rider</span>
+                  </label>
+                </div>
+
+                {sellPartForm.customerType === 'fleet_driver' ? (
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Select Active Fleet Driver</label>
+                    {drivers.length > 0 ? (
+                      <select
+                        value={sellPartForm.driverId}
+                        onChange={(e) => {
+                          const d = drivers.find((drv) => drv.id === e.target.value);
+                          setSellPartForm({
+                            ...sellPartForm,
+                            driverId: e.target.value,
+                            customerName: d ? d.fullName : '',
+                            customerPhone: d ? d.phone : '',
+                          });
+                        }}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                      >
+                        {drivers.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.fullName} ({d.assignedVehiclePlate || 'No Bike'}) — Balance Due: R{d.balanceDue || 0}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder="Driver Full Name"
+                        value={sellPartForm.customerName}
+                        onChange={(e) => setSellPartForm({ ...sellPartForm, customerName: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 block mb-1">Customer Full Name</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Tendai Mokoena"
+                        value={sellPartForm.customerName}
+                        onChange={(e) => setSellPartForm({ ...sellPartForm, customerName: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 block mb-1">Phone / WhatsApp</label>
+                      <input
+                        type="text"
+                        placeholder="083 123 4567"
+                        value={sellPartForm.customerPhone}
+                        onChange={(e) => setSellPartForm({ ...sellPartForm, customerPhone: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Payment Method */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Payment Method</label>
+                <select
+                  value={sellPartForm.paymentMethod}
+                  onChange={(e) => setSellPartForm({ ...sellPartForm, paymentMethod: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                >
+                  <option value="yoco_card">💳 Yoco Card Machine (Workshop Counter)</option>
+                  <option value="cash">💵 Cash Received</option>
+                  <option value="driver_balance">📋 Add to Courier Ledger / Deduct from Weekly Payout</option>
+                  <option value="instant_eft">⚡ Instant EFT</option>
+                </select>
+              </div>
+
+              {/* Sale Total Preview Box */}
+              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] uppercase font-black text-emerald-800 tracking-wider block">
+                    TOTAL AMOUNT DUE
+                  </span>
+                  <span className="text-xs text-emerald-700">
+                    {sellPartForm.quantity} x R{sellPartForm.unitPriceZar}
+                  </span>
+                </div>
+                <div className="text-2xl font-black text-emerald-700 font-mono">
+                  R{(Number(sellPartForm.unitPriceZar) * Number(sellPartForm.quantity)).toLocaleString()}
+                </div>
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsSellPartOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1.5"
+                >
+                  <Receipt className="w-4 h-4" />
+                  <span>Confirm Sale & Print Receipt</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: COMPLETED SALE RECEIPT & INVOICE */}
+      {/* ------------------------------------------------------------- */}
+      {completedSaleReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 my-8 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-black text-slate-900 text-base">Workshop Sale Receipt</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCompletedSaleReceipt(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-900"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Printable Receipt Ticket */}
+            <div id="print-workshop-receipt" className="p-5 bg-slate-50 rounded-2xl border border-slate-200 font-mono text-xs space-y-3">
+              <div className="text-center border-b border-dashed border-slate-300 pb-3">
+                <h4 className="font-black text-slate-900 text-sm">RANDBURG WORKSHOP & SPARES</h4>
+                <p className="text-[10px] text-slate-500">304 Tungsten Rd, Strijdom Park, Randburg</p>
+                <p className="text-[10px] text-slate-500">Tel / WhatsApp: 082 000 1234</p>
+                <div className="mt-2 text-[11px] font-bold text-slate-800">
+                  RECEIPT #{completedSaleReceipt.receiptNumber}
+                </div>
+                <div className="text-[10px] text-slate-400">{completedSaleReceipt.date}</div>
+              </div>
+
+              <div className="space-y-1.5 py-2 border-b border-dashed border-slate-300">
+                <div className="flex justify-between text-slate-600">
+                  <span>Customer:</span>
+                  <span className="font-bold text-slate-900">{completedSaleReceipt.customerName}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Client Type:</span>
+                  <span className="text-slate-800">{completedSaleReceipt.customerType}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Payment:</span>
+                  <span className="font-bold text-emerald-700">{completedSaleReceipt.paymentMethod}</span>
+                </div>
+              </div>
+
+              {/* Line Items */}
+              <div className="space-y-2 py-2 border-b border-dashed border-slate-300">
+                <div className="flex justify-between font-bold text-slate-900">
+                  <span>Item Description</span>
+                  <span>Total</span>
+                </div>
+                <div className="flex justify-between text-slate-800">
+                  <div>
+                    <div>{completedSaleReceipt.partName}</div>
+                    <div className="text-[10px] text-slate-400">
+                      SKU: {completedSaleReceipt.partSku} • {completedSaleReceipt.quantity} @ R{completedSaleReceipt.unitPriceZar}
+                    </div>
+                  </div>
+                  <div className="font-bold text-slate-900">
+                    R{completedSaleReceipt.totalZar.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Total */}
+              <div className="flex justify-between items-center text-sm font-black text-slate-900 pt-1">
+                <span>TOTAL PAID (ZAR)</span>
+                <span className="text-base text-emerald-700 font-mono">
+                  R{completedSaleReceipt.totalZar.toFixed(2)}
+                </span>
+              </div>
+
+              <div className="text-center text-[10px] text-slate-400 pt-2 border-t border-dashed border-slate-300">
+                Thank you for your business! · Safe Riding.
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  const text = `*RANDBURG WORKSHOP SALE RECEIPT*\nReceipt: ${completedSaleReceipt.receiptNumber}\nDate: ${completedSaleReceipt.date}\nCustomer: ${completedSaleReceipt.customerName}\nItem: ${completedSaleReceipt.partName} (Qty: ${completedSaleReceipt.quantity})\nTotal: R${completedSaleReceipt.totalZar}\nPayment: ${completedSaleReceipt.paymentMethod}`;
+                  window.open(`https://wa.me/${(completedSaleReceipt.customerPhone || '').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
+                }}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>WhatsApp Receipt</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print Receipt</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCompletedSaleReceipt(null)}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}

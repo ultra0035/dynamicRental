@@ -24,10 +24,12 @@ import {
 import {
   fetchDrivers as dbFetchDrivers,
   saveDriver as dbSaveDriver,
+  deleteDriver as dbDeleteDriver,
   fetchVehicles as dbFetchVehicles,
   saveVehicle as dbSaveVehicle,
   fetchParts as dbFetchParts,
   savePart as dbSavePart,
+  deletePart as dbDeletePart,
   fetchServices as dbFetchServices,
   saveService as dbSaveService,
   fetchFines as dbFetchFines,
@@ -38,6 +40,7 @@ import {
   saveAgreement as dbSaveAgreement,
   fetchReferrals as dbFetchReferrals,
   saveReferral as dbSaveReferral,
+  deleteReferral as dbDeleteReferral,
 } from './supabase';
 
 const STORAGE_KEYS = {
@@ -163,6 +166,12 @@ export function saveFleetParts(parts: PartsInventoryItem[]): void {
   });
 }
 
+export function deleteFleetPart(partId: string): void {
+  const parts = getFleetParts().filter((p) => p.id !== partId);
+  saveToStorage(STORAGE_KEYS.PARTS, parts);
+  dbDeletePart(partId).catch(() => {});
+}
+
 export function getFleetServices(): RepairAndService[] {
   return loadFromStorage(STORAGE_KEYS.SERVICES, INITIAL_SERVICES);
 }
@@ -216,6 +225,12 @@ export function saveFleetReferrals(referrals: DriverReferral[]): void {
   referrals.forEach((r) => {
     dbSaveReferral(r).catch(() => {});
   });
+}
+
+export function deleteFleetReferral(referralId: string): void {
+  const refs = getFleetReferrals().filter((r) => r.id !== referralId);
+  saveToStorage(STORAGE_KEYS.REFERRALS, refs);
+  dbDeleteReferral(referralId).catch(() => {});
 }
 
 export function getYocoSettings(): YocoSettings {
@@ -672,3 +687,130 @@ export function executeYocoPayment(
     updatedTransactionsList,
   };
 }
+
+/**
+ * Completely remove / delete a driver from fleet, freeing their assigned motorcycle
+ * and cleaning up rental agreements.
+ */
+export function removeDriverAndFreeBike(
+  driverId: string,
+  drivers: Driver[],
+  vehicles: Vehicle[],
+  agreements: RentalAgreement[] = []
+): {
+  updatedDrivers: Driver[];
+  updatedVehicles: Vehicle[];
+  updatedAgreements: RentalAgreement[];
+  freedVehicle?: Vehicle;
+} {
+  const targetDriver = drivers.find((d) => d.id === driverId);
+  const assignedVehId = targetDriver?.assignedVehicleId;
+  const assignedPlate = targetDriver?.assignedBikeVinOrPlate;
+  let freedVehicle: Vehicle | undefined;
+
+  // 1. Mark vehicle as available
+  const updatedVehicles = vehicles.map((v) => {
+    const isMatched =
+      (assignedVehId && v.id === assignedVehId) ||
+      (assignedPlate && (v.registrationPlate === assignedPlate || v.vin === assignedPlate)) ||
+      (v.assignedDriverId === driverId);
+
+    if (isMatched) {
+      const freed: Vehicle = {
+        ...v,
+        status: 'available' as const,
+        assignedDriverId: undefined,
+        assignedDriverName: undefined,
+      };
+      freedVehicle = freed;
+      dbSaveVehicle(freed).catch(() => {});
+      return freed;
+    }
+    return v;
+  });
+
+  // 2. Filter out driver
+  const updatedDrivers = drivers.filter((d) => d.id !== driverId);
+
+  // 3. Remove or terminate rental agreements
+  const updatedAgreements = agreements.filter(
+    (ag) => ag.driverId !== driverId && (!targetDriver || ag.driverName !== targetDriver.fullName)
+  );
+
+  // Save to persistence
+  saveFleetDrivers(updatedDrivers);
+  saveFleetVehicles(updatedVehicles);
+  saveFleetAgreements(updatedAgreements);
+
+  // Sync delete with DB
+  dbDeleteDriver(driverId).catch(() => {});
+
+  return { updatedDrivers, updatedVehicles, updatedAgreements, freedVehicle };
+}
+
+/**
+ * Cascading delete of an application and its associated driver record if one was created upon delivery.
+ */
+export function cascadeDeleteApplication(
+  applicationId: string,
+  applications: RiderApplication[],
+  drivers: Driver[],
+  vehicles: Vehicle[],
+  agreements: RentalAgreement[] = []
+): {
+  updatedApplications: RiderApplication[];
+  updatedDrivers: Driver[];
+  updatedVehicles: Vehicle[];
+  updatedAgreements: RentalAgreement[];
+  deletedDriver?: Driver;
+  freedVehicle?: Vehicle;
+} {
+  const targetApp = applications.find((a) => a.id === applicationId);
+  const updatedApplications = applications.filter((a) => a.id !== applicationId);
+
+  // Find any associated driver
+  const matchedDriver = drivers.find((d) => {
+    if (d.applicationId === applicationId || d.id === applicationId) return true;
+    if (targetApp) {
+      if (targetApp.refNumber && d.refNumber === targetApp.refNumber) return true;
+      if (
+        targetApp.idOrPassportNumber &&
+        d.idOrPassportNumber &&
+        targetApp.idOrPassportNumber.trim().toLowerCase() === d.idOrPassportNumber.trim().toLowerCase()
+      ) {
+        return true;
+      }
+      if (
+        targetApp.phone &&
+        d.phone &&
+        targetApp.phone.replace(/[^0-9]/g, '') === d.phone.replace(/[^0-9]/g, '')
+      ) {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  let updatedDrivers = drivers;
+  let updatedVehicles = vehicles;
+  let updatedAgreements = agreements;
+  let freedVehicle: Vehicle | undefined;
+
+  if (matchedDriver) {
+    const res = removeDriverAndFreeBike(matchedDriver.id, drivers, vehicles, agreements);
+    updatedDrivers = res.updatedDrivers;
+    updatedVehicles = res.updatedVehicles;
+    updatedAgreements = res.updatedAgreements;
+    freedVehicle = res.freedVehicle;
+  }
+
+  return {
+    updatedApplications,
+    updatedDrivers,
+    updatedVehicles,
+    updatedAgreements,
+    deletedDriver: matchedDriver,
+    freedVehicle,
+  };
+}
+

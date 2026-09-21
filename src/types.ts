@@ -253,6 +253,7 @@ export interface PartsInventoryItem {
   compatibleModels: string[];
   supplierName?: string;
   lastRestockedDate?: string;
+  imageUrl?: string;
 }
 
 export type ServiceType = 
@@ -270,6 +271,7 @@ export interface RepairAndService {
   vehiclePlate: string;
   driverId?: string;
   driverName?: string;
+  driverPhone?: string;
   serviceType: ServiceType;
   odometerKm: number;
   costZar: number;
@@ -357,4 +359,37 @@ export interface DriverReferral {
   status: 'pending_onboarding' | 'active_driving' | 'bonus_eligible' | 'paid_out';
   rewardAmountZar: number;
   paidDate?: string;
+}
+
+export type FlaggedReasonCategory =
+  | 'absconded_with_vehicle'
+  | 'tracker_tampering'
+  | 'severe_payment_default'
+  | 'vehicle_severely_damaged'
+  | 'fraudulent_kyc_permit'
+  | 'traffic_fine_evasion'
+  | 'reckless_dangerous_driving'
+  | 'violent_threatening_behavior'
+  | 'subletting_unauthorized_rider'
+  | 'other_violation';
+
+export interface FlaggedRiskEntry {
+  id: string;
+  fullName: string;
+  idOrPassportNumber: string; // Key cross-reference identifier for applications
+  phone: string;
+  whatsappNumber?: string;
+  nationalityCountry?: string;
+  riskTier: DriverRiskTier; // 'critical' (Blacklisted / Banned), 'high', 'medium', 'low'
+  flagReason: FlaggedReasonCategory;
+  reasonDescription: string;
+  outstandingBalanceZar: number;
+  reportedByOperator: string; // e.g. "Dynamic Rental (Randburg Hub)", "Sandton Express Fleet", "Midrand Courier Alliance"
+  isCrossOperatorShared: boolean; // Flagged for sharing across Gauteng Fleet Network
+  reportedDate: string;
+  status: 'active_flag' | 'resolved' | 'under_review' | 'blacklisted';
+  policeCaseNumber?: string;
+  driverId?: string; // If linked to an existing active/past customer
+  lastKnownAddress?: string;
+  notes?: string;
 }

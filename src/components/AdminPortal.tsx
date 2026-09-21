@@ -48,6 +48,10 @@ import {
   unassignBikeFromDriver,
   fetchAllFleetData,
   deduplicateDrivers,
+  cascadeDeleteApplication,
+  removeDriverAndFreeBike,
+  deleteFleetPart,
+  deleteFleetReferral,
   YocoSettings
 } from '../lib/fleetStore';
 import { 
@@ -115,6 +119,7 @@ interface AdminPortalProps {
   applications: RiderApplication[];
   bikes: Bike[];
   onUpdateApplication: (updated: RiderApplication) => Promise<void> | void;
+  onDeleteApplication?: (appId: string) => Promise<void> | void;
   onSaveBike: (bike: Bike) => Promise<void> | void;
   onDeleteBike: (bikeId: string) => Promise<void> | void;
   onAddNewWalkin?: (newApp?: RiderApplication) => Promise<void> | void;
@@ -228,6 +233,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   applications,
   bikes,
   onUpdateApplication,
+  onDeleteApplication,
   onSaveBike,
   onDeleteBike,
   onAddNewWalkin,
@@ -254,6 +260,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   
   // Contract Modal
   const [contractApp, setContractApp] = useState<RiderApplication | null>(null);
+
+  // Application Delete Confirmation Modal
+  const [confirmDeleteApp, setConfirmDeleteApp] = useState<RiderApplication | null>(null);
 
   // Bike Editor / Creation Modal
   const [editingBike, setEditingBike] = useState<Bike | null>(null);
@@ -557,6 +566,43 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     );
     setDriversState(updatedDrivers);
     setVehiclesState(updatedVehicles);
+  };
+
+  // Cascading Application Deletion (removes applicant + linked driver in Approved Customers + frees bike back to inventory)
+  const handleDeleteApplicationWithCascade = async (appId: string) => {
+    const res = cascadeDeleteApplication(
+      appId,
+      applications,
+      driversState,
+      vehiclesState,
+      agreementsState
+    );
+
+    setDriversState(res.updatedDrivers);
+    setVehiclesState(res.updatedVehicles);
+    setAgreementsState(res.updatedAgreements);
+
+    if (selectedAppId === appId) {
+      const remaining = applications.filter((a) => a.id !== appId);
+      setSelectedAppId(remaining[0]?.id || '');
+    }
+
+    if (onDeleteApplication) {
+      await onDeleteApplication(appId);
+    }
+  };
+
+  // Direct Driver Deletion (removes driver + frees up assigned bike)
+  const handleDeleteDriver = (driverId: string) => {
+    const res = removeDriverAndFreeBike(
+      driverId,
+      driversState,
+      vehiclesState,
+      agreementsState
+    );
+    setDriversState(res.updatedDrivers);
+    setVehiclesState(res.updatedVehicles);
+    setAgreementsState(res.updatedAgreements);
   };
 
   // Fleet State Handlers
@@ -1116,25 +1162,6 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
 
             {isFleetGroupOpen && (
               <div className="space-y-0.5 pt-0.5">
-                {/* Vehicle Rental Options */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActivePage('rental_options');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
-                    activePage === 'rental_options'
-                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>Vehicle Rental Options</span>
-                  </div>
-                </button>
-
                 {/* Rental Agreements */}
                 <button
                   type="button"
@@ -1157,49 +1184,6 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                   }`}>
                     {agreementsState.length}
                   </span>
-                </button>
-
-                {/* Sales Agreements */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActivePage('sales_agreements');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
-                    activePage === 'sales_agreements'
-                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Sales Agreements</span>
-                  </div>
-                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black ${
-                    activePage === 'sales_agreements' ? 'bg-slate-950 text-cyan-300' : 'bg-slate-800 text-emerald-400'
-                  }`}>
-                    {agreementsState.length}
-                  </span>
-                </button>
-
-                {/* Bank Account Reconciliation */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActivePage('bank_reconciliation');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
-                    activePage === 'bank_reconciliation'
-                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Landmark className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Bank Reconciliation</span>
-                  </div>
                 </button>
 
                 {/* Paystack & Yoco Collections */}
@@ -1262,25 +1246,6 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                   <div className="flex items-center gap-2.5">
                     <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
                     <span>Reports</span>
-                  </div>
-                </button>
-
-                {/* Settings */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActivePage('settings');
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center justify-between ${
-                    activePage === 'settings'
-                      ? 'bg-cyan-500 text-slate-950 font-black shadow-sm'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <SettingsIcon className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Settings</span>
                   </div>
                 </button>
 
@@ -2277,6 +2242,15 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                         >
                           <FileText className="w-4 h-4" />
                         </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteApp(activeApp)}
+                          className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition-colors"
+                          title="Delete Applicant Record"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
 
@@ -2706,12 +2680,31 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
             }
             onUpdateDriver={handleUpdateDriver}
             onAddDriver={handleAddDriver}
+            onDeleteDriver={handleDeleteDriver}
             onChangeBike={handleChangeDriverBike}
             onRemoveBike={handleRemoveDriverBike}
+            onAddReferral={(newRef) => {
+              setReferralsState((prev) => {
+                const next = [newRef, ...prev.filter((r) => r.id !== newRef.id)];
+                saveFleetReferrals(next);
+                return next;
+              });
+            }}
             onUpdateReferral={(updatedRef) => {
               setReferralsState((prev) => {
-                const next = prev.map((r) => (r.id === updatedRef.id ? updatedRef : r));
+                const exists = prev.some((r) => r.id === updatedRef.id);
+                const next = exists
+                  ? prev.map((r) => (r.id === updatedRef.id ? updatedRef : r))
+                  : [updatedRef, ...prev];
                 saveFleetReferrals(next);
+                return next;
+              });
+            }}
+            onDeleteReferral={(refId) => {
+              setReferralsState((prev) => {
+                const next = prev.filter((r) => r.id !== refId);
+                saveFleetReferrals(next);
+                deleteFleetReferral(refId);
                 return next;
               });
             }}
@@ -2743,6 +2736,7 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
             }
             onUpdateVehicle={handleUpdateVehicle}
             onAddVehicle={handleAddVehicle}
+            onUpdateDriver={handleUpdateDriver}
             onUpdatePart={(updatedPart) => {
               const next = partsState.map((p) => (p.id === updatedPart.id ? updatedPart : p));
               setPartsState(next);
@@ -2752,6 +2746,12 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
               const next = [newPart, ...partsState];
               setPartsState(next);
               saveFleetParts(next);
+            }}
+            onDeletePart={(partId) => {
+              const next = partsState.filter((p) => p.id !== partId);
+              setPartsState(next);
+              saveFleetParts(next);
+              deleteFleetPart(partId);
             }}
             onAddService={(newSrv) => {
               setServicesState((prev) => {
@@ -2809,16 +2809,16 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
               <div>
                 <h2 className="text-2xl font-black text-slate-900 tracking-tight">Fleet Analytics & Executive Reports</h2>
-                <p className="text-xs text-slate-500 mt-1">Real-time financial yield, recovery rates, vehicle maintenance expense summaries, and risk metrics.</p>
+                <p className="text-xs text-slate-500 mt-1">Real-time operational metrics, maintenance expenses, revenue recovery, risk distribution, and referral performance.</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleExportCSV}
-                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                  className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Export All Data (.CSV)</span>
+                  <span>Export Applications (.CSV)</span>
                 </button>
               </div>
             </div>
@@ -2826,19 +2826,23 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
             {/* Top KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="p-5 rounded-2xl bg-cyan-50/70 border border-cyan-200">
-                <span className="text-[11px] font-bold text-cyan-800 uppercase tracking-wider block">Monthly Gross Collections</span>
+                <span className="text-[11px] font-bold text-cyan-800 uppercase tracking-wider block">Total Collections Logged</span>
                 <div className="text-2xl font-black text-slate-900 mt-1">
                   R{transactionsState.reduce((sum, tx) => sum + (tx.amountZar || 0), 0).toLocaleString()}
                 </div>
-                <span className="text-[11px] text-cyan-700 font-semibold mt-1 block">94.2% Collection Efficiency</span>
+                <span className="text-[11px] text-cyan-700 font-semibold mt-1 block">
+                  {transactionsState.length} verified payment transactions
+                </span>
               </div>
 
               <div className="p-5 rounded-2xl bg-emerald-50/70 border border-emerald-200">
-                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">Active Fleet Utilization</span>
+                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">Active Fleet Deployment</span>
                 <div className="text-2xl font-black text-slate-900 mt-1">
-                  {Math.round((vehiclesState.filter(v => v.status === 'assigned_active').length / (vehiclesState.length || 1)) * 100)}%
+                  {vehiclesState.length > 0 ? Math.round((vehiclesState.filter(v => v.status === 'assigned_active').length / vehiclesState.length) * 100) : 0}%
                 </div>
-                <span className="text-[11px] text-emerald-700 font-semibold mt-1 block">{vehiclesState.filter(v => v.status === 'assigned_active').length} of {vehiclesState.length} bikes on road</span>
+                <span className="text-[11px] text-emerald-700 font-semibold mt-1 block">
+                  {vehiclesState.filter(v => v.status === 'assigned_active').length} of {vehiclesState.length} motorbikes deployed
+                </span>
               </div>
 
               <div className="p-5 rounded-2xl bg-amber-50/70 border border-amber-200">
@@ -2846,180 +2850,98 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                 <div className="text-2xl font-black text-slate-900 mt-1">
                   R{driversState.reduce((sum, d) => sum + (d.balanceDue || 0), 0).toLocaleString()}
                 </div>
-                <span className="text-[11px] text-amber-700 font-semibold mt-1 block">{driversState.filter(d => d.balanceDue > 0).length} accounts with balance</span>
+                <span className="text-[11px] text-amber-700 font-semibold mt-1 block">
+                  {driversState.filter(d => (d.balanceDue || 0) > 0).length} drivers with overdue balance
+                </span>
               </div>
 
               <div className="p-5 rounded-2xl bg-purple-50/70 border border-purple-200">
-                <span className="text-[11px] font-bold text-purple-800 uppercase tracking-wider block">Total Deposits Held</span>
+                <span className="text-[11px] font-bold text-purple-800 uppercase tracking-wider block">Total Security Deposits</span>
                 <div className="text-2xl font-black text-slate-900 mt-1">
                   R{driversState.reduce((sum, d) => sum + (d.depositPaid || 0), 0).toLocaleString()}
                 </div>
-                <span className="text-[11px] text-purple-700 font-semibold mt-1 block">Secured in escrow</span>
+                <span className="text-[11px] text-purple-700 font-semibold mt-1 block">
+                  R{transactionsState.filter(tx => tx.allocation === 'deposit').reduce((sum, tx) => sum + (tx.amountZar || 0), 0).toLocaleString()} recorded via payment hub
+                </span>
               </div>
             </div>
 
-            {/* Breakdown Tables */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Driver Risk Distribution */}
+            {/* Detailed System Metrics Breakdown */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Vehicle Fleet Status */}
               <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 flex flex-col justify-between">
-                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Driver Risk Rating Distribution</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs p-2 bg-white rounded-xl border border-slate-100">
-                    <span className="font-bold text-emerald-700">Tier 1: Low Risk (Excellent Payer)</span>
-                    <span className="font-black text-slate-900">{driversState.filter(d => d.riskTier === 'low_risk').length} Drivers</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs p-2 bg-white rounded-xl border border-slate-100">
-                    <span className="font-bold text-amber-700">Tier 2: Medium Risk (Occasional Delay)</span>
-                    <span className="font-black text-slate-900">{driversState.filter(d => d.riskTier === 'medium_risk').length} Drivers</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs p-2 bg-white rounded-xl border border-slate-100">
-                    <span className="font-bold text-rose-700">Tier 3: High Risk (Frequent Arrears)</span>
-                    <span className="font-black text-slate-900">{driversState.filter(d => d.riskTier === 'high_risk').length} Drivers</span>
+                <div>
+                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Vehicle Fleet Status</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
+                      <span className="font-bold text-emerald-700">🟢 Active on Road</span>
+                      <span className="font-black text-slate-900">{vehiclesState.filter(v => v.status === 'assigned_active').length} Bikes</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
+                      <span className="font-bold text-blue-700">🔵 Available in Hub</span>
+                      <span className="font-black text-slate-900">{vehiclesState.filter(v => v.status === 'available_in_stock').length} Bikes</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
+                      <span className="font-bold text-amber-700">🟡 In Workshop / Maintenance</span>
+                      <span className="font-black text-slate-900">{vehiclesState.filter(v => v.status === 'in_maintenance').length} Bikes</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
+                      <span className="font-bold text-rose-700">🔴 Decommissioned / Impounded</span>
+                      <span className="font-black text-slate-900">{vehiclesState.filter(v => v.status === 'decommissioned' || v.status === 'impounded').length} Bikes</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Maintenance Expenses vs Rental Income */}
+              {/* Maintenance & Workshop Expenses */}
               <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 flex flex-col justify-between">
-                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Maintenance & Part Costs</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs p-2 bg-white rounded-xl border border-slate-100">
-                    <span className="text-slate-600 font-bold">Total Services Completed</span>
-                    <span className="font-black text-slate-900">{servicesState.length} work orders</span>
+                <div>
+                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Maintenance & Workshop Costs</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
+                      <span className="text-slate-700 font-bold">Total Repair Orders</span>
+                      <span className="font-black text-slate-900">{servicesState.length} logged</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
+                      <span className="text-slate-700 font-bold">Cumulative Service Spend</span>
+                      <span className="font-black text-rose-600">R{servicesState.reduce((sum, s) => sum + (s.costZar || 0), 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
+                      <span className="text-slate-700 font-bold">Parts Inventory Asset Value</span>
+                      <span className="font-black text-slate-900">R{partsState.reduce((sum, p) => sum + (p.unitCost * p.quantityInStock), 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
+                      <span className="text-slate-700 font-bold">Traffic Fines Incurred</span>
+                      <span className="font-black text-amber-600">R{finesState.reduce((sum, f) => sum + (f.fineAmount || 0), 0).toLocaleString()}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs p-2 bg-white rounded-xl border border-slate-100">
-                    <span className="text-slate-600 font-bold">Parts In Stock Value</span>
-                    <span className="font-black text-slate-900">R{partsState.reduce((sum, p) => sum + (p.unitCost * p.quantityInStock), 0).toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Driver Risk & Referral System */}
+              <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 flex flex-col justify-between">
+                <div>
+                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Drivers & Referrals Program</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
+                      <span className="font-bold text-emerald-700">Active Drivers Registered</span>
+                      <span className="font-black text-slate-900">{driversState.length} Drivers</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
+                      <span className="font-bold text-rose-700">Flagged Risk / Blacklisted</span>
+                      <span className="font-black text-slate-900">{driversState.filter(d => d.riskTier === 'high_risk' || d.accountStatus === 'blacklisted').length} Drivers</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
+                      <span className="text-slate-700 font-bold">Total Referrals Logged</span>
+                      <span className="font-black text-slate-900">{referralsState.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs p-2.5 bg-white rounded-xl border border-slate-100">
+                      <span className="text-slate-700 font-bold">Referral Payouts Earned</span>
+                      <span className="font-black text-cyan-700">R{referralsState.reduce((sum, r) => sum + (r.rewardAmount || 0), 0).toLocaleString()}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs p-2 bg-white rounded-xl border border-slate-100">
-                    <span className="text-slate-600 font-bold">Traffic Fines Incurred</span>
-                    <span className="font-black text-rose-600">R{finesState.reduce((sum, f) => sum + (f.fineAmount || 0), 0).toLocaleString()}</span>
-                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* PAGE 8: SYSTEM SETTINGS */}
-        {activePage === 'settings' && (
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs flex flex-col gap-6" id="admin-settings-page">
-            <div className="border-b border-slate-200 pb-5">
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">FleetCO System Settings</h2>
-              <p className="text-xs text-slate-500 mt-1">Configure payment gateways (Yoco / Paystack), showroom location, bank details, and automated notifications.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
-              {/* Dealership Info */}
-              <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
-                <h3 className="font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <span>Showroom Hub Profile</span>
-                </h3>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Showroom Location</label>
-                  <input
-                    type="text"
-                    defaultValue="304 Tungsten Rd, Strijdom Park, Randburg, 2194"
-                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 text-slate-900 font-medium outline-none focus:border-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Official WhatsApp Support Line</label>
-                  <input
-                    type="text"
-                    defaultValue="+27 71 234 5678"
-                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 text-slate-900 font-medium outline-none focus:border-cyan-500"
-                  />
-                </div>
-              </div>
-
-              {/* Payment Gateway Settings */}
-              <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
-                <h3 className="font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <span>Payment Gateways (Yoco & Paystack)</span>
-                </h3>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Yoco Secret Key (Sandbox / Live)</label>
-                  <input
-                    type="password"
-                    value={yocoSettingsState.secretKey}
-                    onChange={(e) => handleUpdateYocoSettings({ ...yocoSettingsState, secretKey: e.target.value })}
-                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 text-slate-900 font-medium outline-none focus:border-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Paystack Public / Secret Key</label>
-                  <input
-                    type="password"
-                    defaultValue="pk_test_fleetco_paystack_sample_key"
-                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-200 text-slate-900 font-medium outline-none focus:border-cyan-500"
-                  />
-                </div>
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="checkbox"
-                    id="yocoSandbox"
-                    checked={yocoSettingsState.isSandbox}
-                    onChange={(e) => handleUpdateYocoSettings({ ...yocoSettingsState, isSandbox: e.target.checked })}
-                    className="rounded text-cyan-600 focus:ring-cyan-500"
-                  />
-                  <label htmlFor="yocoSandbox" className="font-bold text-slate-800">
-                    Enable Gateway Sandbox / Test Mode
-                  </label>
-                </div>
-              </div>
-
-              {/* GitHub Export & Repository Connection */}
-              <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-black text-slate-900 uppercase tracking-wider">GitHub Integration & Export</h3>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-slate-200 text-slate-700">Cloud Run Ready</span>
-                </div>
-                <p className="text-slate-600 text-xs">
-                  To sync with or export this project to your GitHub repository:
-                </p>
-                <ol className="list-decimal list-inside space-y-1.5 text-slate-700 font-medium text-[11px] bg-white p-3 rounded-xl border border-slate-200">
-                  <li>Open the <strong>AI Studio Menu</strong> in the top-right corner.</li>
-                  <li>Select <strong>&quot;Export to GitHub&quot;</strong> or <strong>&quot;Download ZIP&quot;</strong>.</li>
-                  <li>Authenticate your GitHub account to create or push to a repo directly.</li>
-                  <li>Clone locally using <code className="bg-slate-100 px-1 py-0.5 rounded text-cyan-700 font-mono">git clone &lt;your-repo-url&gt;</code>.</li>
-                </ol>
-              </div>
-
-              {/* PostgreSQL / Supabase Database Schema */}
-              <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-black text-slate-900 uppercase tracking-wider">Production Database Schema (11 Tables)</h3>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800">PostgreSQL / Supabase</span>
-                </div>
-                <p className="text-slate-600 text-xs">
-                  The complete SQL DDL schema with RLS policies, triggers, and foreign keys is available in <code className="bg-slate-200 px-1 py-0.5 rounded font-mono font-bold text-slate-800">/schema.sql</code>.
-                </p>
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
-                      alert("✅ Complete 11-table PostgreSQL SQL Schema copied to clipboard!");
-                    }}
-                    className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>Copy Full SQL Schema</span>
-                  </button>
-                  <span className="text-[11px] text-slate-500">Ready for Supabase SQL Editor</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => alert("Settings saved successfully to FleetCO hub!")}
-                className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs shadow-md transition-all"
-              >
-                Save All Settings
-              </button>
             </div>
           </div>
         )}
@@ -3320,6 +3242,77 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
         onClose={() => setIsSupabaseModalOpen(false)}
         onDataRefreshed={reloadAllFleetFromDb}
       />
+
+      {/* CONFIRM DELETE APPLICANT MODAL (WITH CASCADING DRIVER & BIKE CLEANUP) */}
+      {confirmDeleteApp && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 shadow-2xl flex flex-col gap-5">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-black text-slate-900">
+                  Delete Applicant Record
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Ref: <strong className="font-mono text-slate-800">{confirmDeleteApp.refNumber}</strong> • {confirmDeleteApp.fullName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteApp(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {confirmDeleteApp.status === 'contract_signed' ? (
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex flex-col gap-2">
+                <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Cascading Deletion & Inventory Return</span>
+                </div>
+                <p className="leading-relaxed">
+                  This applicant is currently marked as <strong>Delivered</strong>. Deleting this application will:
+                </p>
+                <ul className="list-disc pl-4 space-y-1 text-amber-900">
+                  <li>Permanently remove their active profile from <strong>Approved Customers</strong></li>
+                  <li>Automatically free up any assigned motorbike (Vin/Plate: <span className="font-mono font-bold">{confirmDeleteApp.assignedBikeVinOrPlate || 'Assigned Bike'}</span>) and return it to <strong>Available</strong> stock</li>
+                  <li>Cancel active lease agreements associated with this record</li>
+                </ul>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to permanently delete the application for <strong>{confirmDeleteApp.fullName}</strong>? This action will remove all submitted documents, KYC vetting checks, and cannot be undone.
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteApp(null)}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const appId = confirmDeleteApp.id;
+                  setConfirmDeleteApp(null);
+                  await handleDeleteApplicationWithCascade(appId);
+                }}
+                className="px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-colors flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Yes, Delete Application</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

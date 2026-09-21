@@ -24,6 +24,7 @@ import {
 import {
   fetchApplications,
   saveApplicationToDb,
+  deleteApplication as deleteApplicationFromDb,
   fetchBikes,
   saveBikeToDb,
   deleteBikeFromDb,
@@ -149,6 +150,15 @@ export default function App() {
       await deleteBikeFromDb(bikeId);
     } catch (e) {
       console.warn('Background delete bike error:', e);
+    }
+  };
+
+  const handleDeleteApplication = async (appId: string) => {
+    setApplications((prev) => prev.filter((a) => a.id !== appId));
+    try {
+      await deleteApplicationFromDb(appId);
+    } catch (e) {
+      console.warn('Background delete application error:', e);
     }
   };
 
@@ -278,6 +288,7 @@ export default function App() {
             applications={applications}
             bikes={bikes}
             onUpdateApplication={handleUpdateApplication}
+            onDeleteApplication={handleDeleteApplication}
             onSaveBike={handleSaveBike}
             onDeleteBike={handleDeleteBike}
             onAddNewWalkin={handleAddNewWalkin}
