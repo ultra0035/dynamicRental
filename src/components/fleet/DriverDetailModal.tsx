@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Driver, Vehicle, RiderApplication, RentalAgreement, ApplicationDocuments, DocumentCheckState } from '../../types';
 import { 
   User, 
@@ -6,7 +6,7 @@ import {
   FileText, 
   FileCheck, 
   AlertTriangle, 
-  AlertCircle,
+  AlertCircle, 
   CheckCircle2, 
   X, 
   Phone, 
@@ -35,6 +35,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { compressImageFile } from '../../lib/imageUtils';
+import { DriverFinanceTracker } from './DriverFinanceTracker';
 
 interface DriverDetailModalProps {
   isOpen: boolean;
@@ -42,6 +43,7 @@ interface DriverDetailModalProps {
   vehicles: Vehicle[];
   application?: RiderApplication;
   agreements?: RentalAgreement[];
+  initialTab?: 'documents' | 'vehicle' | 'handover_photos' | 'profile' | 'financials';
   onClose: () => void;
   onUpdateDriver: (driver: Driver) => void;
   onChangeBike: (driverId: string, newVehicleId: string) => void;
@@ -57,6 +59,7 @@ export const DriverDetailModal: React.FC<DriverDetailModalProps> = ({
   vehicles,
   application,
   agreements = [],
+  initialTab = 'documents',
   onClose,
   onUpdateDriver,
   onChangeBike,
@@ -68,7 +71,16 @@ export const DriverDetailModal: React.FC<DriverDetailModalProps> = ({
   if (!isOpen || !driver) return null;
 
   // Active Tab inside modal: 'documents' | 'vehicle' | 'handover_photos' | 'profile' | 'financials'
-  const [activeModalTab, setActiveModalTab] = useState<'documents' | 'vehicle' | 'handover_photos' | 'profile' | 'financials'>('documents');
+  const [activeModalTab, setActiveModalTab] = useState<'documents' | 'vehicle' | 'handover_photos' | 'profile' | 'financials'>(
+    initialTab || 'documents'
+  );
+
+  // Sync activeModalTab when initialTab changes or modal reopens
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveModalTab(initialTab);
+    }
+  }, [isOpen, initialTab, driver.id]);
 
   // Documents state
   const [documents, setDocuments] = useState<ApplicationDocuments>(
@@ -1345,52 +1357,14 @@ export const DriverDetailModal: React.FC<DriverDetailModalProps> = ({
           {/* TAB 5: FINANCIALS & AGREEMENT */}
           {/* ========================================================= */}
           {activeModalTab === 'financials' && (
-            <div className="space-y-6">
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xs space-y-5">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-emerald-600" />
-                    <span>Rent-to-Own Financial Summary</span>
-                  </h3>
-                  <span className="text-emerald-700 font-black text-base font-mono">R{driver.weeklyRate} / week</span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Deposit Settled</span>
-                    <strong className="text-slate-900 font-mono text-base mt-0.5 block">R{driver.depositPaid}</strong>
-                  </div>
-
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Term Length</span>
-                    <strong className="text-slate-900 text-base mt-0.5 block">{driver.termMonths} Months</strong>
-                  </div>
-
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Ledger Balance</span>
-                    <strong className={`font-mono text-base mt-0.5 block ${driver.balanceDue > 0 ? 'text-rose-600 font-black' : 'text-emerald-700'}`}>
-                      {driver.balanceDue > 0 ? `Overdue: R${driver.balanceDue}` : 'Paid Up to Date'}
-                    </strong>
-                  </div>
-
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                    <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">On-Time Payment Score</span>
-                    <strong className="text-emerald-700 text-base mt-0.5 block">{driver.paymentScore}%</strong>
-                  </div>
-                </div>
-
-                <div className="pt-3 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => onOpenYocoPayment(driver)}
-                    className="px-5 py-2.5 bg-cyan-400 hover:bg-cyan-300 text-slate-950 rounded-xl text-xs font-black shadow-sm flex items-center gap-2 cursor-pointer"
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    <span>Launch Yoco Payment Gateway</span>
-                  </button>
-                </div>
-              </div>
-            </div>
+            <DriverFinanceTracker
+              driver={driver}
+              agreements={agreements}
+              assignedVehicle={assignedVehicle}
+              onUpdateDriver={onUpdateDriver}
+              onOpenYocoPayment={onOpenYocoPayment}
+              onViewDocPreview={(preview) => setActiveDocPreview(preview)}
+            />
           )}
         </div>
 

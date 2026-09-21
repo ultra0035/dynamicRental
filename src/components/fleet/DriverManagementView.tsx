@@ -159,6 +159,7 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
 
   // Selected Driver for Details Modal
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
+  const [modalInitialTab, setModalInitialTab] = useState<'documents' | 'vehicle' | 'handover_photos' | 'profile' | 'financials'>('documents');
 
   // Add Incident Modal
   const [incidentDriver, setIncidentDriver] = useState<Driver | null>(null);
@@ -845,23 +846,29 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
                           {/* Centralized Documents & Bike Modal Button */}
                           <button
                             type="button"
-                            onClick={() => setSelectedDriver(driver)}
+                            onClick={() => {
+                              setModalInitialTab('documents');
+                              setSelectedDriver(driver);
+                            }}
                             title="Open Driver Documents & Motorbike Hub"
-                            className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors font-bold flex items-center gap-1 text-[11px] px-2.5"
+                            className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors font-bold flex items-center gap-1 text-[11px] px-2.5 cursor-pointer"
                           >
                             <FileText className="w-3.5 h-3.5 text-indigo-600" />
                             <span>Docs & Bike</span>
                           </button>
 
-                          {/* Yoco Payment Quick Button */}
+                          {/* Track Finance Quick Button (Replaced Yoco shortcut) */}
                           <button
                             type="button"
-                            onClick={() => onOpenYocoPaymentForDriver(driver)}
-                            title="Collect Yoco Card / Link Payment"
-                            className="p-1.5 rounded-lg bg-cyan-50 text-cyan-800 hover:bg-cyan-100 border border-cyan-200 transition-colors font-bold flex items-center gap-1 text-[11px] px-2"
+                            onClick={() => {
+                              setModalInitialTab('financials');
+                              setSelectedDriver(driver);
+                            }}
+                            title="Track Weekly Finance, GitHub Payment Calendar & Proof of Payment"
+                            className="p-1.5 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 transition-colors font-bold flex items-center gap-1.5 text-[11px] px-2.5 cursor-pointer shadow-2xs"
                           >
-                            <CreditCard className="w-3.5 h-3.5 text-cyan-600" />
-                            <span>Yoco</span>
+                            <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Track Finance</span>
                           </button>
 
                           {/* WhatsApp Statement */}
@@ -1985,6 +1992,7 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
         isOpen={!!selectedDriver}
         driver={selectedDriver}
         vehicles={vehicles}
+        initialTab={modalInitialTab}
         application={applications.find(
           (a) => a.id === selectedDriver?.applicationId || a.fullName === selectedDriver?.fullName || a.idOrPassportNumber === selectedDriver?.idOrPassportNumber
         )}

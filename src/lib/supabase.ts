@@ -1598,6 +1598,10 @@ export async function fetchTransactions(): Promise<YocoTransaction[]> {
           cardBrand: t.card_brand || undefined,
           reconciliationStatus: t.reconciliation_status || 'reconciled',
           transactionDate: t.transaction_date || t.created_at || new Date().toISOString(),
+          weekNumber: t.week_number ? Number(t.week_number) : undefined,
+          proofOfPaymentUrl: t.proof_of_payment_url || t.pop_url || undefined,
+          notes: t.notes || t.reference_note || undefined,
+          recordedBy: t.recorded_by || undefined,
           yocoMetadata: typeof t.yoco_metadata === 'object' ? t.yoco_metadata : {},
         }));
         try {
@@ -1659,6 +1663,10 @@ export async function saveTransaction(tx: YocoTransaction): Promise<{ success: b
     card_brand: tx.cardBrand || null,
     reconciliation_status: tx.reconciliationStatus,
     transaction_date: tx.transactionDate,
+    week_number: tx.weekNumber || null,
+    proof_of_payment_url: tx.proofOfPaymentUrl || null,
+    notes: tx.notes || null,
+    recorded_by: tx.recordedBy || null,
     yoco_metadata: tx.yocoMetadata || {},
   };
 

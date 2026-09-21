@@ -321,12 +321,21 @@ export interface TrafficFine {
   documentUrl?: string;
 }
 
-export type YocoPaymentMethod = 'yoco_card_terminal' | 'yoco_payment_link' | 'yoco_recurring_token' | 'instant_eft';
+export type YocoPaymentMethod = 
+  | 'yoco_card_terminal' 
+  | 'yoco_payment_link' 
+  | 'yoco_recurring_token' 
+  | 'instant_eft'
+  | 'manual_eft'
+  | 'cash'
+  | 'card_pos'
+  | 'manual_pop';
+
 export type PaymentAllocation = 'weekly_rental' | 'security_deposit' | 'traffic_fine' | 'repair_deductible' | 'other';
 
 export interface YocoTransaction {
   id: string;
-  yocoChargeId: string; // e.g. 'ch_yoco_live_9a8b7c'
+  yocoChargeId: string; // e.g. 'ch_yoco_live_9a8b7c' or 'pop_manual_...'
   yocoPaymentLinkId?: string;
   driverId: string;
   driverName: string;
@@ -341,6 +350,10 @@ export interface YocoTransaction {
   cardBrand?: string;
   reconciliationStatus: 'reconciled' | 'unallocated' | 'disputed';
   transactionDate: string;
+  weekNumber?: number;
+  proofOfPaymentUrl?: string;
+  notes?: string;
+  recordedBy?: string;
   yocoMetadata?: Record<string, any>;
 }
 
