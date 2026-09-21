@@ -5,7 +5,8 @@ import {
   RepairAndService, 
   TrafficFine, 
   Driver,
-  VehicleStatus 
+  VehicleStatus,
+  BikeCategory
 } from '../../types';
 import { 
   Bike, 
@@ -100,28 +101,22 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
   // Add Vehicle Modal
   const [isAddVehicleOpen, setIsAddVehicleOpen] = useState<boolean>(false);
-  const [newVehicleForm, setNewVehicleForm] = useState<Partial<Vehicle>>({
+  const [newVehicleForm, setNewVehicleForm] = useState({
+    registration_plate: '',
     vin: '',
-    engineNumber: '',
-    registrationPlate: '',
-    make: 'Bajaj',
-    model: 'Boxer 150 HD',
-    year: 2026,
-    category: 'boxer',
-    condition: 'new',
-    status: 'available',
-    odometerKm: 0,
-    nextServiceKm: 5000,
-    trackerDeviceId: `CT-${Math.floor(10000 + Math.random() * 90000)}-SA`,
-    trackerProvider: 'Cartrack SA',
-    batteryHealthPercent: 100,
-    fuelLevelPercent: 100,
-    isIgnitionOn: false,
-    latitude: -26.0826,
-    longitude: 27.9734,
-    lastLocationAddress: '304 Tungsten Rd, Strijdom Park, Randburg',
-    insurancePolicyNumber: 'OUT-FLEET-2026-900',
-    licenseDiskExpiryDate: '2027-04-30',
+    engine_number: '',
+    bike_id: 'boxer-150',
+    model_name: 'Bajaj Boxer 150 HD',
+    year: 2025,
+    color: 'Fleet White',
+    status: 'available_showroom',
+    current_mileage_km: 0,
+    last_service_mileage_km: 0,
+    next_service_mileage_km: 5000,
+    telematics_imei: `CT-${Math.floor(10000 + Math.random() * 90000)}-SA`,
+    telematics_battery_health: 98,
+    license_disk_expiry_date: '2027-04-30',
+    tracker_provider: 'Cartrack SA',
   });
 
   // -------------------------------------------------------------
@@ -259,59 +254,88 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
   // Submit Add Vehicle
   const handleCreateVehicle = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newVehicleForm.registrationPlate || !newVehicleForm.vin) return;
+    if (!newVehicleForm.registration_plate || !newVehicleForm.vin) return;
+
+    const regPlate = newVehicleForm.registration_plate.toUpperCase().trim();
+    const vinCode = newVehicleForm.vin.toUpperCase().trim();
+    const engNum = (newVehicleForm.engine_number || 'ENG-000').toUpperCase().trim();
+    const modelName = newVehicleForm.model_name || 'Bajaj Boxer 150 HD';
+    const bikeId = newVehicleForm.bike_id || 'boxer-150';
+    const isBigBoy = modelName.toLowerCase().includes('big boy') || bikeId.includes('velocity');
+    const make = isBigBoy ? 'Big Boy' : modelName.toLowerCase().includes('honda') ? 'Honda' : 'Bajaj';
+    const category: BikeCategory = isBigBoy ? 'bigboy' : 'boxer';
+    const currMileage = Number(newVehicleForm.current_mileage_km) || 0;
+    const lastServiceMileage = Number(newVehicleForm.last_service_mileage_km) || 0;
+    const nextServiceMileage = Number(newVehicleForm.next_service_mileage_km) || 5000;
+    const telematicsImei = newVehicleForm.telematics_imei || `CT-${Math.floor(10000 + Math.random() * 90000)}-SA`;
+    const telematicsBattery = Number(newVehicleForm.telematics_battery_health) || 98;
+    const vehicleColor = newVehicleForm.color || 'Fleet White';
+    const vehicleStatus = (newVehicleForm.status as any) || 'available_showroom';
 
     const created: Vehicle = {
       id: `veh-${Date.now()}`,
-      vin: (newVehicleForm.vin || '').toUpperCase().trim(),
-      engineNumber: (newVehicleForm.engineNumber || 'ENG-000').toUpperCase().trim(),
-      registrationPlate: (newVehicleForm.registrationPlate || '').toUpperCase().trim(),
-      bikeModelId: newVehicleForm.category === 'boxer' ? 'bajaj-boxer-150' : 'bigboy-velocity-150',
-      make: newVehicleForm.make || 'Bajaj',
-      model: newVehicleForm.model || 'Boxer 150 HD',
-      year: Number(newVehicleForm.year) || 2026,
-      category: newVehicleForm.category || 'boxer',
-      condition: newVehicleForm.condition || 'new',
-      status: 'available',
-      odometerKm: Number(newVehicleForm.odometerKm) || 0,
-      nextServiceKm: Number(newVehicleForm.nextServiceKm) || 5000,
-      trackerDeviceId: newVehicleForm.trackerDeviceId || `CT-${Math.floor(10000 + Math.random() * 90000)}-SA`,
-      trackerProvider: newVehicleForm.trackerProvider || 'Cartrack SA',
-      batteryHealthPercent: Number(newVehicleForm.batteryHealthPercent) || 100,
-      fuelLevelPercent: Number(newVehicleForm.fuelLevelPercent) || 100,
-      isIgnitionOn: false,
-      latitude: -26.0826,
-      longitude: 27.9734,
-      lastLocationAddress: newVehicleForm.lastLocationAddress || '304 Tungsten Rd, Strijdom Park, Randburg',
-      lastPingTime: new Date().toISOString(),
-      insurancePolicyNumber: newVehicleForm.insurancePolicyNumber || 'OUT-FLEET-2026-900',
-      licenseDiskExpiryDate: newVehicleForm.licenseDiskExpiryDate || '2027-04-30',
-      imageUrl: newVehicleForm.imageUrl || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80',
-    };
-
-    onAddVehicle(created);
-    setNewVehicleForm({
-      vin: '',
-      engineNumber: '',
-      registrationPlate: '',
-      make: 'Bajaj',
-      model: 'Boxer 150 HD',
-      year: 2026,
-      category: 'boxer',
+      vin: vinCode,
+      engineNumber: engNum,
+      engine_number: engNum,
+      registrationPlate: regPlate,
+      registration_plate: regPlate,
+      bikeModelId: bikeId,
+      bike_id: bikeId,
+      bikeId: bikeId,
+      make: make,
+      model: modelName,
+      model_name: modelName,
+      modelName: modelName,
+      year: Number(newVehicleForm.year) || 2025,
+      color: vehicleColor,
+      category: category,
       condition: 'new',
-      status: 'available',
-      odometerKm: 0,
-      nextServiceKm: 5000,
-      trackerDeviceId: `CT-${Math.floor(10000 + Math.random() * 90000)}-SA`,
-      trackerProvider: 'Cartrack SA',
-      batteryHealthPercent: 100,
+      status: vehicleStatus,
+      odometerKm: currMileage,
+      current_mileage_km: currMileage,
+      currentMileageKm: currMileage,
+      last_service_mileage_km: lastServiceMileage,
+      lastServiceMileageKm: lastServiceMileage,
+      nextServiceKm: nextServiceMileage,
+      next_service_mileage_km: nextServiceMileage,
+      nextServiceMileageKm: nextServiceMileage,
+      trackerDeviceId: telematicsImei,
+      telematics_imei: telematicsImei,
+      telematicsImei: telematicsImei,
+      trackerProvider: newVehicleForm.tracker_provider || 'Cartrack SA',
+      batteryHealthPercent: telematicsBattery,
+      telematics_battery_health: telematicsBattery,
+      telematicsBatteryHealth: telematicsBattery,
       fuelLevelPercent: 100,
       isIgnitionOn: false,
       latitude: -26.0826,
       longitude: 27.9734,
       lastLocationAddress: '304 Tungsten Rd, Strijdom Park, Randburg',
+      lastPingTime: new Date().toISOString(),
       insurancePolicyNumber: 'OUT-FLEET-2026-900',
-      licenseDiskExpiryDate: '2027-04-30',
+      licenseDiskExpiryDate: newVehicleForm.license_disk_expiry_date || '2027-04-30',
+      license_disk_expiry_date: newVehicleForm.license_disk_expiry_date || '2027-04-30',
+      imageUrl: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80',
+      image_url: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80',
+    };
+
+    onAddVehicle(created);
+    setNewVehicleForm({
+      registration_plate: '',
+      vin: '',
+      engine_number: '',
+      bike_id: 'boxer-150',
+      model_name: 'Bajaj Boxer 150 HD',
+      year: 2025,
+      color: 'Fleet White',
+      status: 'available_showroom',
+      current_mileage_km: 0,
+      last_service_mileage_km: 0,
+      next_service_mileage_km: 5000,
+      telematics_imei: `CT-${Math.floor(10000 + Math.random() * 90000)}-SA`,
+      telematics_battery_health: 98,
+      license_disk_expiry_date: '2027-04-30',
+      tracker_provider: 'Cartrack SA',
     });
     setIsAddVehicleOpen(false);
   };
@@ -1622,102 +1646,243 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       {/* ------------------------------------------------------------- */}
       {isAddVehicleOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 my-8">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-900 text-base">Register New Fleet Asset</h3>
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 my-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="font-black text-slate-900 text-lg">Register New Fleet Asset</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Enter bike specifications, identification, telematics, and maintenance parameters</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsAddVehicleOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-900"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateVehicle} className="mt-4 space-y-3.5">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Registration Plate</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. GP registration plate"
-                    value={newVehicleForm.registrationPlate}
-                    onChange={(e) => setNewVehicleForm({ ...newVehicleForm, registrationPlate: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">VIN Number (17 Digits)</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="17-character VIN"
-                    value={newVehicleForm.vin}
-                    onChange={(e) => setNewVehicleForm({ ...newVehicleForm, vin: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Make & Model</label>
-                  <input
-                    type="text"
-                    required
-                    value={newVehicleForm.model}
-                    onChange={(e) => setNewVehicleForm({ ...newVehicleForm, model: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Engine Number</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="DHX-98241"
-                    value={newVehicleForm.engineNumber}
-                    onChange={(e) => setNewVehicleForm({ ...newVehicleForm, engineNumber: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono"
-                  />
+            <form onSubmit={handleCreateVehicle} className="mt-5 space-y-5">
+              {/* Section 1: Identification & Registration */}
+              <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100">
+                <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700 block mb-3">
+                  1. Identification & Registration
+                </span>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Registration Plate <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. CA 123-456 / GP"
+                      value={newVehicleForm.registration_plate}
+                      onChange={(e) => setNewVehicleForm({ ...newVehicleForm, registration_plate: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold uppercase focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      VIN (17 Characters) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={17}
+                      placeholder="e.g. MD2A24BY8PW091244"
+                      value={newVehicleForm.vin}
+                      onChange={(e) => setNewVehicleForm({ ...newVehicleForm, vin: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono uppercase focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Engine Number</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. DHX-98241"
+                      value={newVehicleForm.engine_number}
+                      onChange={(e) => setNewVehicleForm({ ...newVehicleForm, engine_number: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono uppercase focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Cartrack Device ID</label>
-                  <input
-                    type="text"
-                    value={newVehicleForm.trackerDeviceId}
-                    onChange={(e) => setNewVehicleForm({ ...newVehicleForm, trackerDeviceId: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono"
-                  />
+              {/* Section 2: Model Specifications & Status */}
+              <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100">
+                <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700 block mb-3">
+                  2. Model Specifications & Asset Status
+                </span>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Bike Model Preset (bike_id)</label>
+                    <select
+                      value={newVehicleForm.bike_id}
+                      onChange={(e) => {
+                        const bId = e.target.value;
+                        let autoModel = newVehicleForm.model_name;
+                        if (bId === 'boxer-150') autoModel = 'Bajaj Boxer 150 HD';
+                        else if (bId === 'velocity-150') autoModel = 'Big Boy Velocity 150';
+                        else if (bId === 'ace-125') autoModel = 'Honda Ace 125';
+                        else if (bId === 'hlx-150') autoModel = 'TVS HLX 150';
+                        setNewVehicleForm({ ...newVehicleForm, bike_id: bId, model_name: autoModel });
+                      }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none bg-white"
+                    >
+                      <option value="boxer-150">Bajaj Boxer 150 HD</option>
+                      <option value="velocity-150">Big Boy Velocity 150</option>
+                      <option value="ace-125">Honda Ace 125</option>
+                      <option value="hlx-150">TVS HLX 150</option>
+                      <option value="custom">Custom Fleet Model</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Model Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Bajaj Boxer 150 HD"
+                      value={newVehicleForm.model_name}
+                      onChange={(e) => setNewVehicleForm({ ...newVehicleForm, model_name: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Year of Manufacture</label>
+                    <input
+                      type="number"
+                      required
+                      min={2018}
+                      max={2030}
+                      value={newVehicleForm.year}
+                      onChange={(e) => setNewVehicleForm({ ...newVehicleForm, year: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">License Disk Expiry</label>
-                  <input
-                    type="date"
-                    value={newVehicleForm.licenseDiskExpiryDate}
-                    onChange={(e) => setNewVehicleForm({ ...newVehicleForm, licenseDiskExpiryDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
-                  />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mt-3.5">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Color / Livery</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Fleet White / Matte Black"
+                      value={newVehicleForm.color}
+                      onChange={(e) => setNewVehicleForm({ ...newVehicleForm, color: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Initial Status</label>
+                    <select
+                      value={newVehicleForm.status}
+                      onChange={(e) => setNewVehicleForm({ ...newVehicleForm, status: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none bg-white"
+                    >
+                      <option value="available_showroom">Available / Showroom Stock</option>
+                      <option value="available">Available for Deployment</option>
+                      <option value="in_maintenance">In Maintenance / Workshop</option>
+                      <option value="assigned">Assigned to Driver</option>
+                      <option value="impounded">Impounded / Grounded</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+              {/* Section 3: Mileage & Service Intervals (KM) */}
+              <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100">
+                <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700 block mb-3">
+                  3. Mileage & Service Intervals (KM)
+                </span>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Current Mileage (KM)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={newVehicleForm.current_mileage_km}
+                      onChange={(e) => setNewVehicleForm({ ...newVehicleForm, current_mileage_km: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Last Service Mileage (KM)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={newVehicleForm.last_service_mileage_km}
+                      onChange={(e) => setNewVehicleForm({ ...newVehicleForm, last_service_mileage_km: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Next Service Due (KM)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={newVehicleForm.next_service_mileage_km}
+                      onChange={(e) => setNewVehicleForm({ ...newVehicleForm, next_service_mileage_km: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold text-indigo-600 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 4: Telematics & Tracking Hardware */}
+              <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100">
+                <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700 block mb-3">
+                  4. Telematics & Tracking Hardware
+                </span>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Telematics IMEI / Tracker ID</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. CT-99636-SA"
+                      value={newVehicleForm.telematics_imei}
+                      onChange={(e) => setNewVehicleForm({ ...newVehicleForm, telematics_imei: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono uppercase focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Telematics Battery Health (%)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={newVehicleForm.telematics_battery_health}
+                      onChange={(e) => setNewVehicleForm({ ...newVehicleForm, telematics_battery_health: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">License Disk Expiry</label>
+                    <input
+                      type="date"
+                      value={newVehicleForm.license_disk_expiry_date}
+                      onChange={(e) => setNewVehicleForm({ ...newVehicleForm, license_disk_expiry_date: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsAddVehicleOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md"
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2"
                 >
-                  Register Asset in Fleet
+                  <Plus className="w-4 h-4" />
+                  Save & Register Asset in Fleet
                 </button>
               </div>
             </form>

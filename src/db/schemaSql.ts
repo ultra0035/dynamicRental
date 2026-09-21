@@ -105,24 +105,31 @@ CREATE TABLE IF NOT EXISTS drivers (
 
 -- 4. VEHICLES TABLE (Asset Register & Telematics)
 CREATE TABLE IF NOT EXISTS vehicles (
-    id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY DEFAULT ('veh-' || gen_random_uuid()),
     registration_plate TEXT UNIQUE NOT NULL,
-    vin TEXT,
+    vin TEXT UNIQUE NOT NULL,
     engine_number TEXT,
+    bike_id TEXT,
+    model_name TEXT NOT NULL DEFAULT 'Bajaj Boxer 150 HD',
+    year INT NOT NULL DEFAULT 2025,
+    color TEXT DEFAULT 'Fleet White',
+    status TEXT NOT NULL DEFAULT 'available_showroom',
+    current_mileage_km INT NOT NULL DEFAULT 0,
+    last_service_mileage_km INT NOT NULL DEFAULT 0,
+    next_service_mileage_km INT NOT NULL DEFAULT 5000,
+    telematics_imei TEXT,
+    telematics_battery_health INT DEFAULT 98,
+    -- Additional standard & operational columns
     bike_model_id TEXT,
     make TEXT DEFAULT 'Bajaj',
-    model TEXT NOT NULL DEFAULT 'Boxer 150 HD',
-    year INTEGER DEFAULT 2026,
+    model TEXT DEFAULT 'Boxer 150 HD',
     category TEXT DEFAULT 'boxer',
     condition TEXT DEFAULT 'new',
     assigned_driver_id TEXT,
     assigned_driver_name TEXT,
-    status TEXT NOT NULL DEFAULT 'available',
     odometer_km INTEGER DEFAULT 0,
     mileage_km INTEGER DEFAULT 0,
     next_service_km INTEGER DEFAULT 5000,
-    next_service_mileage_km INTEGER DEFAULT 5000,
-    last_service_mileage_km INTEGER DEFAULT 0,
     last_service_date DATE,
     tracker_device_id TEXT,
     gps_device_imei TEXT,
@@ -147,6 +154,14 @@ CREATE TABLE IF NOT EXISTS vehicles (
 );
 
 -- In-place Migrations for existing vehicles tables
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS bike_id TEXT;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS model_name TEXT DEFAULT 'Bajaj Boxer 150 HD';
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS color TEXT DEFAULT 'Fleet White';
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS current_mileage_km INTEGER DEFAULT 0;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS last_service_mileage_km INTEGER DEFAULT 0;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS next_service_mileage_km INTEGER DEFAULT 5000;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS telematics_imei TEXT;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS telematics_battery_health INTEGER DEFAULT 98;
 ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS make TEXT DEFAULT 'Bajaj';
 ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'boxer';
 ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS condition TEXT DEFAULT 'new';

@@ -208,28 +208,45 @@ export interface Driver {
   handoverOdometerKm?: number;
 }
 
-export type VehicleStatus = 'available' | 'assigned' | 'in_maintenance' | 'impounded' | 'retired';
+export type VehicleStatus = 'available' | 'available_showroom' | 'assigned' | 'in_maintenance' | 'impounded' | 'retired';
 
 export interface Vehicle {
   id: string;
   vin: string;
   engineNumber: string;
+  engine_number?: string;
   registrationPlate: string;
+  registration_plate?: string;
   bikeModelId: string;
+  bike_id?: string;
+  bikeId?: string;
   make: string;
   model: string;
+  model_name?: string;
+  modelName?: string;
   year: number;
+  color?: string;
   category: BikeCategory;
   condition: BikeCondition;
   status: VehicleStatus;
   assignedDriverId?: string;
   assignedDriverName?: string;
   odometerKm: number;
+  current_mileage_km?: number;
+  currentMileageKm?: number;
+  last_service_mileage_km?: number;
+  lastServiceMileageKm?: number;
   nextServiceKm: number;
+  next_service_mileage_km?: number;
+  nextServiceMileageKm?: number;
   lastServiceDate?: string;
   trackerDeviceId?: string;
-  trackerProvider?: string; // e.g. 'Cartrack', 'Netstar', 'Tracker SA', 'DynamicGPS'
+  trackerProvider?: string; // e.g. 'Cartrack SA', 'Netstar', 'Tracker SA', 'DynamicGPS'
+  telematics_imei?: string;
+  telematicsImei?: string;
   batteryHealthPercent?: number;
+  telematics_battery_health?: number;
+  telematicsBatteryHealth?: number;
   fuelLevelPercent?: number;
   isIgnitionOn?: boolean;
   latitude?: number;
@@ -238,7 +255,9 @@ export interface Vehicle {
   lastPingTime?: string;
   insurancePolicyNumber?: string;
   licenseDiskExpiryDate?: string;
+  license_disk_expiry_date?: string;
   imageUrl?: string;
+  image_url?: string;
 }
 
 export interface PartsInventoryItem {
