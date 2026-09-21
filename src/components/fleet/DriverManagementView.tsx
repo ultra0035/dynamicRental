@@ -1232,12 +1232,24 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
                         <td className="py-3.5 px-4">
                           <select
                             value={ref.status}
-                            onChange={(e) => {
-                              onUpdateReferral({
+                            onChange={async (e) => {
+                              const updated: DriverReferral = {
                                 ...ref,
                                 status: e.target.value as any,
                                 paidDate: e.target.value === 'paid_out' ? (ref.paidDate || new Date().toISOString().split('T')[0]) : ref.paidDate
-                              });
+                              };
+                              onUpdateReferral(updated);
+                              try {
+                                const dbRes = await saveReferral(updated);
+                                if (dbRes.success) {
+                                  setDbNotification({
+                                    type: 'success',
+                                    message: `✓ Status updated for ${ref.referredApplicantName} -> ${e.target.value}`,
+                                  });
+                                }
+                              } catch (err) {
+                                console.warn('Referral update err:', err);
+                              }
                             }}
                             className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase border cursor-pointer ${
                               ref.status === 'paid_out'
@@ -1258,12 +1270,24 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
                             {ref.status !== 'paid_out' ? (
                               <button
                                 type="button"
-                                onClick={() => {
-                                  onUpdateReferral({
+                                onClick={async () => {
+                                  const updated: DriverReferral = {
                                     ...ref,
                                     status: 'paid_out',
                                     paidDate: new Date().toISOString().split('T')[0],
-                                  });
+                                  };
+                                  onUpdateReferral(updated);
+                                  try {
+                                    const dbRes = await saveReferral(updated);
+                                    if (dbRes.success) {
+                                      setDbNotification({
+                                        type: 'success',
+                                        message: `✓ R${ref.rewardAmountZar} bonus marked paid for ${ref.referrerDriverName} (Referral: ${ref.referredApplicantName})`,
+                                      });
+                                    }
+                                  } catch (err) {
+                                    console.warn('Referral mark paid err:', err);
+                                  }
                                 }}
                                 className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition-colors shadow-2xs"
                               >
