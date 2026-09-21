@@ -46,7 +46,10 @@ import {
   Camera,
   MessageSquare,
   Phone,
-  UserCheck
+  UserCheck,
+  Lock,
+  Gauge,
+  Sliders
 } from 'lucide-react';
 
 export type VehicleSubTab = 'register' | 'live_telematics' | 'parts_inventory' | 'repairs_service' | 'traffic_fines';
@@ -118,6 +121,90 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     license_disk_expiry_date: '2027-04-30',
     tracker_provider: 'Cartrack SA',
   });
+
+  // -------------------------------------------------------------
+  // EDIT / MANAGE VEHICLE (STATUS, ODOMETER & SERVICE INTERVALS)
+  // -------------------------------------------------------------
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [editVehicleForm, setEditVehicleForm] = useState<{
+    status: string;
+    odometerKm: number;
+    lastServiceMileageKm: number;
+    nextServiceKm: number;
+    batteryHealthPercent: number;
+    assignedDriverId: string;
+    assignedDriverName: string;
+  }>({
+    status: 'available_showroom',
+    odometerKm: 0,
+    lastServiceMileageKm: 0,
+    nextServiceKm: 5000,
+    batteryHealthPercent: 98,
+    assignedDriverId: '',
+    assignedDriverName: '',
+  });
+
+  const handleOpenEditVehicle = (veh: Vehicle) => {
+    setEditingVehicle(veh);
+    const currKm = Number(veh.odometerKm ?? (veh as any).current_mileage_km ?? 0);
+    const lastKm = Number(veh.lastServiceMileageKm ?? (veh as any).last_service_mileage_km ?? 0);
+    const nextKm = Number(veh.nextServiceKm ?? (veh as any).next_service_mileage_km ?? (currKm + 5000));
+    const battery = Number(veh.batteryHealthPercent ?? (veh as any).telematics_battery_health ?? 98);
+
+    setEditVehicleForm({
+      status: veh.status || 'available_showroom',
+      odometerKm: currKm,
+      lastServiceMileageKm: lastKm,
+      nextServiceKm: nextKm,
+      batteryHealthPercent: battery,
+      assignedDriverId: veh.assignedDriverId || '',
+      assignedDriverName: veh.assignedDriverName || '',
+    });
+  };
+
+  const handleSaveEditVehicle = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVehicle) return;
+
+    const currOdo = Number(editVehicleForm.odometerKm) || 0;
+    const nextSrv = Number(editVehicleForm.nextServiceKm) || (currOdo + 5000);
+    const lastSrv = Number(editVehicleForm.lastServiceMileageKm) || 0;
+    const batt = Number(editVehicleForm.batteryHealthPercent) || 98;
+
+    let driverId = editVehicleForm.assignedDriverId;
+    let driverName = editVehicleForm.assignedDriverName;
+
+    if (driverId === 'none' || !driverId) {
+      driverId = undefined;
+      driverName = undefined;
+    } else {
+      const d = drivers.find((drv) => drv.id === driverId);
+      if (d) {
+        driverName = d.fullName;
+      }
+    }
+
+    const updatedVehicle: Vehicle = {
+      ...editingVehicle,
+      status: editVehicleForm.status as any,
+      odometerKm: currOdo,
+      current_mileage_km: currOdo,
+      currentMileageKm: currOdo,
+      lastServiceMileageKm: lastSrv,
+      last_service_mileage_km: lastSrv,
+      nextServiceKm: nextSrv,
+      next_service_mileage_km: nextSrv,
+      nextServiceMileageKm: nextSrv,
+      batteryHealthPercent: batt,
+      telematics_battery_health: batt,
+      telematicsBatteryHealth: batt,
+      assignedDriverId: driverId,
+      assignedDriverName: driverName,
+    };
+
+    onUpdateVehicle(updatedVehicle);
+    setEditingVehicle(null);
+  };
 
   // -------------------------------------------------------------
   // PARTS INVENTORY & POINT OF SALE (POS) STATE
@@ -880,17 +967,28 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedTrackingVehicleId(veh.id);
-                            setSubTab('live_telematics');
-                          }}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1"
-                        >
-                          <Compass className="w-3.5 h-3.5 text-cyan-600" />
-                          <span>Track</span>
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditVehicle(veh)}
+                            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 border border-indigo-200/80 shadow-xs"
+                            title="Manage Vehicle Status, Odometer & Next Service"
+                          >
+                            <Edit className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Manage</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedTrackingVehicleId(veh.id);
+                              setSubTab('live_telematics');
+                            }}
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 border border-slate-200"
+                          >
+                            <Compass className="w-3.5 h-3.5 text-cyan-600" />
+                            <span>Track</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1907,6 +2005,318 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 >
                   <Plus className="w-4 h-4" />
                   Save & Register Asset in Fleet
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: MANAGE / EDIT VEHICLE STATUS & ODOMETER */}
+      {/* ------------------------------------------------------------- */}
+      {editingVehicle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 my-8">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-800 border border-indigo-200">
+                    Asset Management
+                  </span>
+                  <h3 className="text-lg font-black text-slate-900 tracking-tight">
+                    Manage Vehicle: <span className="font-mono text-indigo-600">{editingVehicle.registrationPlate}</span>
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Update operational status, odometer reading, and maintenance intervals. Permanent identification fields are locked.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingVehicle(null)}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditVehicle} className="mt-5 space-y-4">
+              {/* LOCKED IDENTIFIERS (READ-ONLY) */}
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200/80">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-slate-700 uppercase tracking-wider">
+                    <Lock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Permanent Identifiers (Locked / Read-Only)</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded-md">
+                    NATIS Compliance
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Registration Plate</span>
+                    <span className="font-mono font-black text-slate-900 text-sm flex items-center gap-1">
+                      {editingVehicle.registrationPlate}
+                      <Lock className="w-3 h-3 text-slate-400" />
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Chassis VIN</span>
+                    <span className="font-mono font-bold text-slate-800 truncate block" title={editingVehicle.vin}>
+                      {editingVehicle.vin || 'N/A'}
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Engine Number</span>
+                    <span className="font-mono font-bold text-slate-800 truncate block">
+                      {editingVehicle.engineNumber || 'N/A'}
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Make & Model</span>
+                    <span className="font-bold text-slate-900 truncate block">
+                      {editingVehicle.make} {editingVehicle.model}
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Color & Year</span>
+                    <span className="font-medium text-slate-700">
+                      {editingVehicle.color || 'Fleet White'} ({editingVehicle.year || 2025})
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Telematics IMEI</span>
+                    <span className="font-mono text-slate-700 truncate block">
+                      {editingVehicle.trackerDeviceId || 'Cartrack SA'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* EDITABLE SECTION 1: OPERATIONAL STATUS & COURIER */}
+              <div className="bg-indigo-50/40 rounded-xl p-4 border border-indigo-100 space-y-3">
+                <span className="text-[11px] font-black uppercase tracking-wider text-indigo-900 block">
+                  1. Operational Status & Driver Assignment
+                </span>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Vehicle Status *
+                    </label>
+                    <select
+                      value={editVehicleForm.status}
+                      onChange={(e) => setEditVehicleForm({ ...editVehicleForm, status: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none bg-white text-slate-900"
+                    >
+                      <option value="available_showroom">Available / Showroom Stock</option>
+                      <option value="available">Available for Deployment</option>
+                      <option value="assigned">Assigned / Active with Courier</option>
+                      <option value="in_maintenance">In Workshop / Scheduled Maintenance</option>
+                      <option value="impounded">Impounded / Grounded</option>
+                      <option value="decommissioned">Decommissioned / Retired</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Assigned Courier / Rider
+                    </label>
+                    <select
+                      value={editVehicleForm.assignedDriverId || 'none'}
+                      onChange={(e) => {
+                        const drvId = e.target.value;
+                        if (drvId === 'none') {
+                          setEditVehicleForm({
+                            ...editVehicleForm,
+                            assignedDriverId: '',
+                            assignedDriverName: '',
+                            status: editVehicleForm.status === 'assigned' ? 'available_showroom' : editVehicleForm.status,
+                          });
+                        } else {
+                          const matched = drivers.find((d) => d.id === drvId);
+                          setEditVehicleForm({
+                            ...editVehicleForm,
+                            assignedDriverId: drvId,
+                            assignedDriverName: matched?.fullName || '',
+                            status: 'assigned',
+                          });
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none bg-white text-slate-900"
+                    >
+                      <option value="none">Unassigned / Showroom Inventory</option>
+                      {drivers.map((drv) => (
+                        <option key={drv.id} value={drv.id}>
+                          {drv.fullName} ({drv.phone || drv.idOrPassportNumber})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* EDITABLE SECTION 2: ODOMETER & NEXT SERVICE MILEAGE */}
+              <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100 space-y-3">
+                <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700 block">
+                  2. Odometer Reading & Maintenance Intervals (KM)
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Current Odometer (KM) *
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      required
+                      value={editVehicleForm.odometerKm}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setEditVehicleForm({
+                          ...editVehicleForm,
+                          odometerKm: val,
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none bg-white"
+                    />
+                    <div className="flex gap-1 mt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setEditVehicleForm(prev => ({ ...prev, odometerKm: prev.odometerKm + 250 }))}
+                        className="px-1.5 py-0.5 bg-slate-200/70 hover:bg-slate-300 text-slate-700 text-[10px] font-bold rounded"
+                      >
+                        +250km
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditVehicleForm(prev => ({ ...prev, odometerKm: prev.odometerKm + 500 }))}
+                        className="px-1.5 py-0.5 bg-slate-200/70 hover:bg-slate-300 text-slate-700 text-[10px] font-bold rounded"
+                      >
+                        +500km
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditVehicleForm(prev => ({ ...prev, odometerKm: prev.odometerKm + 1000 }))}
+                        className="px-1.5 py-0.5 bg-slate-200/70 hover:bg-slate-300 text-slate-700 text-[10px] font-bold rounded"
+                      >
+                        +1,000km
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Next Service Due (KM) *
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      required
+                      value={editVehicleForm.nextServiceKm}
+                      onChange={(e) => setEditVehicleForm({ ...editVehicleForm, nextServiceKm: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none bg-white"
+                    />
+                    <div className="flex gap-1 mt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setEditVehicleForm(prev => ({ ...prev, nextServiceKm: prev.odometerKm + 5000 }))}
+                        className="px-1.5 py-0.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 text-[10px] font-bold rounded"
+                      >
+                        Odo + 5,000km
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Last Service Mileage (KM)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editVehicleForm.lastServiceMileageKm}
+                      onChange={(e) => setEditVehicleForm({ ...editVehicleForm, lastServiceMileageKm: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Remaining KM helper calculation */}
+                <div className="pt-2 flex items-center justify-between text-xs text-slate-500">
+                  <span>
+                    Service Status:{' '}
+                    <strong className={editVehicleForm.nextServiceKm - editVehicleForm.odometerKm <= 500 ? 'text-amber-600' : 'text-emerald-600'}>
+                      {Math.max(0, editVehicleForm.nextServiceKm - editVehicleForm.odometerKm).toLocaleString()} KM remaining
+                    </strong>{' '}
+                    until next routine maintenance.
+                  </span>
+                </div>
+              </div>
+
+              {/* EDITABLE SECTION 3: TELEMATICS BATTERY HEALTH */}
+              <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100">
+                <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700 block mb-2">
+                  3. Telematics & GPS Hardware Health
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 items-center">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Tracker Battery Health (%)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={editVehicleForm.batteryHealthPercent}
+                      onChange={(e) => setEditVehicleForm({ ...editVehicleForm, batteryHealthPercent: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none bg-white"
+                    />
+                  </div>
+                  <div className="bg-white p-3 rounded-lg border border-slate-200">
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-slate-500 font-bold">Battery Gauge:</span>
+                      <span className="font-mono font-black text-slate-900">{editVehicleForm.batteryHealthPercent}%</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          editVehicleForm.batteryHealthPercent > 50
+                            ? 'bg-emerald-500'
+                            : editVehicleForm.batteryHealthPercent > 20
+                            ? 'bg-amber-500'
+                            : 'bg-rose-500'
+                        }`}
+                        style={{ width: `${Math.min(100, Math.max(0, editVehicleForm.batteryHealthPercent))}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* MODAL FOOTER */}
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingVehicle(null)}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  Save & Update Vehicle
                 </button>
               </div>
             </form>
