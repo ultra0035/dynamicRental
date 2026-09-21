@@ -105,8 +105,8 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     registration_plate: '',
     vin: '',
     engine_number: '',
-    bike_id: 'boxer-150',
-    model_name: 'Bajaj Boxer 150 HD',
+    bike_id: 'bigboy-velocity-150',
+    model_name: 'Big Boy Velocity 150',
     year: 2025,
     color: 'Fleet White',
     status: 'available_showroom',
@@ -259,11 +259,32 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     const regPlate = newVehicleForm.registration_plate.toUpperCase().trim();
     const vinCode = newVehicleForm.vin.toUpperCase().trim();
     const engNum = (newVehicleForm.engine_number || 'ENG-000').toUpperCase().trim();
-    const modelName = newVehicleForm.model_name || 'Bajaj Boxer 150 HD';
-    const bikeId = newVehicleForm.bike_id || 'boxer-150';
-    const isBigBoy = modelName.toLowerCase().includes('big boy') || bikeId.includes('velocity');
-    const make = isBigBoy ? 'Big Boy' : modelName.toLowerCase().includes('honda') ? 'Honda' : 'Bajaj';
-    const category: BikeCategory = isBigBoy ? 'bigboy' : 'boxer';
+    const bikeId = newVehicleForm.bike_id || 'bigboy-velocity-150';
+    const modelName = newVehicleForm.model_name || 'Big Boy Velocity 150';
+
+    let make = 'Bajaj';
+    let category: BikeCategory = 'boxer';
+
+    if (bikeId.includes('bigboy') || bikeId.includes('velocity') || modelName.toLowerCase().includes('big boy')) {
+      make = 'Big Boy';
+      category = 'bigboy';
+    } else if (bikeId.includes('honda') || modelName.toLowerCase().includes('honda')) {
+      make = 'Honda';
+      category = 'honda';
+    } else if (bikeId.includes('hero') || modelName.toLowerCase().includes('hero')) {
+      make = 'Hero';
+      category = 'hero';
+    } else if (bikeId.includes('arch') || bikeId.includes('electric') || modelName.toLowerCase().includes('arch') || modelName.toLowerCase().includes('electric')) {
+      make = 'Arch Electric';
+      category = 'electric';
+    } else if (bikeId === 'custom') {
+      make = modelName.split(' ')[0] || 'Custom';
+      category = 'custom';
+    } else {
+      make = 'Bajaj';
+      category = 'boxer';
+    }
+
     const currMileage = Number(newVehicleForm.current_mileage_km) || 0;
     const lastServiceMileage = Number(newVehicleForm.last_service_mileage_km) || 0;
     const nextServiceMileage = Number(newVehicleForm.next_service_mileage_km) || 5000;
@@ -324,8 +345,8 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       registration_plate: '',
       vin: '',
       engine_number: '',
-      bike_id: 'boxer-150',
-      model_name: 'Bajaj Boxer 150 HD',
+      bike_id: 'bigboy-velocity-150',
+      model_name: 'Big Boy Velocity 150',
       year: 2025,
       color: 'Fleet White',
       status: 'available_showroom',
@@ -1721,19 +1742,22 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       onChange={(e) => {
                         const bId = e.target.value;
                         let autoModel = newVehicleForm.model_name;
-                        if (bId === 'boxer-150') autoModel = 'Bajaj Boxer 150 HD';
-                        else if (bId === 'velocity-150') autoModel = 'Big Boy Velocity 150';
-                        else if (bId === 'ace-125') autoModel = 'Honda Ace 125';
-                        else if (bId === 'hlx-150') autoModel = 'TVS HLX 150';
+                        if (bId === 'bigboy-velocity-150') autoModel = 'Big Boy Velocity 150';
+                        else if (bId === 'bajaj-boxer-150') autoModel = 'Bajaj Boxer 150 HD';
+                        else if (bId === 'honda-ace-125') autoModel = 'Honda Ace 125';
+                        else if (bId === 'hero-hunter-150') autoModel = 'Hero Hunter 150';
+                        else if (bId === 'arch-electric') autoModel = 'Arch Electric E-Bike';
+                        else if (bId === 'custom') autoModel = '';
                         setNewVehicleForm({ ...newVehicleForm, bike_id: bId, model_name: autoModel });
                       }}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none bg-white"
                     >
-                      <option value="boxer-150">Bajaj Boxer 150 HD</option>
-                      <option value="velocity-150">Big Boy Velocity 150</option>
-                      <option value="ace-125">Honda Ace 125</option>
-                      <option value="hlx-150">TVS HLX 150</option>
-                      <option value="custom">Custom Fleet Model</option>
+                      <option value="bigboy-velocity-150">Big Boy (Velocity 150)</option>
+                      <option value="bajaj-boxer-150">Bajaj Boxer (150 HD)</option>
+                      <option value="honda-ace-125">Honda (Ace 125)</option>
+                      <option value="hero-hunter-150">Hero (Hunter 150)</option>
+                      <option value="arch-electric">Arch Electric (E-Bike)</option>
+                      <option value="custom">Custom Model</option>
                     </select>
                   </div>
                   <div>

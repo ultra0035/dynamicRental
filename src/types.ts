@@ -1,4 +1,4 @@
-export type BikeCategory = 'boxer' | 'bigboy' | 'electric' | 'hero';
+export type BikeCategory = 'boxer' | 'bigboy' | 'honda' | 'hero' | 'electric' | 'custom';
 
 export type BikeCondition = 'new' | 'used';
 
