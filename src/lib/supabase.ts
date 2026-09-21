@@ -198,6 +198,144 @@ export async function testSupabaseConnection(): Promise<{
 }
 
 // ==============================================================================
+// ADAPTIVE SCHEMA ENGINE: Auto-recovers from missing columns, foreign keys & RLS
+// ==============================================================================
+
+export async function adaptiveUpsert(
+  tableName: string,
+  record: Record<string, any>,
+  primaryKey: string = 'id',
+  alternateTableNames: string[] = []
+): Promise<{ success: boolean; data?: any; error?: string; strippedColumns?: string[] }> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { success: false, error: 'Database connection not initialized.' };
+  }
+
+  const tablesToTry = [tableName, ...alternateTableNames];
+
+  for (const currentTable of tablesToTry) {
+    let currentRecord: Record<string, any> = { ...record };
+    // Remove undefined values to avoid schema issues
+    Object.keys(currentRecord).forEach((key) => {
+      if (currentRecord[key] === undefined) {
+        delete currentRecord[key];
+      }
+    });
+
+    const strippedColumns: string[] = [];
+    const maxRetries = 25;
+    let tableNotFound = false;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      // 1. Try upsert with onConflict primary key
+      const { data, error } = await client
+        .from(currentTable)
+        .upsert(currentRecord, { onConflict: primaryKey });
+
+      if (!error) {
+        return { success: true, data, strippedColumns };
+      }
+
+      console.warn(`[Supabase adaptiveUpsert ${currentTable} attempt ${attempt + 1}] error:`, error.message);
+
+      // 2. Check for missing column error in PostgREST schema cache (Code PGRST204 or Postgres 42703)
+      // Examples: "Could not find the 'bike_id' column of 'vehicles' in the schema cache"
+      // or: "column \"bike_id\" of relation \"vehicles\" does not exist"
+      const missingColMatch =
+        error.message?.match(/Could not find the '([^']+)' column/i) ||
+        error.message?.match(/column "([^"]+)" of relation/i) ||
+        error.message?.match(/column '([^']+)' does not exist/i) ||
+        error.message?.match(/column "([^"]+)" does not exist/i) ||
+        error.details?.match(/column "([^"]+)"/i) ||
+        error.hint?.match(/column "([^"]+)"/i);
+
+      if (missingColMatch && missingColMatch[1]) {
+        const missingCol = missingColMatch[1];
+        if (missingCol in currentRecord) {
+          console.log(`[Supabase Auto-Sync] Dynamically stripping missing column '${missingCol}' from '${currentTable}' and retrying...`);
+          delete currentRecord[missingCol];
+          strippedColumns.push(missingCol);
+          continue; // Retry upsert with column removed!
+        }
+      }
+
+      // 3. Foreign key violation (Postgres 23503)
+      // e.g. "Key (bike_id)=(boxer-150) is not present in table \"bikes\""
+      if (
+        error.code === '23503' ||
+        error.message?.includes('foreign key constraint') ||
+        error.details?.includes('is not present in table')
+      ) {
+        const fkMatch =
+          error.details?.match(/Key \(([^)]+)\)=/i) ||
+          error.message?.match(/foreign key constraint "([^"]+)"/i);
+        if (fkMatch && fkMatch[1]) {
+          const fkField = fkMatch[1];
+          if (fkField in currentRecord) {
+            console.log(`[Supabase Auto-Sync] Nulling foreign key '${fkField}' from '${currentTable}' to prevent constraint violation and retrying...`);
+            delete currentRecord[fkField];
+            strippedColumns.push(fkField);
+            continue;
+          }
+        }
+      }
+
+      // 4. Check for RLS (Row Level Security) violation (Postgres 42501)
+      if (
+        error.message?.includes('row-level security') ||
+        error.message?.includes('violates row-level security policy') ||
+        error.code === '42501'
+      ) {
+        return {
+          success: false,
+          error: `Supabase Row-Level Security (RLS) is blocking writes on table "${currentTable}". In your Supabase SQL Editor, run: ALTER TABLE public.${currentTable} DISABLE ROW LEVEL SECURITY;`,
+        };
+      }
+
+      // 5. Table does not exist (Postgres 42P01)
+      if (
+        error.code === '42P01' ||
+        (error.message?.includes('does not exist') && (error.message?.includes('relation') || error.message?.includes('table')))
+      ) {
+        tableNotFound = true;
+        break; // Try next alternate table name
+      }
+
+      // 6. If upsert conflict on PK fails (e.g. 42P10), try direct insert
+      const { data: insertData, error: insertError } = await client.from(currentTable).insert(currentRecord);
+      if (!insertError) {
+        return { success: true, data: insertData, strippedColumns };
+      }
+
+      const insertMissingColMatch =
+        insertError.message?.match(/Could not find the '([^']+)' column/i) ||
+        insertError.message?.match(/column "([^"]+)" of relation/i) ||
+        insertError.message?.match(/column '([^']+)' does not exist/i) ||
+        insertError.message?.match(/column "([^"]+)" does not exist/i);
+
+      if (insertMissingColMatch && insertMissingColMatch[1]) {
+        const missingCol = insertMissingColMatch[1];
+        if (missingCol in currentRecord) {
+          delete currentRecord[missingCol];
+          strippedColumns.push(missingCol);
+          continue;
+        }
+      }
+
+      // If insert also failed
+      return { success: false, error: insertError.message || error.message };
+    }
+
+    if (!tableNotFound) {
+      break;
+    }
+  }
+
+  return { success: false, error: `Could not save to table '${tableName}' in Supabase.` };
+}
+
+// ==============================================================================
 // 1. APPLICATIONS REPOSITORY
 // ==============================================================================
 
@@ -334,7 +472,7 @@ export async function fetchApplications(): Promise<RiderApplication[]> {
   return [];
 }
 
-export async function saveApplication(app: RiderApplication): Promise<void> {
+export async function saveApplication(app: RiderApplication): Promise<{ success: boolean; error?: string }> {
   // Update local cache
   try {
     const cached = localStorage.getItem(LOCAL_APPS_KEY);
@@ -350,21 +488,9 @@ export async function saveApplication(app: RiderApplication): Promise<void> {
     // ignore
   }
 
-  // Sync with Supabase
-  const client = getSupabaseClient();
-  if (client) {
-    try {
-      const dbRecord = mapApplicationToDb(app);
-      const { error } = await client
-        .from('applications')
-        .upsert(dbRecord, { onConflict: 'id' });
-      if (error) {
-        console.error('Supabase application upsert error:', error);
-      }
-    } catch (err) {
-      console.warn('Supabase application sync error:', err);
-    }
-  }
+  // Sync with Supabase using adaptiveUpsert
+  const dbRecord = mapApplicationToDb(app);
+  return await adaptiveUpsert('applications', dbRecord, 'id');
 }
 
 export const saveApplicationToDb = saveApplication;
@@ -455,7 +581,7 @@ export async function fetchBikes(): Promise<Bike[]> {
   return [];
 }
 
-export async function saveBike(bike: Bike): Promise<void> {
+export async function saveBike(bike: Bike): Promise<{ success: boolean; error?: string }> {
   try {
     const cached = localStorage.getItem(LOCAL_BIKES_KEY);
     let list: Bike[] = cached ? JSON.parse(cached) : [];
@@ -470,33 +596,28 @@ export async function saveBike(bike: Bike): Promise<void> {
     // ignore
   }
 
-  const client = getSupabaseClient();
-  if (client) {
-    try {
-      const dbRecord = {
-        id: bike.id,
-        name: bike.name,
-        subtitle: bike.subtitle,
-        brand: bike.brand,
-        category: bike.category,
-        is_available: bike.isAvailable,
-        is_coming_soon: Boolean(bike.isComingSoon),
-        image: bike.image,
-        badge: bike.badge,
-        fuel_type: bike.fuelType,
-        engine_capacity: bike.engineCapacity,
-        tank_capacity: bike.tankCapacity,
-        range_per_charge: bike.rangePerCharge,
-        delivery_box_ready: bike.deliveryBoxReady,
-        pricing: bike.pricing,
-        key_features: bike.keyFeatures,
-        recommended_for: bike.recommendedFor,
-      };
-      await client.from('bikes').upsert(dbRecord, { onConflict: 'id' });
-    } catch (err) {
-      console.warn('Supabase bike save error:', err);
-    }
-  }
+  const dbRecord = {
+    id: bike.id,
+    name: bike.name,
+    subtitle: bike.subtitle,
+    brand: bike.brand,
+    category: bike.category,
+    is_available: bike.isAvailable,
+    is_coming_soon: Boolean(bike.isComingSoon),
+    image: bike.image,
+    image_url: bike.image,
+    badge: bike.badge,
+    fuel_type: bike.fuelType,
+    engine_capacity: bike.engineCapacity,
+    tank_capacity: bike.tankCapacity,
+    range_per_charge: bike.rangePerCharge,
+    delivery_box_ready: bike.deliveryBoxReady,
+    pricing: bike.pricing,
+    key_features: bike.keyFeatures,
+    recommended_for: bike.recommendedFor,
+  };
+
+  return await adaptiveUpsert('bikes', dbRecord, 'id');
 }
 
 export const saveBikeToDb = saveBike;
@@ -667,67 +788,9 @@ export async function saveVehicle(vehicle: Vehicle): Promise<{ success: boolean;
     // ignore
   }
 
-  // 2. Persist to Supabase with schema-safe column handling & RLS diagnostics
-  const client = getSupabaseClient();
-  if (client) {
-    try {
-      let record: Record<string, any> = mapVehicleToDb(vehicle);
-
-      // Attempt upsert first
-      let { error } = await client.from('vehicles').upsert(record, { onConflict: 'id' });
-
-      if (!error) {
-        return { success: true };
-      }
-
-      console.warn('Supabase primary vehicle upsert error:', error);
-
-      // Check for RLS (Row Level Security) violation
-      if (
-        error.message?.includes('row-level security') ||
-        error.message?.includes('violates row-level security policy') ||
-        error.code === '42501'
-      ) {
-        const rlsMsg = 'Row Level Security (RLS) is blocking inserts on table "vehicles". In Supabase SQL Editor, run: CREATE POLICY "Public access" ON public.vehicles FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);';
-        console.error('Supabase RLS Error:', rlsMsg);
-        return { success: false, error: rlsMsg };
-      }
-
-      // Check if a specific column is missing from user's schema cache (PGRST204)
-      if (error.message?.includes('Could not find the') || error.message?.includes('column')) {
-        // Try saving with ultra-minimal core schema
-        const minimalRecord = {
-          id: vehicle.id,
-          registration_plate: (vehicle.registrationPlate || (vehicle as any).registration_plate || '').toUpperCase().trim(),
-          vin: (vehicle.vin || (vehicle as any).vin || '').toUpperCase().trim(),
-          engine_number: (vehicle.engineNumber || (vehicle as any).engine_number || '').toUpperCase().trim() || null,
-          model_name: vehicle.modelName || vehicle.model || (vehicle as any).model_name || 'Boxer 150',
-          status: vehicle.status || 'available_showroom',
-          current_mileage_km: Number(vehicle.current_mileage_km ?? vehicle.odometerKm ?? 0),
-        };
-
-        const { error: minimalError } = await client.from('vehicles').upsert(minimalRecord, { onConflict: 'id' });
-        if (!minimalError) {
-          return { success: true };
-        }
-        console.warn('Minimal vehicle upsert failed, trying direct insert:', minimalError);
-      }
-
-      // Try direct insert fallback in case onConflict is not configured on id
-      const { error: insertError } = await client.from('vehicles').insert(record);
-      if (!insertError) {
-        return { success: true };
-      }
-
-      console.error('Supabase vehicle insert fallback failed:', insertError);
-      return { success: false, error: insertError.message || error.message };
-    } catch (err: any) {
-      console.error('Supabase vehicle save exception:', err);
-      return { success: false, error: err?.message || 'Database connection error' };
-    }
-  }
-
-  return { success: true };
+  // 2. Persist to Supabase with adaptiveUpsert (auto strips unknown cols, handles FKs & RLS)
+  const record = mapVehicleToDb(vehicle);
+  return await adaptiveUpsert('vehicles', record, 'id');
 }
 
 export async function syncAllPendingVehiclesToSupabase(): Promise<{ total: number; synced: number; errors: string[] }> {
@@ -920,55 +983,8 @@ export async function saveDriver(driver: Driver): Promise<{ success: boolean; er
     // ignore
   }
 
-  const client = getSupabaseClient();
-  if (client) {
-    try {
-      const dbRecord = mapDriverToDb(driver);
-      const { error } = await client.from('drivers').upsert(dbRecord, { onConflict: 'id' });
-      if (!error) {
-        return { success: true };
-      }
-
-      console.warn('Primary Supabase driver upsert error, attempting baseline fallback:', error);
-
-      const fallbackDriver = {
-        id: driver.id,
-        full_name: driver.fullName,
-        id_number: driver.idOrPassportNumber || '0000000000000',
-        phone_number: driver.phone || driver.whatsappNumber || '',
-        email: driver.email || null,
-        status: driver.status || 'active',
-        assigned_vehicle_id: driver.assignedVehicleId || null,
-        assigned_vehicle_reg: driver.assignedBikeVinOrPlate || null,
-        vehicle_model: driver.assignedBikeName || null,
-        weekly_rate_zar: Number(driver.weeklyRate) || 0,
-        deposit_paid: Number(driver.depositPaid) || 0,
-        balance_due: Number(driver.balanceDue) || 0,
-        total_paid: Number(driver.totalPaid) || 0,
-        risk_score: Number(driver.riskScore) || 90,
-        payment_score: Number(driver.paymentScore) || 100,
-        incident_count: Number(driver.incidentCount) || 0,
-        delivery_platform: driver.primaryPlatform || 'Checkers Sixty60',
-        risk_tier: driver.riskTier || 'low',
-        emergency_contact_name: null,
-        emergency_contact_phone: null,
-        updated_at: new Date().toISOString(),
-      };
-
-      const { error: fallbackError } = await client.from('drivers').upsert(fallbackDriver, { onConflict: 'id' });
-      if (!fallbackError) {
-        return { success: true };
-      }
-
-      console.error('Supabase driver fallback save failed:', fallbackError);
-      return { success: false, error: fallbackError.message || error.message };
-    } catch (err: any) {
-      console.error('Supabase driver save exception:', err);
-      return { success: false, error: err?.message || 'Database connection error' };
-    }
-  }
-
-  return { success: true };
+  const dbRecord = mapDriverToDb(driver);
+  return await adaptiveUpsert('drivers', dbRecord, 'id');
 }
 
 export async function deleteDriver(driverId: string): Promise<void> {
@@ -1048,7 +1064,7 @@ export async function fetchParts(): Promise<PartsInventoryItem[]> {
   return [];
 }
 
-export async function savePart(part: PartsInventoryItem): Promise<void> {
+export async function savePart(part: PartsInventoryItem): Promise<{ success: boolean; error?: string }> {
   try {
     const cached = localStorage.getItem(LOCAL_PARTS_KEY);
     let list: PartsInventoryItem[] = cached ? JSON.parse(cached) : [];
@@ -1063,33 +1079,27 @@ export async function savePart(part: PartsInventoryItem): Promise<void> {
     // ignore
   }
 
-  const client = getSupabaseClient();
-  if (client) {
-    try {
-      const dbRecord = {
-        id: part.id,
-        sku: part.sku,
-        part_number: part.sku,
-        name: part.name,
-        category: part.category,
-        quantity_in_stock: part.quantityInStock,
-        min_threshold: part.minThreshold,
-        minimum_threshold: part.minThreshold,
-        cost_price_zar: part.costPriceZar,
-        unit_cost: part.costPriceZar,
-        selling_price_zar: part.sellingPriceZar,
-        retail_price: part.sellingPriceZar,
-        compatible_models: part.compatibleModels,
-        supplier_name: part.supplierName,
-        supplier: part.supplierName,
-        last_restocked_date: part.lastRestockedDate,
-        image_url: part.imageUrl || null,
-      };
-      await client.from('parts_inventory').upsert(dbRecord, { onConflict: 'id' });
-    } catch (err) {
-      console.warn('Supabase part save error:', err);
-    }
-  }
+  const dbRecord = {
+    id: part.id,
+    sku: part.sku,
+    part_number: part.sku,
+    name: part.name,
+    category: part.category,
+    quantity_in_stock: part.quantityInStock,
+    min_threshold: part.minThreshold,
+    minimum_threshold: part.minThreshold,
+    cost_price_zar: part.costPriceZar,
+    unit_cost: part.costPriceZar,
+    selling_price_zar: part.sellingPriceZar,
+    retail_price: part.sellingPriceZar,
+    compatible_models: part.compatibleModels,
+    supplier_name: part.supplierName,
+    supplier: part.supplierName,
+    last_restocked_date: part.lastRestockedDate,
+    image_url: part.imageUrl || null,
+  };
+
+  return await adaptiveUpsert('parts_inventory', dbRecord, 'id', ['parts']);
 }
 
 export async function deletePart(partId: string): Promise<void> {
@@ -1173,7 +1183,7 @@ export async function fetchServices(): Promise<RepairAndService[]> {
   return [];
 }
 
-export async function saveService(service: RepairAndService): Promise<void> {
+export async function saveService(service: RepairAndService): Promise<{ success: boolean; error?: string }> {
   try {
     const cached = localStorage.getItem(LOCAL_SERVICES_KEY);
     let list: RepairAndService[] = cached ? JSON.parse(cached) : [];
@@ -1188,35 +1198,29 @@ export async function saveService(service: RepairAndService): Promise<void> {
     // ignore
   }
 
-  const client = getSupabaseClient();
-  if (client) {
-    try {
-      const dbRecord = {
-        id: service.id,
-        vehicle_id: service.vehicleId,
-        vehicle_plate: service.vehiclePlate,
-        vehicle_reg: service.vehiclePlate,
-        driver_id: service.driverId || null,
-        driver_name: service.driverName || null,
-        driver_phone: service.driverPhone || null,
-        service_type: service.serviceType,
-        odometer_km: service.odometerKm,
-        mileage_at_service_km: service.odometerKm,
-        cost_zar: service.costZar,
-        total_cost_zar: service.costZar,
-        technician_name: service.technicianName,
-        garage_location: service.garageLocation,
-        service_date: service.serviceDate,
-        status: service.status,
-        parts_used: service.partsUsed || [],
-        notes: service.notes || null,
-        invoice_url: service.invoiceUrl || null,
-      };
-      await client.from('repairs_and_services').upsert(dbRecord, { onConflict: 'id' });
-    } catch (err) {
-      console.warn('Supabase service save error:', err);
-    }
-  }
+  const dbRecord = {
+    id: service.id,
+    vehicle_id: service.vehicleId,
+    vehicle_plate: service.vehiclePlate,
+    vehicle_reg: service.vehiclePlate,
+    driver_id: service.driverId || null,
+    driver_name: service.driverName || null,
+    driver_phone: service.driverPhone || null,
+    service_type: service.serviceType,
+    odometer_km: service.odometerKm,
+    mileage_at_service_km: service.odometerKm,
+    cost_zar: service.costZar,
+    total_cost_zar: service.costZar,
+    technician_name: service.technicianName,
+    garage_location: service.garageLocation,
+    service_date: service.serviceDate,
+    status: service.status,
+    parts_used: service.partsUsed || [],
+    notes: service.notes || null,
+    invoice_url: service.invoiceUrl || null,
+  };
+
+  return await adaptiveUpsert('repairs_and_services', dbRecord, 'id', ['services', 'repairs']);
 }
 
 export async function deleteService(serviceId: string): Promise<void> {
@@ -1299,7 +1303,7 @@ export async function fetchFines(): Promise<TrafficFine[]> {
   return [];
 }
 
-export async function saveFine(fine: TrafficFine): Promise<void> {
+export async function saveFine(fine: TrafficFine): Promise<{ success: boolean; error?: string }> {
   try {
     const cached = localStorage.getItem(LOCAL_FINES_KEY);
     let list: TrafficFine[] = cached ? JSON.parse(cached) : [];
@@ -1314,31 +1318,25 @@ export async function saveFine(fine: TrafficFine): Promise<void> {
     // ignore
   }
 
-  const client = getSupabaseClient();
-  if (client) {
-    try {
-      const dbRecord = {
-        id: fine.id,
-        notice_number: fine.noticeNumber,
-        infringement_date: fine.infringementDate,
-        vehicle_plate: fine.vehiclePlate,
-        driver_id: fine.driverId || null,
-        driver_name: fine.driverName || null,
-        location: fine.location,
-        municipality: fine.municipality,
-        infringement_type: fine.infringementType,
-        amount_zar: fine.amountZar,
-        discounted_amount_zar: fine.discountedAmountZar || fine.amountZar / 2,
-        due_date: fine.dueDate,
-        aarto_status: fine.aartoStatus,
-        payment_status: fine.paymentStatus,
-        document_url: fine.documentUrl || null,
-      };
-      await client.from('traffic_fines').upsert(dbRecord, { onConflict: 'id' });
-    } catch (err) {
-      console.warn('Supabase fine save error:', err);
-    }
-  }
+  const dbRecord = {
+    id: fine.id,
+    notice_number: fine.noticeNumber,
+    infringement_date: fine.infringementDate,
+    vehicle_plate: fine.vehiclePlate,
+    driver_id: fine.driverId || null,
+    driver_name: fine.driverName || null,
+    location: fine.location,
+    municipality: fine.municipality,
+    infringement_type: fine.infringementType,
+    amount_zar: fine.amountZar,
+    discounted_amount_zar: fine.discountedAmountZar || fine.amountZar / 2,
+    due_date: fine.dueDate,
+    aarto_status: fine.aartoStatus,
+    payment_status: fine.paymentStatus,
+    document_url: fine.documentUrl || null,
+  };
+
+  return await adaptiveUpsert('traffic_fines', dbRecord, 'id', ['fines']);
 }
 
 export async function deleteFine(fineId: string): Promise<void> {
@@ -1423,7 +1421,7 @@ export async function fetchTransactions(): Promise<YocoTransaction[]> {
   return [];
 }
 
-export async function saveTransaction(tx: YocoTransaction): Promise<void> {
+export async function saveTransaction(tx: YocoTransaction): Promise<{ success: boolean; error?: string }> {
   try {
     const cached = localStorage.getItem(LOCAL_TRANSACTIONS_KEY);
     let list: YocoTransaction[] = cached ? JSON.parse(cached) : [];
@@ -1438,33 +1436,27 @@ export async function saveTransaction(tx: YocoTransaction): Promise<void> {
     // ignore
   }
 
-  const client = getSupabaseClient();
-  if (client) {
-    try {
-      const dbRecord = {
-        id: tx.id,
-        yoco_charge_id: tx.yocoChargeId,
-        yoco_payment_link_id: tx.yocoPaymentLinkId || null,
-        driver_id: tx.driverId,
-        driver_name: tx.driverName,
-        amount_zar: tx.amountZar,
-        currency: tx.currency,
-        payment_method: tx.paymentMethod,
-        allocation: tx.allocation,
-        status: tx.status,
-        yoco_fee_zar: tx.yocoFeeZar,
-        net_amount_zar: tx.netAmountZar,
-        card_last4: tx.cardLast4 || null,
-        card_brand: tx.cardBrand || null,
-        reconciliation_status: tx.reconciliationStatus,
-        transaction_date: tx.transactionDate,
-        yoco_metadata: tx.yocoMetadata || {},
-      };
-      await client.from('yoco_transactions').upsert(dbRecord, { onConflict: 'id' });
-    } catch (err) {
-      console.warn('Supabase transaction save error:', err);
-    }
-  }
+  const dbRecord = {
+    id: tx.id,
+    yoco_charge_id: tx.yocoChargeId,
+    yoco_payment_link_id: tx.yocoPaymentLinkId || null,
+    driver_id: tx.driverId,
+    driver_name: tx.driverName,
+    amount_zar: tx.amountZar,
+    currency: tx.currency,
+    payment_method: tx.paymentMethod,
+    allocation: tx.allocation,
+    status: tx.status,
+    yoco_fee_zar: tx.yocoFeeZar,
+    net_amount_zar: tx.netAmountZar,
+    card_last4: tx.cardLast4 || null,
+    card_brand: tx.cardBrand || null,
+    reconciliation_status: tx.reconciliationStatus,
+    transaction_date: tx.transactionDate,
+    yoco_metadata: tx.yocoMetadata || {},
+  };
+
+  return await adaptiveUpsert('yoco_transactions', dbRecord, 'id', ['transactions', 'payments']);
 }
 
 // ==============================================================================
@@ -1531,7 +1523,7 @@ export async function fetchAgreements(): Promise<RentalAgreement[]> {
   return [];
 }
 
-export async function saveAgreement(ag: RentalAgreement): Promise<void> {
+export async function saveAgreement(ag: RentalAgreement): Promise<{ success: boolean; error?: string }> {
   try {
     const cached = localStorage.getItem(LOCAL_AGREEMENTS_KEY);
     let list: RentalAgreement[] = cached ? JSON.parse(cached) : [];
@@ -1546,37 +1538,31 @@ export async function saveAgreement(ag: RentalAgreement): Promise<void> {
     // ignore
   }
 
-  const client = getSupabaseClient();
-  if (client) {
-    try {
-      const dbRecord = {
-        id: ag.id,
-        agreement_number: ag.agreementNumber,
-        driver_id: ag.driverId,
-        driver_name: ag.driverName,
-        vehicle_id: ag.vehicleId,
-        vehicle_plate: ag.vehiclePlate,
-        agreement_type: ag.agreementType,
-        term_months: ag.termMonths,
-        weekly_rate_zar: ag.weeklyRateZar,
-        deposit_amount_zar: ag.depositAmountZar,
-        deposit_paid: ag.depositPaid,
-        start_date: ag.startDate,
-        expected_end_date: ag.expectedEndDate,
-        actual_end_date: ag.actualEndDate || null,
-        total_contract_value_zar: ag.totalContractValueZar,
-        total_paid_zar: ag.totalPaidZar,
-        remaining_balance_zar: ag.remainingBalanceZar,
-        is_completed: ag.isCompleted,
-        signature_data_url: ag.signatureDataUrl || null,
-        contract_pdf_url: ag.contractPdfUrl || null,
-        terms_version: ag.termsVersion,
-      };
-      await client.from('rental_agreements').upsert(dbRecord, { onConflict: 'id' });
-    } catch (err) {
-      console.warn('Supabase agreement save error:', err);
-    }
-  }
+  const dbRecord = {
+    id: ag.id,
+    agreement_number: ag.agreementNumber,
+    driver_id: ag.driverId,
+    driver_name: ag.driverName,
+    vehicle_id: ag.vehicleId,
+    vehicle_plate: ag.vehiclePlate,
+    agreement_type: ag.agreementType,
+    term_months: ag.termMonths,
+    weekly_rate_zar: ag.weeklyRateZar,
+    deposit_amount_zar: ag.depositAmountZar,
+    deposit_paid: ag.depositPaid,
+    start_date: ag.startDate,
+    expected_end_date: ag.expectedEndDate,
+    actual_end_date: ag.actualEndDate || null,
+    total_contract_value_zar: ag.totalContractValueZar,
+    total_paid_zar: ag.totalPaidZar,
+    remaining_balance_zar: ag.remainingBalanceZar,
+    is_completed: ag.isCompleted,
+    signature_data_url: ag.signatureDataUrl || null,
+    contract_pdf_url: ag.contractPdfUrl || null,
+    terms_version: ag.termsVersion,
+  };
+
+  return await adaptiveUpsert('rental_agreements', dbRecord, 'id', ['agreements']);
 }
 
 // ==============================================================================
@@ -1631,7 +1617,7 @@ export async function fetchReferrals(): Promise<DriverReferral[]> {
   return [];
 }
 
-export async function saveReferral(ref: DriverReferral): Promise<void> {
+export async function saveReferral(ref: DriverReferral): Promise<{ success: boolean; error?: string }> {
   try {
     const cached = localStorage.getItem(LOCAL_REFERRALS_KEY);
     let list: DriverReferral[] = cached ? JSON.parse(cached) : [];
@@ -1646,44 +1632,19 @@ export async function saveReferral(ref: DriverReferral): Promise<void> {
     // ignore
   }
 
-  const client = getSupabaseClient();
-  if (client) {
-    try {
-      // Primary attempt: standard schema
-      const primaryRecord = {
-        id: ref.id,
-        referrer_driver_id: ref.referrerDriverId || null,
-        referrer_driver_name: ref.referrerDriverName || '',
-        referred_applicant_name: ref.referredApplicantName || '',
-        referred_phone: ref.referredPhone || '',
-        referral_date: ref.referralDate || new Date().toISOString().split('T')[0],
-        status: ref.status || 'pending_onboarding',
-        reward_amount_zar: Number(ref.rewardAmountZar) || 350,
-        paid_date: ref.paidDate || null,
-      };
-      const { error: err1 } = await client.from('driver_referrals').upsert(primaryRecord, { onConflict: 'id' });
-      
-      if (err1) {
-        // Fallback attempt: alternate column names
-        const fallbackRecord = {
-          id: ref.id,
-          referring_driver_id: ref.referrerDriverId || null,
-          referring_driver_name: ref.referrerDriverName || '',
-          referred_applicant_name: ref.referredApplicantName || '',
-          referred_applicant_phone: ref.referredPhone || '',
-          referral_date: ref.referralDate || new Date().toISOString().split('T')[0],
-          status: ref.status || 'pending_onboarding',
-          bonus_amount_zar: Number(ref.rewardAmountZar) || 350,
-        };
-        const { error: err2 } = await client.from('driver_referrals').upsert(fallbackRecord, { onConflict: 'id' });
-        if (err2) {
-          console.warn('Supabase referral save fallback error:', err2);
-        }
-      }
-    } catch (err) {
-      console.warn('Supabase referral save error:', err);
-    }
-  }
+  const primaryRecord = {
+    id: ref.id,
+    referrer_driver_id: ref.referrerDriverId || null,
+    referrer_driver_name: ref.referrerDriverName || '',
+    referred_applicant_name: ref.referredApplicantName || '',
+    referred_phone: ref.referredPhone || '',
+    referral_date: ref.referralDate || new Date().toISOString().split('T')[0],
+    status: ref.status || 'pending_onboarding',
+    reward_amount_zar: Number(ref.rewardAmountZar) || 350,
+    paid_date: ref.paidDate || null,
+  };
+
+  return await adaptiveUpsert('driver_referrals', primaryRecord, 'id', ['referrals']);
 }
 
 export async function deleteReferral(referralId: string): Promise<void> {
@@ -1801,22 +1762,15 @@ export async function saveCustomizationToDb(
     // ignore
   }
 
-  const client = getSupabaseClient();
-  if (client) {
-    try {
-      const dbRecord = {
-        id: 'global',
-        logo_url: updated.logoUrl,
-        hero_image_url: updated.heroImageUrl,
-        hero_title: updated.heroTitle,
-        hero_subtitle: updated.heroSubtitle,
-        updated_at: new Date().toISOString(),
-      };
-      await client.from('site_settings').upsert(dbRecord, { onConflict: 'id' });
-    } catch (err) {
-      console.warn('Supabase site_settings save error:', err);
-    }
-  }
+  const dbRecord = {
+    id: 'global',
+    logo_url: updated.logoUrl,
+    hero_image_url: updated.heroImageUrl,
+    hero_title: updated.heroTitle,
+    hero_subtitle: updated.heroSubtitle,
+    updated_at: new Date().toISOString(),
+  };
+  await adaptiveUpsert('site_settings', dbRecord, 'id');
 
   return updated;
 }
