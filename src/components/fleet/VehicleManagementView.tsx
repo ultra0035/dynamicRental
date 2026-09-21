@@ -58,7 +58,13 @@ import {
   ShieldAlert,
   CheckCheck
 } from 'lucide-react';
-import { saveSingleVehicleAsync, syncAllVehiclesToDatabase } from '../../lib/fleetStore';
+import { 
+  saveSingleVehicleAsync, 
+  syncAllVehiclesToDatabase,
+  saveSinglePartAsync,
+  saveSingleServiceAsync,
+  saveSingleFineAsync
+} from '../../lib/fleetStore';
 
 export type VehicleSubTab = 'register' | 'live_telematics' | 'parts_inventory' | 'repairs_service' | 'traffic_fines';
 
@@ -552,7 +558,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleCreatePartSubmit = (e: React.FormEvent) => {
+  const handleCreatePartSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPartForm.name || !newPartForm.sku) {
       alert('Please provide Part Name and SKU');
@@ -576,6 +582,21 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
     onAddPart(createdPart);
     setIsAddPartOpen(false);
+
+    // Persist directly to Supabase
+    const dbRes = await saveSinglePartAsync(createdPart);
+    if (dbRes.success) {
+      setDbNotification({
+        type: 'success',
+        message: `✓ Part "${createdPart.name}" (SKU: ${createdPart.sku}) successfully saved and synced to Supabase parts_inventory!`,
+      });
+    } else if (dbRes.error) {
+      setDbNotification({
+        type: 'error',
+        message: `Saved locally, but Supabase reported: ${dbRes.error}`,
+      });
+    }
+
     setNewPartForm({
       name: '',
       sku: '',
@@ -771,7 +792,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
   };
 
   // Submit Service Log
-  const handleCreateService = (e: React.FormEvent) => {
+  const handleCreateService = async (e: React.FormEvent) => {
     e.preventDefault();
     const matchedVeh = vehicles.find((v) => v.registrationPlate === newServiceForm.vehiclePlate);
     const assignedDrv = drivers.find((d) => d.id === newServiceForm.driverId || d.fullName === newServiceForm.driverName) || 
@@ -809,6 +830,20 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       });
     }
 
+    // Persist directly to Supabase
+    const dbRes = await saveSingleServiceAsync(srv);
+    if (dbRes.success) {
+      setDbNotification({
+        type: 'success',
+        message: `✓ Workshop service record for ${srv.vehiclePlate} (${srv.serviceType.replace(/_/g, ' ')}) successfully logged and saved to Supabase repairs_and_services!`,
+      });
+    } else if (dbRes.error) {
+      setDbNotification({
+        type: 'error',
+        message: `Logged locally, but Supabase reported: ${dbRes.error}`,
+      });
+    }
+
     // Broadcast WhatsApp if enabled
     if (notifyDriverWhatsApp && srv.driverPhone) {
       sendServiceWhatsApp(srv, srv.driverPhone);
@@ -818,7 +853,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
   };
 
   // Submit Fine
-  const handleCreateFine = (e: React.FormEvent) => {
+  const handleCreateFine = async (e: React.FormEvent) => {
     e.preventDefault();
     const fine: TrafficFine = {
       id: `fine-${Date.now()}`,
@@ -837,6 +872,16 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     };
 
     onAddFine(fine);
+
+    // Direct Supabase sync
+    const dbRes = await saveSingleFineAsync(fine);
+    if (dbRes.success) {
+      setDbNotification({
+        type: 'success',
+        message: `✓ Traffic fine notice ${fine.noticeNumber} for ${fine.vehiclePlate} synced to Supabase!`,
+      });
+    }
+
     setIsAddFineOpen(false);
   };
 
@@ -1991,21 +2036,21 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       onChange={(e) => {
                         const bId = e.target.value;
                         let autoModel = newVehicleForm.model_name;
-                        if (bId === 'bigboy-velocity-150') autoModel = 'Big Boy Velocity 150';
-                        else if (bId === 'bajaj-boxer-150') autoModel = 'Bajaj Boxer 150 HD';
-                        else if (bId === 'honda-ace-125') autoModel = 'Honda Ace 125';
-                        else if (bId === 'hero-hunter-150') autoModel = 'Hero Hunter 150';
-                        else if (bId === 'arch-electric') autoModel = 'Arch Electric E-Bike';
+                        if (bId === 'bigboy-velocity-150' || bId === 'bigboy') autoModel = 'Big Boy Velocity 150';
+                        else if (bId === 'bajaj-boxer-150' || bId === 'baja-boxer') autoModel = 'Bajaj Boxer 150 HD';
+                        else if (bId === 'honda-ace-125' || bId === 'honda') autoModel = 'Honda Ace 125';
+                        else if (bId === 'hero-hunter-150' || bId === 'hero') autoModel = 'Hero Hunter 150';
+                        else if (bId === 'arch-electric' || bId === 'arch-eclectic') autoModel = 'Arch Eclectic E-Bike';
                         else if (bId === 'custom') autoModel = '';
                         setNewVehicleForm({ ...newVehicleForm, bike_id: bId, model_name: autoModel });
                       }}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none bg-white"
                     >
-                      <option value="bigboy-velocity-150">Big Boy (Velocity 150)</option>
-                      <option value="bajaj-boxer-150">Bajaj Boxer (150 HD)</option>
-                      <option value="honda-ace-125">Honda (Ace 125)</option>
-                      <option value="hero-hunter-150">Hero (Hunter 150)</option>
-                      <option value="arch-electric">Arch Electric (E-Bike)</option>
+                      <option value="bigboy-velocity-150">Big Boy</option>
+                      <option value="bajaj-boxer-150">Baja Boxer</option>
+                      <option value="honda-ace-125">Honda</option>
+                      <option value="hero-hunter-150">Hero</option>
+                      <option value="arch-electric">Arch Eclectic</option>
                       <option value="custom">Custom Model</option>
                     </select>
                   </div>

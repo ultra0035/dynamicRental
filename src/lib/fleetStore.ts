@@ -141,7 +141,12 @@ export function saveFleetDrivers(drivers: Driver[]): void {
   const deduped = deduplicateDrivers(drivers);
   saveToStorage(STORAGE_KEYS.DRIVERS, deduped);
   deduped.forEach((drv) => {
-    dbSaveDriver(drv).catch((err) => console.warn('Failed to background save driver to Supabase:', err));
+    dbSaveDriver(drv)
+      .then((res) => {
+        if (!res.success) console.warn('[Supabase Sync Driver Warning]', res.error);
+        else console.log('[Supabase Sync Driver Success]', drv.fullName);
+      })
+      .catch((err) => console.warn('Failed to background save driver to Supabase:', err));
   });
 }
 
@@ -156,7 +161,12 @@ export function getFleetVehicles(): Vehicle[] {
 export function saveFleetVehicles(vehicles: Vehicle[]): void {
   saveToStorage(STORAGE_KEYS.VEHICLES, vehicles);
   vehicles.forEach((veh) => {
-    dbSaveVehicle(veh).catch((err) => console.warn('Failed to background save vehicle to Supabase:', err));
+    dbSaveVehicle(veh)
+      .then((res) => {
+        if (!res.success) console.warn('[Supabase Sync Vehicle Warning]', res.error);
+        else console.log('[Supabase Sync Vehicle Success]', veh.registrationPlate);
+      })
+      .catch((err) => console.warn('Failed to background save vehicle to Supabase:', err));
   });
 }
 
@@ -175,8 +185,17 @@ export function getFleetParts(): PartsInventoryItem[] {
 export function saveFleetParts(parts: PartsInventoryItem[]): void {
   saveToStorage(STORAGE_KEYS.PARTS, parts);
   parts.forEach((p) => {
-    dbSavePart(p).catch(() => {});
+    dbSavePart(p)
+      .then((res) => {
+        if (!res.success) console.warn('[Supabase Sync Part Warning]', res.error);
+        else console.log('[Supabase Sync Part Success]', p.name);
+      })
+      .catch((err) => console.warn('Failed to background save part to Supabase:', err));
   });
+}
+
+export async function saveSinglePartAsync(part: PartsInventoryItem): Promise<{ success: boolean; error?: string }> {
+  return await dbSavePart(part);
 }
 
 export function deleteFleetPart(partId: string): void {
@@ -192,8 +211,17 @@ export function getFleetServices(): RepairAndService[] {
 export function saveFleetServices(services: RepairAndService[]): void {
   saveToStorage(STORAGE_KEYS.SERVICES, services);
   services.forEach((s) => {
-    dbSaveService(s).catch(() => {});
+    dbSaveService(s)
+      .then((res) => {
+        if (!res.success) console.warn('[Supabase Sync Service Warning]', res.error);
+        else console.log('[Supabase Sync Service Success]', s.vehiclePlate);
+      })
+      .catch((err) => console.warn('Failed to background save service to Supabase:', err));
   });
+}
+
+export async function saveSingleServiceAsync(service: RepairAndService): Promise<{ success: boolean; error?: string }> {
+  return await dbSaveService(service);
 }
 
 export function getFleetFines(): TrafficFine[] {
@@ -203,8 +231,17 @@ export function getFleetFines(): TrafficFine[] {
 export function saveFleetFines(fines: TrafficFine[]): void {
   saveToStorage(STORAGE_KEYS.FINES, fines);
   fines.forEach((f) => {
-    dbSaveFine(f).catch(() => {});
+    dbSaveFine(f)
+      .then((res) => {
+        if (!res.success) console.warn('[Supabase Sync Fine Warning]', res.error);
+        else console.log('[Supabase Sync Fine Success]', f.noticeNumber);
+      })
+      .catch((err) => console.warn('Failed to background save fine to Supabase:', err));
   });
+}
+
+export async function saveSingleFineAsync(fine: TrafficFine): Promise<{ success: boolean; error?: string }> {
+  return await dbSaveFine(fine);
 }
 
 export function getFleetTransactions(): YocoTransaction[] {
@@ -214,8 +251,17 @@ export function getFleetTransactions(): YocoTransaction[] {
 export function saveFleetTransactions(txs: YocoTransaction[]): void {
   saveToStorage(STORAGE_KEYS.TRANSACTIONS, txs);
   txs.forEach((tx) => {
-    dbSaveTransaction(tx).catch(() => {});
+    dbSaveTransaction(tx)
+      .then((res) => {
+        if (!res.success) console.warn('[Supabase Sync Transaction Warning]', res.error);
+        else console.log('[Supabase Sync Transaction Success]', tx.id);
+      })
+      .catch((err) => console.warn('Failed to background save transaction to Supabase:', err));
   });
+}
+
+export async function saveSingleTransactionAsync(tx: YocoTransaction): Promise<{ success: boolean; error?: string }> {
+  return await dbSaveTransaction(tx);
 }
 
 export function getFleetAgreements(): RentalAgreement[] {
@@ -225,8 +271,17 @@ export function getFleetAgreements(): RentalAgreement[] {
 export function saveFleetAgreements(agreements: RentalAgreement[]): void {
   saveToStorage(STORAGE_KEYS.AGREEMENTS, agreements);
   agreements.forEach((ag) => {
-    dbSaveAgreement(ag).catch(() => {});
+    dbSaveAgreement(ag)
+      .then((res) => {
+        if (!res.success) console.warn('[Supabase Sync Agreement Warning]', res.error);
+        else console.log('[Supabase Sync Agreement Success]', ag.agreementNumber);
+      })
+      .catch((err) => console.warn('Failed to background save agreement to Supabase:', err));
   });
+}
+
+export async function saveSingleAgreementAsync(agreement: RentalAgreement): Promise<{ success: boolean; error?: string }> {
+  return await dbSaveAgreement(agreement);
 }
 
 export function getFleetReferrals(): DriverReferral[] {
@@ -236,8 +291,17 @@ export function getFleetReferrals(): DriverReferral[] {
 export function saveFleetReferrals(referrals: DriverReferral[]): void {
   saveToStorage(STORAGE_KEYS.REFERRALS, referrals);
   referrals.forEach((r) => {
-    dbSaveReferral(r).catch(() => {});
+    dbSaveReferral(r)
+      .then((res) => {
+        if (!res.success) console.warn('[Supabase Sync Referral Warning]', res.error);
+        else console.log('[Supabase Sync Referral Success]', r.referredApplicantName);
+      })
+      .catch((err) => console.warn('Failed to background save referral to Supabase:', err));
   });
+}
+
+export async function saveSingleReferralAsync(ref: DriverReferral): Promise<{ success: boolean; error?: string }> {
+  return await dbSaveReferral(ref);
 }
 
 export function deleteFleetReferral(referralId: string): void {

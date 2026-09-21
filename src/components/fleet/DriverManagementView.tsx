@@ -144,6 +144,10 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
 
   // Referrals Modal State
   const [isAddReferralOpen, setIsAddReferralOpen] = useState<boolean>(false);
+  const [dbNotification, setDbNotification] = useState<{
+    type: 'success' | 'error' | 'info';
+    message: string;
+  } | null>(null);
   const [newReferralForm, setNewReferralForm] = useState<Partial<DriverReferral>>({
     referrerDriverId: '',
     referrerDriverName: '',
@@ -390,9 +394,24 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
 
     // Direct persistence to Supabase backend
     try {
-      await saveReferral(newRef);
-    } catch (err) {
+      const dbRes = await saveReferral(newRef);
+      if (dbRes.success) {
+        setDbNotification({
+          type: 'success',
+          message: `✓ Referral for applicant "${newRef.referredApplicantName}" (Referrer: ${newRef.referrerDriverName}) was successfully saved and synced to Supabase referrals table!`,
+        });
+      } else {
+        setDbNotification({
+          type: 'error',
+          message: `Referral logged in app, but Supabase reported: ${dbRes.error || 'Sync warning'}`,
+        });
+      }
+    } catch (err: any) {
       console.warn('Direct referral Supabase save err:', err);
+      setDbNotification({
+        type: 'error',
+        message: `Sync error: ${err?.message || 'Database error'}`,
+      });
     }
 
     setIsAddReferralOpen(false);
@@ -619,6 +638,33 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Database Sync Feedback Toast Banner */}
+      {dbNotification && (
+        <div
+          className={`p-4 rounded-xl border flex items-center justify-between text-xs font-bold transition-all shadow-md ${
+            dbNotification.type === 'success'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+              : 'bg-rose-50 border-rose-300 text-rose-900'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {dbNotification.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{dbNotification.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDbNotification(null)}
+            className="p-1 hover:bg-black/5 rounded text-slate-500 hover:text-slate-700 ml-3"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* ------------------------------------------------------------- */}
       {/* SUBTAB 1: DRIVERS DIRECTORY */}

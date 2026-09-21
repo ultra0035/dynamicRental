@@ -216,17 +216,19 @@ export async function adaptiveUpsert(
 
   for (const currentTable of tablesToTry) {
     let currentRecord: Record<string, any> = { ...record };
-    // Remove undefined values to avoid schema issues
+    
+    // Sanitize record: remove undefined and convert empty strings in ID/numeric/date fields to null
     Object.keys(currentRecord).forEach((key) => {
       if (currentRecord[key] === undefined) {
         delete currentRecord[key];
+      } else if (currentRecord[key] === '' && (key.endsWith('_id') || key.endsWith('Id') || key.endsWith('_date') || key.endsWith('_at') || key.includes('cost') || key.includes('price') || key.includes('amount') || key.includes('km') || key.includes('mileage') || key.includes('threshold') || key.includes('stock') || key.includes('quantity'))) {
+        currentRecord[key] = null;
       }
     });
 
     const strippedColumns: string[] = [];
     const maxRetries = 25;
     let tableNotFound = false;
-
     let statusAttemptCount = 0;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -241,7 +243,38 @@ export async function adaptiveUpsert(
 
       console.warn(`[Supabase adaptiveUpsert ${currentTable} attempt ${attempt + 1}] error:`, error.message);
 
-      // 2. Check for check constraint violation (Postgres 23514)
+      // 2. Check for invalid UUID syntax error (Postgres 22P02)
+      // E.g. "invalid input syntax for type uuid: \"part-1738291823\"" or "invalid input syntax for type uuid: \"\""
+      if (
+        error.code === '22P02' ||
+        error.message?.includes('invalid input syntax for type uuid') ||
+        error.details?.includes('invalid input syntax for type uuid')
+      ) {
+        // If the ID column contains a custom non-standard prefix (e.g. part-, srv-, ref-), replace with standard UUID or delete to let DB default
+        if (currentRecord.id && typeof currentRecord.id === 'string' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentRecord.id)) {
+          console.log(`[Supabase Auto-Sync] Non-UUID id '${currentRecord.id}' detected for table '${currentTable}'. Trying with standard UUID...`);
+          try {
+            currentRecord.id = crypto.randomUUID();
+          } catch {
+            delete currentRecord.id;
+            strippedColumns.push('id');
+          }
+          continue;
+        }
+
+        // Check if any foreign key is invalid UUID
+        let sanitizedAnyFk = false;
+        Object.keys(currentRecord).forEach((k) => {
+          if (k.endsWith('_id') && currentRecord[k] && typeof currentRecord[k] === 'string' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentRecord[k])) {
+            console.log(`[Supabase Auto-Sync] Nulling invalid non-UUID foreign key '${k}' with value '${currentRecord[k]}'...`);
+            currentRecord[k] = null;
+            sanitizedAnyFk = true;
+          }
+        });
+        if (sanitizedAnyFk) continue;
+      }
+
+      // 3. Check for check constraint violation (Postgres 23514)
       // e.g. "new row for relation \"vehicles\" violates check constraint \"vehicles_status_check\""
       if (
         error.code === '23514' ||
@@ -254,7 +287,7 @@ export async function adaptiveUpsert(
           error.details?.includes('status')
         ) {
           statusAttemptCount++;
-          const candidateStatuses = ['available', 'assigned', 'in_maintenance', 'maintenance', 'active', 'rented', 'showroom'];
+          const candidateStatuses = ['available', 'assigned', 'in_maintenance', 'maintenance', 'active', 'rented', 'completed', 'pending', 'open', 'approved'];
           if (statusAttemptCount <= candidateStatuses.length) {
             const nextCandidate = candidateStatuses[statusAttemptCount - 1];
             console.log(`[Supabase Auto-Sync] Status check constraint violated. Retrying '${currentTable}' with status='${nextCandidate}'...`);
@@ -273,8 +306,8 @@ export async function adaptiveUpsert(
         if (constraintMatch && constraintMatch[1]) {
           const constraintName = constraintMatch[1];
           // Try to infer column name from constraint name e.g. vehicles_year_check -> year
-          const guessedCol = constraintName.replace(new RegExp(`^${currentTable}_?`, 'i'), '').replace(/_check$/i, '');
-          if (guessedCol && guessedCol in currentRecord) {
+          let guessedCol = constraintName.replace(new RegExp(`^${currentTable}_?`, 'i'), '').replace(/_check$/i, '');
+          if (guessedCol in currentRecord) {
             console.log(`[Supabase Auto-Sync] Removing check-constraint failing column '${guessedCol}' and retrying...`);
             delete currentRecord[guessedCol];
             strippedColumns.push(guessedCol);
@@ -283,9 +316,7 @@ export async function adaptiveUpsert(
         }
       }
 
-      // 3. Check for missing column error in PostgREST schema cache (Code PGRST204 or Postgres 42703)
-      // Examples: "Could not find the 'bike_id' column of 'vehicles' in the schema cache"
-      // or: "column \"bike_id\" of relation \"vehicles\" does not exist"
+      // 4. Check for missing column error in PostgREST schema cache (Code PGRST204 or Postgres 42703)
       const missingColMatch =
         error.message?.match(/Could not find the '([^']+)' column/i) ||
         error.message?.match(/column "([^"]+)" of relation/i) ||
@@ -304,8 +335,7 @@ export async function adaptiveUpsert(
         }
       }
 
-      // 4. Foreign key violation (Postgres 23503)
-      // e.g. "Key (bike_id)=(boxer-150) is not present in table \"bikes\""
+      // 5. Foreign key violation (Postgres 23503)
       if (
         error.code === '23503' ||
         error.message?.includes('foreign key constraint') ||
@@ -313,19 +343,44 @@ export async function adaptiveUpsert(
       ) {
         const fkMatch =
           error.details?.match(/Key \(([^)]+)\)=/i) ||
-          error.message?.match(/foreign key constraint "([^"]+)"/i);
+          error.message?.match(/foreign key constraint "([^"]+)"/i) ||
+          error.details?.match(/constraint "([^"]+)"/i);
+
+        let resolvedFk = false;
         if (fkMatch && fkMatch[1]) {
-          const fkField = fkMatch[1];
-          if (fkField in currentRecord) {
-            console.log(`[Supabase Auto-Sync] Nulling foreign key '${fkField}' from '${currentTable}' to prevent constraint violation and retrying...`);
-            delete currentRecord[fkField];
-            strippedColumns.push(fkField);
-            continue;
+          const rawFk = fkMatch[1];
+          // Clean constraint name: remove table prefix and _fkey suffix e.g. driver_referrals_referrer_driver_id_fkey -> referrer_driver_id
+          const cleanFk = rawFk
+            .replace(new RegExp(`^${currentTable}_?`, 'i'), '')
+            .replace(/_fkey$/i, '')
+            .replace(/_fk$/i, '');
+
+          if (cleanFk in currentRecord) {
+            console.log(`[Supabase Auto-Sync] Nulling foreign key '${cleanFk}' from '${currentTable}'...`);
+            currentRecord[cleanFk] = null;
+            resolvedFk = true;
+          } else if (rawFk in currentRecord) {
+            currentRecord[rawFk] = null;
+            resolvedFk = true;
           }
         }
+
+        // If specific FK wasn't extracted, null any obvious relational IDs present in the record
+        if (!resolvedFk) {
+          const commonFkCols = ['vehicle_id', 'driver_id', 'referrer_driver_id', 'referring_driver_id', 'bike_id', 'application_id'];
+          for (const fk of commonFkCols) {
+            if (fk in currentRecord && currentRecord[fk] !== null) {
+              console.log(`[Supabase Auto-Sync] Nulling candidate foreign key '${fk}' from '${currentTable}'...`);
+              currentRecord[fk] = null;
+              resolvedFk = true;
+            }
+          }
+        }
+
+        if (resolvedFk) continue;
       }
 
-      // 5. Check for RLS (Row Level Security) violation (Postgres 42501)
+      // 6. Check for RLS (Row Level Security) violation (Postgres 42501)
       if (
         error.message?.includes('row-level security') ||
         error.message?.includes('violates row-level security policy') ||
@@ -337,7 +392,7 @@ export async function adaptiveUpsert(
         };
       }
 
-      // 6. Table does not exist (Postgres 42P01)
+      // 7. Table does not exist (Postgres 42P01)
       if (
         error.code === '42P01' ||
         (error.message?.includes('does not exist') && (error.message?.includes('relation') || error.message?.includes('table')))
@@ -346,7 +401,7 @@ export async function adaptiveUpsert(
         break; // Try next alternate table name
       }
 
-      // 7. If upsert conflict on PK fails (e.g. 42P10), try direct insert
+      // 8. If upsert conflict on PK fails (e.g. 42P10), try direct insert
       const { data: insertData, error: insertError } = await client.from(currentTable).insert(currentRecord);
       if (!insertError) {
         return { success: true, data: insertData, strippedColumns };
@@ -364,28 +419,6 @@ export async function adaptiveUpsert(
           delete currentRecord[missingCol];
           strippedColumns.push(missingCol);
           continue;
-        }
-      }
-
-      // If status check constraint failed on insert as well
-      if (
-        insertError.code === '23514' ||
-        insertError.message?.includes('violates check constraint')
-      ) {
-        if (
-          insertError.message?.includes('status_check') ||
-          insertError.message?.includes('status')
-        ) {
-          statusAttemptCount++;
-          const candidateStatuses = ['available', 'assigned', 'in_maintenance', 'maintenance', 'active', 'rented'];
-          if (statusAttemptCount <= candidateStatuses.length) {
-            currentRecord.status = candidateStatuses[statusAttemptCount - 1];
-            continue;
-          } else if ('status' in currentRecord) {
-            delete currentRecord.status;
-            strippedColumns.push('status');
-            continue;
-          }
         }
       }
 
