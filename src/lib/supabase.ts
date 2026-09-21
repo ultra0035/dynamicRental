@@ -582,8 +582,8 @@ function mapDbToVehicle(row: any): Vehicle {
 }
 
 function mapVehicleToDb(veh: Vehicle) {
-  const modelName = veh.model_name || veh.modelName || veh.model || 'Boxer 150 HD';
-  const bikeId = veh.bike_id || veh.bikeId || veh.bikeModelId || 'boxer-150';
+  const modelName = veh.model_name || veh.modelName || veh.model || 'Big Boy Velocity 150';
+  const bikeId = veh.bike_id || veh.bikeId || veh.bikeModelId || 'bigboy-velocity-150';
   const currentMileage = Number(veh.current_mileage_km ?? veh.currentMileageKm ?? veh.odometerKm ?? 0);
   const lastServiceMileage = Number(veh.last_service_mileage_km ?? veh.lastServiceMileageKm ?? 0);
   const nextServiceMileage = Number(veh.next_service_mileage_km ?? veh.nextServiceMileageKm ?? veh.nextServiceKm ?? 5000);
@@ -592,11 +592,12 @@ function mapVehicleToDb(veh: Vehicle) {
   const vehicleColor = veh.color || 'Fleet White';
   const vehicleStatus = veh.status || 'available_showroom';
 
+  // Exact 14 columns present in public.vehicles table
   return {
     id: veh.id,
-    registration_plate: veh.registrationPlate || (veh as any).registration_plate,
-    vin: veh.vin || null,
-    engine_number: veh.engineNumber || (veh as any).engine_number || null,
+    registration_plate: (veh.registrationPlate || (veh as any).registration_plate || '').toUpperCase().trim(),
+    vin: (veh.vin || (veh as any).vin || '').toUpperCase().trim(),
+    engine_number: (veh.engineNumber || (veh as any).engine_number || '').toUpperCase().trim() || null,
     bike_id: bikeId,
     model_name: modelName,
     year: Number(veh.year) || 2025,
@@ -607,36 +608,6 @@ function mapVehicleToDb(veh: Vehicle) {
     next_service_mileage_km: nextServiceMileage,
     telematics_imei: telematicsImei,
     telematics_battery_health: telematicsBattery,
-    // Complementary standard columns for maximum schema compatibility:
-    bike_model_id: bikeId,
-    make: veh.make || (modelName.toLowerCase().includes('big boy') ? 'Big Boy' : 'Bajaj'),
-    model: modelName,
-    category: veh.category || 'boxer',
-    condition: veh.condition || 'new',
-    assigned_driver_id: veh.assignedDriverId || null,
-    assigned_driver_name: veh.assignedDriverName || null,
-    odometer_km: currentMileage,
-    mileage_km: currentMileage,
-    next_service_km: nextServiceMileage,
-    last_service_date: veh.lastServiceDate || null,
-    tracker_device_id: telematicsImei,
-    gps_device_imei: telematicsImei,
-    tracker_provider: veh.trackerProvider || 'Cartrack SA',
-    battery_health_percent: telematicsBattery,
-    fuel_level_percent: Number(veh.fuelLevelPercent) || 100,
-    is_ignition_on: Boolean(veh.isIgnitionOn),
-    ignition_status: Boolean(veh.isIgnitionOn),
-    latitude: veh.latitude ?? -26.0963,
-    longitude: veh.longitude ?? 27.9734,
-    current_lat: veh.latitude ?? -26.0963,
-    current_lng: veh.longitude ?? 27.9734,
-    last_location_address: veh.lastLocationAddress || '304 Tungsten Rd, Strijdom Park, Randburg',
-    last_ping_time: veh.lastPingTime || new Date().toISOString(),
-    last_ping_at: veh.lastPingTime || new Date().toISOString(),
-    insurance_policy_number: veh.insurancePolicyNumber || null,
-    license_disk_expiry_date: veh.licenseDiskExpiryDate || (veh as any).license_disk_expiry_date || null,
-    image_url: veh.imageUrl || (veh as any).image_url || null,
-    updated_at: new Date().toISOString(),
   };
 }
 
@@ -696,55 +667,60 @@ export async function saveVehicle(vehicle: Vehicle): Promise<{ success: boolean;
     // ignore
   }
 
-  // 2. Persist to Supabase with resilient fallbacks
+  // 2. Persist to Supabase with schema-safe column handling & RLS diagnostics
   const client = getSupabaseClient();
   if (client) {
     try {
-      const dbRecord = mapVehicleToDb(vehicle);
-      const { error } = await client.from('vehicles').upsert(dbRecord, { onConflict: 'id' });
+      let record: Record<string, any> = mapVehicleToDb(vehicle);
+
+      // Attempt upsert first
+      let { error } = await client.from('vehicles').upsert(record, { onConflict: 'id' });
+
       if (!error) {
         return { success: true };
       }
 
-      console.warn('Primary Supabase vehicle upsert returned error, attempting compatible baseline save:', error);
-      
-      // Fallback: minimal standard PostgreSQL schema record
-      const fallbackRecord = {
-        id: vehicle.id,
-        registration_plate: vehicle.registrationPlate || (vehicle as any).registration_plate,
-        vin: vehicle.vin || null,
-        engine_number: vehicle.engineNumber || (vehicle as any).engine_number || null,
-        bike_id: vehicle.bike_id || vehicle.bikeId || vehicle.bikeModelId || 'boxer-150',
-        model_name: vehicle.model_name || vehicle.modelName || vehicle.model || 'Boxer 150 HD',
-        model: vehicle.model || vehicle.model_name || 'Boxer 150 HD',
-        year: Number(vehicle.year) || 2025,
-        color: vehicle.color || 'Fleet White',
-        assigned_driver_id: vehicle.assignedDriverId || null,
-        assigned_driver_name: vehicle.assignedDriverName || null,
-        status: vehicle.status || 'available_showroom',
-        current_mileage_km: Number(vehicle.current_mileage_km ?? vehicle.odometerKm ?? 0),
-        mileage_km: Number(vehicle.odometerKm ?? vehicle.current_mileage_km ?? 0),
-        last_service_mileage_km: Number(vehicle.last_service_mileage_km ?? 0),
-        next_service_mileage_km: Number(vehicle.next_service_mileage_km ?? vehicle.nextServiceKm ?? 5000),
-        telematics_imei: vehicle.telematics_imei || vehicle.trackerDeviceId || null,
-        telematics_battery_health: Number(vehicle.telematics_battery_health ?? vehicle.batteryHealthPercent ?? 98),
-        battery_health_percent: Number(vehicle.batteryHealthPercent ?? 98),
-        gps_device_imei: vehicle.trackerDeviceId || null,
-        ignition_status: Boolean(vehicle.isIgnitionOn),
-        immobilizer_locked: false,
-        current_lat: vehicle.latitude ?? -26.0963,
-        current_lng: vehicle.longitude ?? 27.9734,
-        last_ping_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
+      console.warn('Supabase primary vehicle upsert error:', error);
 
-      const { error: fallbackError } = await client.from('vehicles').upsert(fallbackRecord, { onConflict: 'id' });
-      if (!fallbackError) {
+      // Check for RLS (Row Level Security) violation
+      if (
+        error.message?.includes('row-level security') ||
+        error.message?.includes('violates row-level security policy') ||
+        error.code === '42501'
+      ) {
+        const rlsMsg = 'Row Level Security (RLS) is blocking inserts on table "vehicles". In Supabase SQL Editor, run: CREATE POLICY "Public access" ON public.vehicles FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);';
+        console.error('Supabase RLS Error:', rlsMsg);
+        return { success: false, error: rlsMsg };
+      }
+
+      // Check if a specific column is missing from user's schema cache (PGRST204)
+      if (error.message?.includes('Could not find the') || error.message?.includes('column')) {
+        // Try saving with ultra-minimal core schema
+        const minimalRecord = {
+          id: vehicle.id,
+          registration_plate: (vehicle.registrationPlate || (vehicle as any).registration_plate || '').toUpperCase().trim(),
+          vin: (vehicle.vin || (vehicle as any).vin || '').toUpperCase().trim(),
+          engine_number: (vehicle.engineNumber || (vehicle as any).engine_number || '').toUpperCase().trim() || null,
+          model_name: vehicle.modelName || vehicle.model || (vehicle as any).model_name || 'Boxer 150',
+          status: vehicle.status || 'available_showroom',
+          current_mileage_km: Number(vehicle.current_mileage_km ?? vehicle.odometerKm ?? 0),
+        };
+
+        const { error: minimalError } = await client.from('vehicles').upsert(minimalRecord, { onConflict: 'id' });
+        if (!minimalError) {
+          return { success: true };
+        }
+        console.warn('Minimal vehicle upsert failed, trying direct insert:', minimalError);
+      }
+
+      // Try direct insert fallback in case onConflict is not configured on id
+      const { error: insertError } = await client.from('vehicles').insert(record);
+      if (!insertError) {
         return { success: true };
       }
 
-      console.error('Supabase vehicle fallback save failed:', fallbackError);
-      return { success: false, error: fallbackError.message || error.message };
+      console.error('Supabase vehicle insert fallback failed:', insertError);
+      return { success: false, error: insertError.message || error.message };
     } catch (err: any) {
       console.error('Supabase vehicle save exception:', err);
       return { success: false, error: err?.message || 'Database connection error' };
@@ -752,6 +728,34 @@ export async function saveVehicle(vehicle: Vehicle): Promise<{ success: boolean;
   }
 
   return { success: true };
+}
+
+export async function syncAllPendingVehiclesToSupabase(): Promise<{ total: number; synced: number; errors: string[] }> {
+  const client = getSupabaseClient();
+  if (!client) return { total: 0, synced: 0, errors: ['Supabase client not connected'] };
+
+  try {
+    const cached = localStorage.getItem(LOCAL_VEHICLES_KEY);
+    if (!cached) return { total: 0, synced: 0, errors: [] };
+    const list: Vehicle[] = JSON.parse(cached);
+    if (!Array.isArray(list) || list.length === 0) return { total: 0, synced: 0, errors: [] };
+
+    let synced = 0;
+    const errors: string[] = [];
+
+    for (const veh of list) {
+      const res = await saveVehicle(veh);
+      if (res.success) {
+        synced++;
+      } else if (res.error) {
+        errors.push(`${veh.registrationPlate}: ${res.error}`);
+      }
+    }
+
+    return { total: list.length, synced, errors };
+  } catch (err: any) {
+    return { total: 0, synced: 0, errors: [err?.message || 'Sync failed'] };
+  }
 }
 
 export async function deleteVehicle(vehicleId: string): Promise<void> {

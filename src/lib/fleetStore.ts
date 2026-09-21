@@ -41,6 +41,7 @@ import {
   fetchReferrals as dbFetchReferrals,
   saveReferral as dbSaveReferral,
   deleteReferral as dbDeleteReferral,
+  syncAllPendingVehiclesToSupabase as dbSyncAllVehicles,
 } from './supabase';
 
 const STORAGE_KEYS = {
@@ -161,6 +162,10 @@ export function saveFleetVehicles(vehicles: Vehicle[]): void {
 
 export async function saveSingleVehicleAsync(vehicle: Vehicle): Promise<{ success: boolean; error?: string }> {
   return await dbSaveVehicle(vehicle);
+}
+
+export async function syncAllVehiclesToDatabase(): Promise<{ total: number; synced: number; errors: string[] }> {
+  return await dbSyncAllVehicles();
 }
 
 export function getFleetParts(): PartsInventoryItem[] {
