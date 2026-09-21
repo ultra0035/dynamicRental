@@ -227,6 +227,8 @@ export async function adaptiveUpsert(
     const maxRetries = 25;
     let tableNotFound = false;
 
+    let statusAttemptCount = 0;
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       // 1. Try upsert with onConflict primary key
       const { data, error } = await client
@@ -239,7 +241,49 @@ export async function adaptiveUpsert(
 
       console.warn(`[Supabase adaptiveUpsert ${currentTable} attempt ${attempt + 1}] error:`, error.message);
 
-      // 2. Check for missing column error in PostgREST schema cache (Code PGRST204 or Postgres 42703)
+      // 2. Check for check constraint violation (Postgres 23514)
+      // e.g. "new row for relation \"vehicles\" violates check constraint \"vehicles_status_check\""
+      if (
+        error.code === '23514' ||
+        error.message?.includes('violates check constraint') ||
+        error.details?.includes('violates check constraint')
+      ) {
+        if (
+          error.message?.includes('status_check') ||
+          error.message?.includes('status') ||
+          error.details?.includes('status')
+        ) {
+          statusAttemptCount++;
+          const candidateStatuses = ['available', 'assigned', 'in_maintenance', 'maintenance', 'active', 'rented', 'showroom'];
+          if (statusAttemptCount <= candidateStatuses.length) {
+            const nextCandidate = candidateStatuses[statusAttemptCount - 1];
+            console.log(`[Supabase Auto-Sync] Status check constraint violated. Retrying '${currentTable}' with status='${nextCandidate}'...`);
+            currentRecord.status = nextCandidate;
+            continue;
+          } else if ('status' in currentRecord) {
+            console.log(`[Supabase Auto-Sync] Removing status column from '${currentTable}' to use database default...`);
+            delete currentRecord.status;
+            strippedColumns.push('status');
+            continue;
+          }
+        }
+
+        // Generic check constraint handling: extract constraint name
+        const constraintMatch = error.message?.match(/violates check constraint "([^"]+)"/i) || error.details?.match(/constraint "([^"]+)"/i);
+        if (constraintMatch && constraintMatch[1]) {
+          const constraintName = constraintMatch[1];
+          // Try to infer column name from constraint name e.g. vehicles_year_check -> year
+          const guessedCol = constraintName.replace(new RegExp(`^${currentTable}_?`, 'i'), '').replace(/_check$/i, '');
+          if (guessedCol && guessedCol in currentRecord) {
+            console.log(`[Supabase Auto-Sync] Removing check-constraint failing column '${guessedCol}' and retrying...`);
+            delete currentRecord[guessedCol];
+            strippedColumns.push(guessedCol);
+            continue;
+          }
+        }
+      }
+
+      // 3. Check for missing column error in PostgREST schema cache (Code PGRST204 or Postgres 42703)
       // Examples: "Could not find the 'bike_id' column of 'vehicles' in the schema cache"
       // or: "column \"bike_id\" of relation \"vehicles\" does not exist"
       const missingColMatch =
@@ -260,7 +304,7 @@ export async function adaptiveUpsert(
         }
       }
 
-      // 3. Foreign key violation (Postgres 23503)
+      // 4. Foreign key violation (Postgres 23503)
       // e.g. "Key (bike_id)=(boxer-150) is not present in table \"bikes\""
       if (
         error.code === '23503' ||
@@ -281,7 +325,7 @@ export async function adaptiveUpsert(
         }
       }
 
-      // 4. Check for RLS (Row Level Security) violation (Postgres 42501)
+      // 5. Check for RLS (Row Level Security) violation (Postgres 42501)
       if (
         error.message?.includes('row-level security') ||
         error.message?.includes('violates row-level security policy') ||
@@ -293,7 +337,7 @@ export async function adaptiveUpsert(
         };
       }
 
-      // 5. Table does not exist (Postgres 42P01)
+      // 6. Table does not exist (Postgres 42P01)
       if (
         error.code === '42P01' ||
         (error.message?.includes('does not exist') && (error.message?.includes('relation') || error.message?.includes('table')))
@@ -302,7 +346,7 @@ export async function adaptiveUpsert(
         break; // Try next alternate table name
       }
 
-      // 6. If upsert conflict on PK fails (e.g. 42P10), try direct insert
+      // 7. If upsert conflict on PK fails (e.g. 42P10), try direct insert
       const { data: insertData, error: insertError } = await client.from(currentTable).insert(currentRecord);
       if (!insertError) {
         return { success: true, data: insertData, strippedColumns };
@@ -323,7 +367,29 @@ export async function adaptiveUpsert(
         }
       }
 
-      // If insert also failed
+      // If status check constraint failed on insert as well
+      if (
+        insertError.code === '23514' ||
+        insertError.message?.includes('violates check constraint')
+      ) {
+        if (
+          insertError.message?.includes('status_check') ||
+          insertError.message?.includes('status')
+        ) {
+          statusAttemptCount++;
+          const candidateStatuses = ['available', 'assigned', 'in_maintenance', 'maintenance', 'active', 'rented'];
+          if (statusAttemptCount <= candidateStatuses.length) {
+            currentRecord.status = candidateStatuses[statusAttemptCount - 1];
+            continue;
+          } else if ('status' in currentRecord) {
+            delete currentRecord.status;
+            strippedColumns.push('status');
+            continue;
+          }
+        }
+      }
+
+      // If insert also failed and no pattern matched
       return { success: false, error: insertError.message || error.message };
     }
 
@@ -711,7 +777,14 @@ function mapVehicleToDb(veh: Vehicle) {
   const telematicsImei = veh.telematics_imei || veh.telematicsImei || veh.trackerDeviceId || null;
   const telematicsBattery = Number(veh.telematics_battery_health ?? veh.telematicsBatteryHealth ?? veh.batteryHealthPercent ?? 98);
   const vehicleColor = veh.color || 'Fleet White';
-  const vehicleStatus = veh.status || 'available_showroom';
+  
+  // Standardize status for PostgreSQL check constraints (e.g. 'available', 'assigned', 'in_maintenance')
+  let vehicleStatus = (veh.status || 'available').trim();
+  if (vehicleStatus === 'available_showroom' || vehicleStatus === 'showroom' || vehicleStatus === 'in_stock') {
+    vehicleStatus = 'available';
+  } else if (vehicleStatus === 'maintenance') {
+    vehicleStatus = 'in_maintenance';
+  }
 
   // Exact 14 columns present in public.vehicles table
   return {
