@@ -263,9 +263,9 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
     const created: Vehicle = {
       id: `veh-${Date.now()}`,
-      vin: newVehicleForm.vin || '',
-      engineNumber: newVehicleForm.engineNumber || 'ENG-000',
-      registrationPlate: newVehicleForm.registrationPlate || '',
+      vin: (newVehicleForm.vin || '').toUpperCase().trim(),
+      engineNumber: (newVehicleForm.engineNumber || 'ENG-000').toUpperCase().trim(),
+      registrationPlate: (newVehicleForm.registrationPlate || '').toUpperCase().trim(),
       bikeModelId: newVehicleForm.category === 'boxer' ? 'bajaj-boxer-150' : 'bigboy-velocity-150',
       make: newVehicleForm.make || 'Bajaj',
       model: newVehicleForm.model || 'Boxer 150 HD',
@@ -274,8 +274,35 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       condition: newVehicleForm.condition || 'new',
       status: 'available',
       odometerKm: Number(newVehicleForm.odometerKm) || 0,
-      nextServiceKm: 5000,
+      nextServiceKm: Number(newVehicleForm.nextServiceKm) || 5000,
       trackerDeviceId: newVehicleForm.trackerDeviceId || `CT-${Math.floor(10000 + Math.random() * 90000)}-SA`,
+      trackerProvider: newVehicleForm.trackerProvider || 'Cartrack SA',
+      batteryHealthPercent: Number(newVehicleForm.batteryHealthPercent) || 100,
+      fuelLevelPercent: Number(newVehicleForm.fuelLevelPercent) || 100,
+      isIgnitionOn: false,
+      latitude: -26.0826,
+      longitude: 27.9734,
+      lastLocationAddress: newVehicleForm.lastLocationAddress || '304 Tungsten Rd, Strijdom Park, Randburg',
+      lastPingTime: new Date().toISOString(),
+      insurancePolicyNumber: newVehicleForm.insurancePolicyNumber || 'OUT-FLEET-2026-900',
+      licenseDiskExpiryDate: newVehicleForm.licenseDiskExpiryDate || '2027-04-30',
+      imageUrl: newVehicleForm.imageUrl || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80',
+    };
+
+    onAddVehicle(created);
+    setNewVehicleForm({
+      vin: '',
+      engineNumber: '',
+      registrationPlate: '',
+      make: 'Bajaj',
+      model: 'Boxer 150 HD',
+      year: 2026,
+      category: 'boxer',
+      condition: 'new',
+      status: 'available',
+      odometerKm: 0,
+      nextServiceKm: 5000,
+      trackerDeviceId: `CT-${Math.floor(10000 + Math.random() * 90000)}-SA`,
       trackerProvider: 'Cartrack SA',
       batteryHealthPercent: 100,
       fuelLevelPercent: 100,
@@ -283,13 +310,9 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       latitude: -26.0826,
       longitude: 27.9734,
       lastLocationAddress: '304 Tungsten Rd, Strijdom Park, Randburg',
-      lastPingTime: 'Just now',
-      insurancePolicyNumber: newVehicleForm.insurancePolicyNumber || 'OUT-FLEET-2026-900',
-      licenseDiskExpiryDate: newVehicleForm.licenseDiskExpiryDate || '2027-04-30',
-      imageUrl: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80',
-    };
-
-    onAddVehicle(created);
+      insurancePolicyNumber: 'OUT-FLEET-2026-900',
+      licenseDiskExpiryDate: '2027-04-30',
+    });
     setIsAddVehicleOpen(false);
   };
 

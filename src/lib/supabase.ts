@@ -538,23 +538,23 @@ function mapDbToVehicle(row: any): Vehicle {
     bikeModelId: row.bike_model_id || row.bike_id || row.bikeModelId || 'boxer-150',
     make: row.make || 'Bajaj',
     model: row.model || row.model_name || 'Boxer 150 HD',
-    year: Number(row.year || 2025),
+    year: Number(row.year || 2026),
     category: row.category || 'boxer',
     condition: row.condition || 'new',
     status: row.status || 'available',
     assignedDriverId: row.assigned_driver_id || row.current_driver_id || row.assignedDriverId || undefined,
     assignedDriverName: row.assigned_driver_name || row.current_driver_name || row.assignedDriverName || undefined,
-    odometerKm: Number(row.odometer_km || row.current_mileage_km || row.mileage_km || 0),
-    nextServiceKm: Number(row.next_service_km || row.next_service_mileage_km || 5000),
-    lastServiceDate: row.last_service_date || row.last_service_mileage_km ? String(row.last_service_date || '') : undefined,
+    odometerKm: Number(row.odometer_km ?? row.current_mileage_km ?? row.mileage_km ?? 0),
+    nextServiceKm: Number(row.next_service_km ?? row.next_service_mileage_km ?? 5000),
+    lastServiceDate: row.last_service_date || (row.last_service_mileage_km ? String(row.last_service_date || '') : undefined),
     trackerDeviceId: row.tracker_device_id || row.gps_device_imei || row.telematics_imei || '',
     trackerProvider: row.tracker_provider || 'Cartrack SA',
-    batteryHealthPercent: Number(row.battery_health_percent || row.telematics_battery_health || 100),
-    fuelLevelPercent: Number(row.fuel_level_percent || 100),
-    isIgnitionOn: Boolean(row.is_ignition_on || row.ignition_status || row.ignition_state || false),
-    latitude: row.latitude ? Number(row.latitude) : row.current_lat ? Number(row.current_lat) : undefined,
-    longitude: row.longitude ? Number(row.longitude) : row.current_lng ? Number(row.current_lng) : undefined,
-    lastLocationAddress: row.last_location_address || row.last_known_location || '',
+    batteryHealthPercent: Number(row.battery_health_percent ?? row.telematics_battery_health ?? 100),
+    fuelLevelPercent: Number(row.fuel_level_percent ?? 100),
+    isIgnitionOn: Boolean(row.is_ignition_on ?? row.ignition_status ?? row.ignition_state ?? false),
+    latitude: row.latitude !== undefined && row.latitude !== null ? Number(row.latitude) : (row.current_lat !== undefined && row.current_lat !== null ? Number(row.current_lat) : undefined),
+    longitude: row.longitude !== undefined && row.longitude !== null ? Number(row.longitude) : (row.current_lng !== undefined && row.current_lng !== null ? Number(row.current_lng) : undefined),
+    lastLocationAddress: row.last_location_address || row.last_known_location || '304 Tungsten Rd, Strijdom Park, Randburg',
     lastPingTime: row.last_ping_time || row.last_ping_at || row.last_telematics_ping || new Date().toISOString(),
     insurancePolicyNumber: row.insurance_policy_number || '',
     licenseDiskExpiryDate: row.license_disk_expiry_date || '',
@@ -565,30 +565,37 @@ function mapDbToVehicle(row: any): Vehicle {
 function mapVehicleToDb(veh: Vehicle) {
   return {
     id: veh.id,
-    vin: veh.vin,
-    engine_number: veh.engineNumber,
+    vin: veh.vin || null,
+    engine_number: veh.engineNumber || null,
     registration_plate: veh.registrationPlate,
-    bike_model_id: veh.bikeModelId,
-    make: veh.make,
-    model: veh.model,
-    year: veh.year,
-    category: veh.category,
-    condition: veh.condition,
-    status: veh.status,
+    bike_model_id: veh.bikeModelId || 'boxer-150',
+    make: veh.make || 'Bajaj',
+    model: veh.model || 'Boxer 150 HD',
+    year: Number(veh.year) || 2026,
+    category: veh.category || 'boxer',
+    condition: veh.condition || 'new',
+    status: veh.status || 'available',
     assigned_driver_id: veh.assignedDriverId || null,
     assigned_driver_name: veh.assignedDriverName || null,
-    odometer_km: veh.odometerKm,
-    next_service_km: veh.nextServiceKm,
+    odometer_km: Number(veh.odometerKm) || 0,
+    mileage_km: Number(veh.odometerKm) || 0,
+    next_service_km: Number(veh.nextServiceKm) || 5000,
+    next_service_mileage_km: Number(veh.nextServiceKm) || 5000,
     last_service_date: veh.lastServiceDate || null,
     tracker_device_id: veh.trackerDeviceId || null,
+    gps_device_imei: veh.trackerDeviceId || null,
     tracker_provider: veh.trackerProvider || 'Cartrack SA',
-    battery_health_percent: veh.batteryHealthPercent || 100,
-    fuel_level_percent: veh.fuelLevelPercent || 100,
-    is_ignition_on: veh.isIgnitionOn || false,
-    latitude: veh.latitude || null,
-    longitude: veh.longitude || null,
-    last_location_address: veh.lastLocationAddress || null,
+    battery_health_percent: Number(veh.batteryHealthPercent) || 100,
+    fuel_level_percent: Number(veh.fuelLevelPercent) || 100,
+    is_ignition_on: Boolean(veh.isIgnitionOn),
+    ignition_status: Boolean(veh.isIgnitionOn),
+    latitude: veh.latitude ?? -26.0963,
+    longitude: veh.longitude ?? 27.9734,
+    current_lat: veh.latitude ?? -26.0963,
+    current_lng: veh.longitude ?? 27.9734,
+    last_location_address: veh.lastLocationAddress || '304 Tungsten Rd, Strijdom Park, Randburg',
     last_ping_time: veh.lastPingTime || new Date().toISOString(),
+    last_ping_at: veh.lastPingTime || new Date().toISOString(),
     insurance_policy_number: veh.insurancePolicyNumber || null,
     license_disk_expiry_date: veh.licenseDiskExpiryDate || null,
     image_url: veh.imageUrl || null,
@@ -613,6 +620,8 @@ export async function fetchVehicles(): Promise<Vehicle[]> {
           // ignore
         }
         return mapped;
+      } else if (error) {
+        console.warn('Supabase vehicles fetch error:', error);
       }
     } catch (err) {
       console.warn('Supabase vehicles fetch error:', err);
@@ -634,7 +643,8 @@ export async function fetchVehicles(): Promise<Vehicle[]> {
   return [];
 }
 
-export async function saveVehicle(vehicle: Vehicle): Promise<void> {
+export async function saveVehicle(vehicle: Vehicle): Promise<{ success: boolean; error?: string }> {
+  // 1. Update local cache immediately
   try {
     const cached = localStorage.getItem(LOCAL_VEHICLES_KEY);
     let list: Vehicle[] = cached ? JSON.parse(cached) : [];
@@ -649,15 +659,56 @@ export async function saveVehicle(vehicle: Vehicle): Promise<void> {
     // ignore
   }
 
+  // 2. Persist to Supabase with resilient fallbacks
   const client = getSupabaseClient();
   if (client) {
     try {
       const dbRecord = mapVehicleToDb(vehicle);
-      await client.from('vehicles').upsert(dbRecord, { onConflict: 'id' });
-    } catch (err) {
-      console.warn('Supabase vehicle save error:', err);
+      const { error } = await client.from('vehicles').upsert(dbRecord, { onConflict: 'id' });
+      if (!error) {
+        return { success: true };
+      }
+
+      console.warn('Primary Supabase vehicle upsert returned error, attempting compatible baseline save:', error);
+      
+      // Fallback: minimal standard PostgreSQL schema record
+      const fallbackRecord = {
+        id: vehicle.id,
+        registration_plate: vehicle.registrationPlate,
+        vin: vehicle.vin || null,
+        engine_number: vehicle.engineNumber || null,
+        model: vehicle.model || 'Boxer 150 HD',
+        year: Number(vehicle.year) || 2026,
+        assigned_driver_id: vehicle.assignedDriverId || null,
+        assigned_driver_name: vehicle.assignedDriverName || null,
+        status: vehicle.status || 'available',
+        mileage_km: Number(vehicle.odometerKm) || 0,
+        last_service_mileage_km: 0,
+        next_service_mileage_km: Number(vehicle.nextServiceKm) || 5000,
+        battery_health_percent: Number(vehicle.batteryHealthPercent) || 100,
+        gps_device_imei: vehicle.trackerDeviceId || null,
+        ignition_status: Boolean(vehicle.isIgnitionOn),
+        immobilizer_locked: false,
+        current_lat: vehicle.latitude ?? -26.0963,
+        current_lng: vehicle.longitude ?? 27.9734,
+        last_ping_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: fallbackError } = await client.from('vehicles').upsert(fallbackRecord, { onConflict: 'id' });
+      if (!fallbackError) {
+        return { success: true };
+      }
+
+      console.error('Supabase vehicle fallback save failed:', fallbackError);
+      return { success: false, error: fallbackError.message || error.message };
+    } catch (err: any) {
+      console.error('Supabase vehicle save exception:', err);
+      return { success: false, error: err?.message || 'Database connection error' };
     }
   }
+
+  return { success: true };
 }
 
 export async function deleteVehicle(vehicleId: string): Promise<void> {
@@ -705,19 +756,19 @@ function mapDbToDriver(row: any): Driver {
     assignedVehicleId: row.assigned_vehicle_id || row.assignedVehicleId || undefined,
     assignedBikeVinOrPlate: row.assigned_bike_vin_or_plate || row.assigned_vehicle_reg || row.assignedBikeVinOrPlate || undefined,
     assignedBikeName: row.assigned_bike_name || row.vehicle_model || row.assignedBikeName || undefined,
-    weeklyRate: Number(row.weekly_rate || row.weekly_rate_zar || row.weeklyRate || 750),
-    balanceDue: Number(row.balance_due || row.balanceDue || 0),
-    depositPaid: Number(row.deposit_paid || row.depositPaid || 1000),
+    weeklyRate: Number(row.weekly_rate ?? row.weekly_rate_zar ?? row.weeklyRate ?? 750),
+    balanceDue: Number(row.balance_due ?? row.balanceDue ?? 0),
+    depositPaid: Number(row.deposit_paid ?? row.depositPaid ?? 1000),
     contractStartDate: row.contract_start_date || row.contractStartDate || new Date().toISOString().split('T')[0],
     contractEndDate: row.contract_end_date || row.contractEndDate || undefined,
-    termMonths: Number(row.term_months || row.termMonths || 18),
+    termMonths: Number(row.term_months ?? row.termMonths ?? 18),
     primaryPlatform: row.primary_platform || row.delivery_platform || 'Checkers Sixty60',
     deliveryApps: Array.isArray(row.delivery_apps) ? row.delivery_apps : [],
     riskTier: row.risk_tier || row.riskTier || 'low',
     riskScore: Number(row.risk_score ?? row.riskScore ?? 90),
     paymentScore: Number(row.payment_score ?? row.paymentScore ?? 100),
     incidentCount: Number(row.incident_count ?? row.incidentCount ?? 0),
-    totalPaid: Number(row.total_paid || row.totalPaid || 0),
+    totalPaid: Number(row.total_paid ?? row.totalPaid ?? 0),
     yocoCustomerToken: row.yoco_customer_token || row.yocoCustomerToken || undefined,
     referredBy: row.referred_by || row.referredBy || undefined,
     notes: row.notes || undefined,
@@ -731,9 +782,11 @@ function mapDriverToDb(drv: Driver) {
     ref_number: drv.refNumber,
     full_name: drv.fullName,
     phone: drv.phone,
+    phone_number: drv.phone,
     whatsapp_number: drv.whatsappNumber,
     email: drv.email || null,
     id_or_passport_number: drv.idOrPassportNumber,
+    id_number: drv.idOrPassportNumber,
     citizenship: drv.citizenship,
     nationality_country: drv.nationalityCountry || null,
     address: drv.address,
@@ -741,15 +794,19 @@ function mapDriverToDb(drv: Driver) {
     city: drv.city,
     status: drv.status,
     assigned_vehicle_id: drv.assignedVehicleId || null,
+    assigned_vehicle_reg: drv.assignedBikeVinOrPlate || null,
     assigned_bike_vin_or_plate: drv.assignedBikeVinOrPlate || null,
     assigned_bike_name: drv.assignedBikeName || null,
+    vehicle_model: drv.assignedBikeName || null,
     weekly_rate: drv.weeklyRate,
+    weekly_rate_zar: drv.weeklyRate,
     balance_due: drv.balanceDue,
     deposit_paid: drv.depositPaid,
     contract_start_date: drv.contractStartDate,
     contract_end_date: drv.contractEndDate || null,
     term_months: drv.termMonths,
     primary_platform: drv.primaryPlatform,
+    delivery_platform: drv.primaryPlatform,
     delivery_apps: drv.deliveryApps || [],
     risk_tier: drv.riskTier,
     risk_score: drv.riskScore,
@@ -801,7 +858,7 @@ export async function fetchDrivers(): Promise<Driver[]> {
   return [];
 }
 
-export async function saveDriver(driver: Driver): Promise<void> {
+export async function saveDriver(driver: Driver): Promise<{ success: boolean; error?: string }> {
   try {
     const cached = localStorage.getItem(LOCAL_DRIVERS_KEY);
     let list: Driver[] = cached ? JSON.parse(cached) : [];
@@ -820,11 +877,51 @@ export async function saveDriver(driver: Driver): Promise<void> {
   if (client) {
     try {
       const dbRecord = mapDriverToDb(driver);
-      await client.from('drivers').upsert(dbRecord, { onConflict: 'id' });
-    } catch (err) {
-      console.warn('Supabase driver save error:', err);
+      const { error } = await client.from('drivers').upsert(dbRecord, { onConflict: 'id' });
+      if (!error) {
+        return { success: true };
+      }
+
+      console.warn('Primary Supabase driver upsert error, attempting baseline fallback:', error);
+
+      const fallbackDriver = {
+        id: driver.id,
+        full_name: driver.fullName,
+        id_number: driver.idOrPassportNumber || '0000000000000',
+        phone_number: driver.phone || driver.whatsappNumber || '',
+        email: driver.email || null,
+        status: driver.status || 'active',
+        assigned_vehicle_id: driver.assignedVehicleId || null,
+        assigned_vehicle_reg: driver.assignedBikeVinOrPlate || null,
+        vehicle_model: driver.assignedBikeName || null,
+        weekly_rate_zar: Number(driver.weeklyRate) || 0,
+        deposit_paid: Number(driver.depositPaid) || 0,
+        balance_due: Number(driver.balanceDue) || 0,
+        total_paid: Number(driver.totalPaid) || 0,
+        risk_score: Number(driver.riskScore) || 90,
+        payment_score: Number(driver.paymentScore) || 100,
+        incident_count: Number(driver.incidentCount) || 0,
+        delivery_platform: driver.primaryPlatform || 'Checkers Sixty60',
+        risk_tier: driver.riskTier || 'low',
+        emergency_contact_name: null,
+        emergency_contact_phone: null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: fallbackError } = await client.from('drivers').upsert(fallbackDriver, { onConflict: 'id' });
+      if (!fallbackError) {
+        return { success: true };
+      }
+
+      console.error('Supabase driver fallback save failed:', fallbackError);
+      return { success: false, error: fallbackError.message || error.message };
+    } catch (err: any) {
+      console.error('Supabase driver save exception:', err);
+      return { success: false, error: err?.message || 'Database connection error' };
     }
   }
+
+  return { success: true };
 }
 
 export async function deleteDriver(driverId: string): Promise<void> {

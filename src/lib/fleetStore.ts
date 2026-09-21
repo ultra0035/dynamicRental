@@ -140,8 +140,12 @@ export function saveFleetDrivers(drivers: Driver[]): void {
   const deduped = deduplicateDrivers(drivers);
   saveToStorage(STORAGE_KEYS.DRIVERS, deduped);
   deduped.forEach((drv) => {
-    dbSaveDriver(drv).catch(() => {});
+    dbSaveDriver(drv).catch((err) => console.warn('Failed to background save driver to Supabase:', err));
   });
+}
+
+export async function saveSingleDriverAsync(driver: Driver): Promise<{ success: boolean; error?: string }> {
+  return await dbSaveDriver(driver);
 }
 
 export function getFleetVehicles(): Vehicle[] {
@@ -151,8 +155,12 @@ export function getFleetVehicles(): Vehicle[] {
 export function saveFleetVehicles(vehicles: Vehicle[]): void {
   saveToStorage(STORAGE_KEYS.VEHICLES, vehicles);
   vehicles.forEach((veh) => {
-    dbSaveVehicle(veh).catch(() => {});
+    dbSaveVehicle(veh).catch((err) => console.warn('Failed to background save vehicle to Supabase:', err));
   });
+}
+
+export async function saveSingleVehicleAsync(vehicle: Vehicle): Promise<{ success: boolean; error?: string }> {
+  return await dbSaveVehicle(vehicle);
 }
 
 export function getFleetParts(): PartsInventoryItem[] {
