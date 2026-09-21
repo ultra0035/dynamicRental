@@ -286,15 +286,32 @@ CREATE TABLE IF NOT EXISTS yoco_transactions (
     net_zar NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     allocation TEXT NOT NULL DEFAULT 'weekly_rental',
     channel TEXT NOT NULL DEFAULT 'payment_link',
+    payment_method TEXT DEFAULT 'manual_eft',
     yoco_charge_id TEXT,
+    yoco_payment_link_id TEXT,
     status TEXT NOT NULL DEFAULT 'successful',
     reconciliation_status TEXT DEFAULT 'reconciled_ledger',
     transaction_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    week_number INTEGER,
+    proof_of_payment_url TEXT,
+    notes TEXT,
+    recorded_by TEXT DEFAULT 'Admin Portal',
     card_last4 TEXT,
     card_brand TEXT,
+    yoco_metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- In-place Migrations for yoco_transactions
+ALTER TABLE yoco_transactions ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'manual_eft';
+ALTER TABLE yoco_transactions ADD COLUMN IF NOT EXISTS yoco_payment_link_id TEXT;
+ALTER TABLE yoco_transactions ADD COLUMN IF NOT EXISTS week_number INTEGER;
+ALTER TABLE yoco_transactions ADD COLUMN IF NOT EXISTS proof_of_payment_url TEXT;
+ALTER TABLE yoco_transactions ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE yoco_transactions ADD COLUMN IF NOT EXISTS recorded_by TEXT DEFAULT 'Admin Portal';
+ALTER TABLE yoco_transactions ADD COLUMN IF NOT EXISTS yoco_metadata JSONB DEFAULT '{}'::jsonb;
+
 
 -- 9. RENTAL AGREEMENTS TABLE
 CREATE TABLE IF NOT EXISTS rental_agreements (

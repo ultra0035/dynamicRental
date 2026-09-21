@@ -23,6 +23,7 @@ import { VehicleManagementView } from './fleet/VehicleManagementView';
 import { FleetFinancialsView } from './fleet/FleetFinancialsView';
 import { DeliverAndAssignModal } from './fleet/DeliverAndAssignModal';
 import { DriverFinanceModal } from './fleet/DriverFinanceModal';
+import { DynamicRentalLogo } from './DynamicRentalLogo';
 import { compressImageFile } from '../lib/imageUtils';
 import { SUPABASE_SQL_SCHEMA } from '../db/schemaSql';
 import { isSupabaseConnected } from '../lib/supabase';
@@ -240,6 +241,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onSaveBike,
   onDeleteBike,
   onAddNewWalkin,
+  onSaveLogo,
+  onSaveHeroImage,
+  customLogoUrl,
+  customHeroUrl,
   onCloseAdmin,
 }) => {
   // Sidebar active page state: 'dashboard' | 'applicant' | 'bike_and_stock'
@@ -852,20 +857,16 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
       {/* SIDEBAR NAVIGATION */}
       {/* ------------------------------------------------------------- */}
       {/* ------------------------------------------------------------- */}
-      {/* SIDEBAR NAVIGATION (FleetCO / Dynamic Rental) */}
+      {/* SIDEBAR NAVIGATION (Dynamic Rental) */}
       {/* ------------------------------------------------------------- */}
       <aside className="w-full md:w-64 lg:w-72 bg-slate-900 text-white flex-shrink-0 flex flex-col border-r border-slate-800 shadow-xl z-20">
         {/* Sidebar Header / Brand */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-cyan-400 flex items-center justify-center text-slate-950 font-black shadow-lg">
-              <ShieldCheck className="w-4 h-4 text-slate-950" />
-            </div>
-            <div>
-              <span className="text-sm font-black tracking-tight text-white flex items-center gap-1.5">
-                FleetCO <span className="text-[10px] font-normal text-cyan-400">· Dynamic Rental</span>
-              </span>
-              <span className="text-[10px] text-slate-400 font-medium block">
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between gap-2">
+          <div className="flex flex-col gap-1 min-w-0">
+            <DynamicRentalLogo customLogoUrl={customLogoUrl} size="sm" />
+            <div className="flex items-center gap-1.5 pl-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              <span className="text-[10px] text-slate-400 font-bold tracking-wide uppercase">
                 Randburg Hub Staff Portal
               </span>
             </div>
@@ -1394,7 +1395,7 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
             {/* Help Button */}
             <button
               type="button"
-              onClick={() => alert("FleetCO Help: Quick shortcuts: Press Applicants to vet new couriers, Live Tracking to monitor telemetry, or Paystack/Yoco Collections to process instant debit/card collections.")}
+              onClick={() => alert("Dynamic Rental Operations Help: Quick shortcuts: Press Applicants to vet new couriers, Live Tracking to monitor telemetry, or Paystack Collections to process card & debit payments.")}
               className="w-8 h-8 rounded-full border border-slate-200 hover:bg-slate-100 text-slate-600 flex items-center justify-center transition-colors text-xs font-black"
               title="Help & Support"
             >
