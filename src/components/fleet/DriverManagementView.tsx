@@ -11,6 +11,7 @@ import {
   FlaggedReasonCategory 
 } from '../../types';
 import { DriverDetailModal } from './DriverDetailModal';
+import { DriverFinanceModal } from './DriverFinanceModal';
 import { 
   getFlaggedRiskEntries, 
   addFlaggedRiskEntry, 
@@ -157,9 +158,12 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
     status: 'pending_onboarding',
   });
 
-  // Selected Driver for Details Modal
+  // Selected Driver for Details Modal (Docs & Bike)
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
   const [modalInitialTab, setModalInitialTab] = useState<'documents' | 'vehicle' | 'handover_photos' | 'profile' | 'financials'>('documents');
+
+  // Selected Driver for Dedicated Track Finance & Agreements Modal
+  const [selectedFinanceDriver, setSelectedFinanceDriver] = useState<Driver | null>(null);
 
   // Add Incident Modal
   const [incidentDriver, setIncidentDriver] = useState<Driver | null>(null);
@@ -857,14 +861,13 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
                             <span>Docs & Bike</span>
                           </button>
 
-                          {/* Track Finance Quick Button (Replaced Yoco shortcut) */}
+                          {/* Track Finance Dedicated Button (Opens ONLY Financials & Agreement Modal) */}
                           <button
                             type="button"
                             onClick={() => {
-                              setModalInitialTab('financials');
-                              setSelectedDriver(driver);
+                              setSelectedFinanceDriver(driver);
                             }}
-                            title="Track Weekly Finance, GitHub Payment Calendar & Proof of Payment"
+                            title="Track Weekly Finance, Rent-to-Own Agreement, GitHub Payment Calendar & Proof of Payment"
                             className="p-1.5 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 transition-colors font-bold flex items-center gap-1.5 text-[11px] px-2.5 cursor-pointer shadow-2xs"
                           >
                             <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
@@ -2038,6 +2041,23 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
           onDeleteDriver(driverId);
           setSelectedDriver(null);
         } : undefined}
+      />
+
+      {/* DEDICATED TRACK FINANCE & AGREEMENT MODAL (Clean, no documents or handover tabs) */}
+      <DriverFinanceModal
+        isOpen={!!selectedFinanceDriver}
+        driver={selectedFinanceDriver}
+        agreements={agreements}
+        vehicles={vehicles}
+        onClose={() => setSelectedFinanceDriver(null)}
+        onUpdateDriver={(updated) => {
+          onUpdateDriver(updated);
+          setSelectedFinanceDriver(updated);
+        }}
+        onOpenYocoPayment={(drv) => {
+          setSelectedFinanceDriver(null);
+          onOpenYocoPaymentForDriver(drv);
+        }}
       />
     </div>
   );

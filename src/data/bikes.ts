@@ -17,4 +17,7 @@ export const COMPANY_DETAILS = {
   hours: 'Mon - Fri: 08:00 - 17:00 | Sat: 08:30 - 13:00 | Sun: Closed',
   googleMapsUrl: 'https://maps.google.com/?q=304+Tungsten+Road+Strijdom+Park+Randburg+South+Africa+2169',
   email: 'info@dynamicrental.co.za',
+  bankName: 'Standard Bank',
+  bankAccountNumber: '023456789',
+  bankBranchCode: '051001',
 };

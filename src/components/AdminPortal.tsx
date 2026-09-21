@@ -22,6 +22,7 @@ import { DriverManagementView } from './fleet/DriverManagementView';
 import { VehicleManagementView } from './fleet/VehicleManagementView';
 import { FleetFinancialsView } from './fleet/FleetFinancialsView';
 import { DeliverAndAssignModal } from './fleet/DeliverAndAssignModal';
+import { DriverFinanceModal } from './fleet/DriverFinanceModal';
 import { compressImageFile } from '../lib/imageUtils';
 import { SUPABASE_SQL_SCHEMA } from '../db/schemaSql';
 import { isSupabaseConnected } from '../lib/supabase';
@@ -242,8 +243,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onCloseAdmin,
 }) => {
   // Sidebar active page state: 'dashboard' | 'applicant' | 'bike_and_stock'
-  const [activePage, setActivePage] = useState<AdminPage>('applicant');
+  const [activePage, setActivePage] = useState<AdminPage>('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+
+  // Dedicated Finance Tracking Modal
+  const [selectedFinanceDriver, setSelectedFinanceDriver] = useState<Driver | null>(null);
+
+  // Quick Record Payment Modal
+  const [isQuickRecordPaymentOpen, setIsQuickRecordPaymentOpen] = useState<boolean>(false);
+  const [quickPayDriverId, setQuickPayDriverId] = useState<string>('');
+  const [quickPayAmount, setQuickPayAmount] = useState<number>(650);
+  const [quickPayMethod, setQuickPayMethod] = useState<'manual_eft' | 'cash' | 'card_present' | 'yoco_app' | 'debit_order'>('manual_eft');
+  const [quickPayAllocation, setQuickPayAllocation] = useState<'weekly_installment' | 'deposit' | 'fine' | 'repair' | 'tracker' | 'unallocated'>('weekly_installment');
+  const [quickPayNotes, setQuickPayNotes] = useState<string>('');
+  const [quickPayProofFile, setQuickPayProofFile] = useState<string | null>(null);
+  const [quickPayProofFileName, setQuickPayProofFileName] = useState<string>('');
+  const [isQuickPayUploading, setIsQuickPayUploading] = useState<boolean>(false);
+  const quickPayFileRef = useRef<HTMLInputElement>(null);
 
   // Walk-in modal state
   const [isWalkinModalOpen, setIsWalkinModalOpen] = useState<boolean>(false);
@@ -1429,305 +1445,406 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
         {/* INNER CONTENT SCROLLER */}
         <div className="p-4 sm:p-6 lg:p-8 flex-1 flex flex-col gap-6">
 
-        {/* PAGE: DASHBOARD OVERVIEW (Matching Screenshot) */}
-        {activePage === 'dashboard' && (
-          <div className="flex flex-col gap-6" id="admin-dashboard-page">
-            {/* Sub-Header: Date and Customise */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-xs text-slate-500 font-bold">
-                <span>{new Date().toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCustomizeModalOpen(true)}
-                className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs flex items-center gap-1.5 w-fit"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
-                <span>Customise</span>
-              </button>
-            </div>
+        {/* PAGE: DASHBOARD OVERVIEW */}
+        {activePage === 'dashboard' && (() => {
+          // Dynamic Setup Step Calculation
+          const setupSteps = [
+            { id: 'profile', label: 'Set up Dealership Profile & Pricing', done: true, route: 'dealership_profile' as AdminPage },
+            { id: 'bikes', label: 'Add Motorbikes to Inventory', done: bikes.length > 0, route: 'bike_and_stock' as AdminPage },
+            { id: 'fleet', label: 'Register Commercial Fleet Vehicles', done: vehiclesState.length > 0, route: 'vehicle_register' as AdminPage },
+            { id: 'apps', label: 'Accept Applications & Customer Onboarding', done: applications.length > 0 || driversState.length > 0, route: 'applicants' as AdminPage },
+            { id: 'db', label: 'Connect Supabase Cloud Database', done: isSupabaseConnected(), route: 'settings' as AdminPage },
+            { id: 'contracts', label: 'Issue Rental Agreements & Contracts', done: agreementsState.length > 0, route: 'agreements_contracts' as AdminPage },
+          ];
+          const completedStepsCount = setupSteps.filter((s) => s.done).length;
+          const setupProgressPct = Math.round((completedStepsCount / setupSteps.length) * 100);
+          const nextIncompleteStep = setupSteps.find((s) => !s.done);
 
-            {/* Finish Setting Up FleetCO Progress Banner */}
-            {isSetupBannerVisible && (
-              <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950 text-white rounded-3xl p-5 sm:p-6 shadow-md border border-slate-800 relative overflow-hidden">
-                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="space-y-1.5 flex-1">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-cyan-400 text-slate-950 flex items-center justify-center text-xs font-black">
-                        ✓
+          // Priority metrics
+          const overdueDrivers = driversState.filter((d) => (d.balanceDue || 0) > 0);
+          const pendingAppsList = applications.filter((a) => a.status === 'pending_review' || a.status === 'needs_more_info');
+          const maintenanceVehiclesList = vehiclesState.filter((v) => v.status === 'in_maintenance' || v.status === 'repair_needed');
+          const pendingReferralsList = referralsState.filter((r) => r.payoutStatus === 'pending_payout');
+
+          // Financial metrics
+          const totalRevenueCollected = transactionsState.reduce((sum, tx) => sum + (tx.amountZar || 0), 0);
+          const totalDepositsBanked = transactionsState
+            .filter((tx) => tx.allocation === 'deposit')
+            .reduce((sum, tx) => sum + (tx.amountZar || 0), 0);
+          const activeAssignedCount = vehiclesState.filter((v) => v.status === 'assigned_active').length || driversState.filter((d) => d.status === 'active').length;
+          const monthlyTarget = 250000;
+          const targetPct = Math.min(100, Math.round((totalRevenueCollected / monthlyTarget) * 100));
+
+          return (
+            <div className="flex flex-col gap-6" id="admin-dashboard-page">
+              {/* Sub-Header: Date and Customise */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h1 className="text-xl font-black text-slate-900 tracking-tight">Operations Dashboard</h1>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {new Date().toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · Fleet & Financial Overview
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => reloadAllFleetFromDb()}
+                    className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs flex items-center gap-1.5"
+                    title="Refresh data from database"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${isLoadingFleetFromDb ? 'animate-spin' : ''}`} />
+                    <span>Sync</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomizeModalOpen(true)}
+                    className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs flex items-center gap-1.5"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Customise</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Finish Setting Up FleetCO Progress Banner */}
+              {isSetupBannerVisible && (
+                <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950 text-white rounded-3xl p-5 sm:p-6 shadow-md border border-slate-800 relative overflow-hidden">
+                  <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-cyan-400 text-slate-950 flex items-center justify-center text-xs font-black">
+                          ✓
+                        </div>
+                        <h2 className="text-sm font-black tracking-tight text-white uppercase">
+                          SETUP PROGRESS · FLEET OPERATIONS
+                        </h2>
                       </div>
-                      <h2 className="text-sm font-black tracking-tight text-white uppercase">
-                        FINISH SETTING UP FLEETCO
-                      </h2>
+                      <p className="text-xs text-slate-300">
+                        {completedStepsCount} of {setupSteps.length} core setup steps complete · {nextIncompleteStep ? `Next: ${nextIncompleteStep.label}` : 'All Core Setup Done!'}
+                      </p>
+                      {/* Progress bar */}
+                      <div className="w-full max-w-md bg-slate-800 rounded-full h-2 overflow-hidden mt-2">
+                        <div
+                          className="bg-cyan-400 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${setupProgressPct}%` }}
+                        />
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-300">
-                      5 of 6 core steps done · ~1 minutes remaining
-                    </p>
-                    {/* Progress bar (83%) */}
-                    <div className="w-full max-w-md bg-slate-800 rounded-full h-2 overflow-hidden mt-2">
-                      <div className="bg-cyan-400 h-full rounded-full transition-all duration-500" style={{ width: '83%' }} />
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setIsSetupBannerVisible(false)}
-                      className="px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
-                    >
-                      Remind Me Tomorrow
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActivePage('settings')}
-                      className="px-5 py-2 rounded-xl text-xs font-black bg-cyan-400 hover:bg-cyan-300 text-slate-950 transition-all shadow-md"
-                    >
-                      Resume
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TODAY'S PRIORITIES (5 Vibrant Cards from Screenshot) */}
-            <div>
-              <h2 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">
-                TODAY'S PRIORITIES
-              </h2>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-                {/* 1. Red Card: Overdue Payments */}
-                <div className="bg-white rounded-2xl border-2 border-rose-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
-                  <div>
-                    <div className="text-2xl font-black text-rose-600">
-                      {driversState.filter((d) => d.balanceDue > 0).length}
-                    </div>
-                    <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
-                      OVERDUE PAYMENTS
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setActivePage('paystack_collections')}
-                    className="mt-4 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-colors w-fit border border-rose-200"
-                  >
-                    Collect Now
-                  </button>
-                </div>
-
-                {/* 2. Mint Green Card: New Applicants */}
-                <div className="bg-white rounded-2xl border-2 border-emerald-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
-                  <div>
-                    <div className="text-2xl font-black text-emerald-600">
-                      {pendingCount}
-                    </div>
-                    <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
-                      NEW APPLICANTS
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setActivePage('applicants')}
-                    className="mt-4 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold transition-colors w-fit border border-emerald-200"
-                  >
-                    Review
-                  </button>
-                </div>
-
-                {/* 3. Yellow/Gold Card: Vehicles in Maintenance */}
-                <div className="bg-white rounded-2xl border-2 border-amber-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
-                  <div>
-                    <div className="text-2xl font-black text-amber-600">
-                      {vehiclesState.filter((v) => v.status === 'in_maintenance' || v.status === 'repair_needed').length}
-                    </div>
-                    <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
-                      VEHICLES IN MAINTENANCE
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setActivePage('repairs_services')}
-                    className="mt-4 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-bold transition-colors w-fit border border-amber-200"
-                  >
-                    Check Status
-                  </button>
-                </div>
-
-                {/* 4. Sky Blue Card: Missing Documents */}
-                <div className="bg-white rounded-2xl border-2 border-cyan-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
-                  <div>
-                    <div className="text-2xl font-black text-cyan-600">
-                      {missingDocsCount}
-                    </div>
-                    <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
-                      MISSING DOCUMENTS
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setActivePage('applicants')}
-                    className="mt-4 px-3 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-800 rounded-xl text-xs font-bold transition-colors w-fit border border-cyan-200"
-                  >
-                    Follow Up
-                  </button>
-                </div>
-
-                {/* 5. Dark / Charcoal Card: Referrals Owed */}
-                <div className="bg-white rounded-2xl border-2 border-slate-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
-                  <div>
-                    <div className="text-2xl font-black text-slate-800">
-                      {referralsState.filter((r) => r.payoutStatus === 'pending_payout').length}
-                    </div>
-                    <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
-                      REFERRALS OWED
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setActivePage('referrals')}
-                    className="mt-4 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-colors w-fit border border-slate-300"
-                  >
-                    Pay Out
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Actions Bar */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-xs font-black text-slate-400 uppercase tracking-wider mr-2">Quick Actions:</span>
-
-                <button
-                  type="button"
-                  onClick={() => setIsWalkinModalOpen(true)}
-                  className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center gap-2"
-                >
-                  <UserPlus className="w-4 h-4 text-cyan-600" />
-                  <span>+ Add Customer</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActivePage('bike_and_stock');
-                    startAddNewBike();
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center gap-2"
-                >
-                  <BikeIcon className="w-4 h-4 text-emerald-600" />
-                  <span>Add Vehicle</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActivePage('paystack_collections')}
-                  className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center gap-2"
-                >
-                  <CreditCard className="w-4 h-4 text-amber-600" />
-                  <span>Record Payment</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (applications.length > 0) {
-                      setContractApp(applications[0]);
-                    } else {
-                      alert('Register an applicant first to generate agreements.');
-                    }
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center gap-2"
-                >
-                  <FileText className="w-4 h-4 text-indigo-600" />
-                  <span>Create New Document</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Split Dashboard: NEEDS ATTENTION & REVENUE TREND */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              
-              {/* Left Card: NEEDS ATTENTION */}
-              <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-                    NEEDS ATTENTION
-                  </h3>
-                  
-                  {/* Filter Tabs */}
-                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
-                    {(['all', 'overdue', 'applications', 'payments'] as const).map((tab) => (
+                    <div className="flex items-center gap-2.5 shrink-0">
                       <button
-                        key={tab}
                         type="button"
-                        onClick={() => setDashboardTab(tab)}
-                        className={`px-2.5 py-1 rounded-lg capitalize font-bold transition-all ${
-                          dashboardTab === tab
-                            ? 'bg-white text-slate-900 shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
+                        onClick={() => setIsSetupBannerVisible(false)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
                       >
-                        {tab}
+                        Dismiss
                       </button>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (nextIncompleteStep) {
+                            setActivePage(nextIncompleteStep.route);
+                          } else {
+                            setActivePage('approved_customers');
+                          }
+                        }}
+                        className="px-5 py-2 rounded-xl text-xs font-black bg-cyan-400 hover:bg-cyan-300 text-slate-950 transition-all shadow-md flex items-center gap-1.5"
+                      >
+                        <span>{nextIncompleteStep ? 'Resume Setup' : 'View Operations'}</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                {/* Attention Items List */}
-                <div className="space-y-3 mt-1">
-                  {/* Overdue items */}
-                  {driversState
-                    .filter((d) => d.balanceDue > 0)
-                    .slice(0, 3)
-                    .map((d) => (
+              {/* TODAY'S PRIORITIES (5 Vibrant Clickable Cards) */}
+              <div>
+                <h2 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">
+                  TODAY'S PRIORITIES
+                </h2>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                  {/* 1. Red Card: Overdue Payments */}
+                  <div className="bg-white rounded-2xl border-2 border-rose-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+                    <div>
+                      <div className="text-2xl font-black text-rose-600">
+                        {overdueDrivers.length}
+                      </div>
+                      <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
+                        OVERDUE PAYMENTS
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        {overdueDrivers.length > 0 
+                          ? `R${overdueDrivers.reduce((sum, d) => sum + d.balanceDue, 0).toFixed(0)} total balance` 
+                          : 'All accounts up to date'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (overdueDrivers.length > 0) {
+                          setSelectedFinanceDriver(overdueDrivers[0]);
+                        } else {
+                          setActivePage('approved_customers');
+                        }
+                      }}
+                      className="mt-4 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-colors w-full sm:w-fit border border-rose-200 flex items-center justify-center gap-1.5"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      <span>{overdueDrivers.length > 0 ? 'Track & Collect' : 'View Ledger'}</span>
+                    </button>
+                  </div>
+
+                  {/* 2. Mint Green Card: New Applicants */}
+                  <div className="bg-white rounded-2xl border-2 border-emerald-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+                    <div>
+                      <div className="text-2xl font-black text-emerald-600">
+                        {pendingAppsList.length || pendingCount}
+                      </div>
+                      <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
+                        NEW APPLICANTS
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        {pendingAppsList.length > 0 ? 'Awaiting vetting / docs' : 'No new queue items'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter('all');
+                        setActivePage('applicants');
+                      }}
+                      className="mt-4 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold transition-colors w-full sm:w-fit border border-emerald-200 flex items-center justify-center gap-1.5"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>Review Queue</span>
+                    </button>
+                  </div>
+
+                  {/* 3. Yellow/Gold Card: Vehicles in Maintenance */}
+                  <div className="bg-white rounded-2xl border-2 border-amber-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+                    <div>
+                      <div className="text-2xl font-black text-amber-600">
+                        {maintenanceVehiclesList.length}
+                      </div>
+                      <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
+                        VEHICLES IN MAINTENANCE
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        {maintenanceVehiclesList.length > 0 ? 'Workshop jobs open' : 'Fleet fully operational'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActivePage('repairs_services')}
+                      className="mt-4 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-bold transition-colors w-full sm:w-fit border border-amber-200 flex items-center justify-center gap-1.5"
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                      <span>Check Workshop</span>
+                    </button>
+                  </div>
+
+                  {/* 4. Sky Blue Card: Missing Documents */}
+                  <div className="bg-white rounded-2xl border-2 border-cyan-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+                    <div>
+                      <div className="text-2xl font-black text-cyan-600">
+                        {missingDocsCount}
+                      </div>
+                      <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
+                        MISSING DOCUMENTS
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        {missingDocsCount > 0 ? 'TRN / Work permits pending' : 'All applicant files complete'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter('needs_more_info');
+                        setActivePage('applicants');
+                      }}
+                      className="mt-4 px-3 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-800 rounded-xl text-xs font-bold transition-colors w-full sm:w-fit border border-cyan-200 flex items-center justify-center gap-1.5"
+                    >
+                      <FileCheck className="w-3.5 h-3.5" />
+                      <span>Follow Up</span>
+                    </button>
+                  </div>
+
+                  {/* 5. Dark / Charcoal Card: Referrals Owed */}
+                  <div className="bg-white rounded-2xl border-2 border-slate-400/80 p-4 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+                    <div>
+                      <div className="text-2xl font-black text-slate-800">
+                        {pendingReferralsList.length}
+                      </div>
+                      <div className="text-xs font-black text-slate-900 uppercase mt-0.5 tracking-tight">
+                        REFERRALS OWED
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        {pendingReferralsList.length > 0 
+                          ? `R${pendingReferralsList.reduce((sum, r) => sum + r.rewardAmountZar, 0).toFixed(0)} payout pending` 
+                          : 'No pending driver rewards'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActivePage('referrals')}
+                      className="mt-4 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-colors w-full sm:w-fit border border-slate-300 flex items-center justify-center gap-1.5"
+                    >
+                      <Gift className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Manage Referrals</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Actions Bar */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-xs font-black text-slate-400 uppercase tracking-wider mr-2">Quick Actions:</span>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsWalkinModalOpen(true)}
+                    className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-cyan-50 hover:border-cyan-300 text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center gap-2 shadow-2xs"
+                  >
+                    <UserPlus className="w-4 h-4 text-cyan-600" />
+                    <span>+ Add Customer / Walk-In</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePage('bike_and_stock');
+                      startAddNewBike();
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center gap-2 shadow-2xs"
+                  >
+                    <BikeIcon className="w-4 h-4 text-emerald-600" />
+                    <span>Add Vehicle Model</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (driversState.length > 0) {
+                        setQuickPayDriverId(driversState[0].id);
+                        setQuickPayAmount(driversState[0].weeklyRate || 650);
+                      }
+                      setIsQuickRecordPaymentOpen(true);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-amber-50 hover:border-amber-300 text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center gap-2 shadow-2xs"
+                  >
+                    <CreditCard className="w-4 h-4 text-amber-600" />
+                    <span>Record Payment (POP / EFT)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (applications.length > 0) {
+                        setContractApp(applications[0]);
+                      } else {
+                        alert('Register an applicant first to generate agreements.');
+                      }
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center gap-2 shadow-2xs"
+                  >
+                    <FileText className="w-4 h-4 text-indigo-600" />
+                    <span>Create New Document</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActivePage('live_tracking')}
+                    className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-rose-50 hover:border-rose-300 text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center gap-2 shadow-2xs"
+                  >
+                    <Radio className="w-4 h-4 text-rose-500 animate-pulse" />
+                    <span>Live Fleet GPS</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Split Dashboard: NEEDS ATTENTION & REVENUE TREND */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* Left Card: NEEDS ATTENTION */}
+                <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs flex flex-col gap-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                        NEEDS ATTENTION
+                      </h3>
+                      <p className="text-[11px] text-slate-500">Action items requiring administrative action</p>
+                    </div>
+                    
+                    {/* Filter Tabs */}
+                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs self-start sm:self-auto">
+                      {(['all', 'overdue', 'applications', 'payments'] as const).map((tab) => (
+                        <button
+                          key={tab}
+                          type="button"
+                          onClick={() => setDashboardTab(tab)}
+                          className={`px-2.5 py-1 rounded-lg capitalize font-bold transition-all ${
+                            dashboardTab === tab
+                              ? 'bg-white text-slate-900 shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {tab}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Attention Items List */}
+                  <div className="space-y-3 mt-1 flex-1">
+                    {/* OVERDUE TAB OR ALL */}
+                    {(dashboardTab === 'all' || dashboardTab === 'overdue') && overdueDrivers.map((d) => (
                       <div
-                        key={d.id}
-                        className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-200 flex items-center justify-between hover:bg-rose-100/70 transition-colors"
+                        key={`overdue-${d.id}`}
+                        className="p-3.5 rounded-2xl bg-rose-50/70 border border-rose-200 flex items-center justify-between hover:bg-rose-100/70 transition-colors gap-3"
                       >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-black text-slate-900">{d.fullName}</span>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-black text-slate-900 truncate">{d.fullName}</span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 shrink-0">
                               Overdue R{d.balanceDue.toFixed(2)}
                             </span>
                           </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">
-                            Bike: {d.assignedVehiclePlate || 'None'} · Contact: {d.phone}
+                          <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                            Bike: <strong className="text-slate-700">{d.assignedVehiclePlate || 'Unassigned'}</strong> · Phone: {d.phone}
                           </div>
                         </div>
 
                         <button
                           type="button"
-                          onClick={() => {
-                            setSelectedDriverForYocoPayment(d);
-                            setActivePage('paystack_collections');
-                          }}
-                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-2xs"
+                          onClick={() => setSelectedFinanceDriver(d)}
+                          className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-2xs shrink-0 flex items-center gap-1.5"
                         >
-                          Collect
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span>Track Finance</span>
                         </button>
                       </div>
                     ))}
 
-                  {/* Pending applications */}
-                  {applications
-                    .filter((a) => a.status === 'pending_review' || a.status === 'needs_more_info')
-                    .slice(0, 3)
-                    .map((a) => (
+                    {/* APPLICATIONS TAB OR ALL */}
+                    {(dashboardTab === 'all' || dashboardTab === 'applications') && pendingAppsList.map((a) => (
                       <div
-                        key={a.id}
-                        className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between hover:bg-slate-100 transition-colors"
+                        key={`app-${a.id}`}
+                        className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between hover:bg-slate-100 transition-colors gap-3"
                       >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-black text-slate-900">{a.fullName}</span>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800">
-                              {a.status === 'needs_more_info' ? 'Missing TRN/Docs' : 'Pending Review'}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-black text-slate-900 truncate">{a.fullName}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                              a.status === 'needs_more_info' ? 'bg-amber-100 text-amber-900' : 'bg-cyan-100 text-cyan-900'
+                            }`}>
+                              {a.status === 'needs_more_info' ? 'Missing Docs / TRN' : 'Pending Review'}
                             </span>
                           </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">
-                            Ref: {a.refNumber} · Chosen: {a.bikeName}
+                          <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                            Ref: <strong className="font-mono text-slate-700">{a.refNumber}</strong> · Bike: {a.bikeName}
                           </div>
                         </div>
 
@@ -1737,85 +1854,156 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                             setSelectedAppId(a.id);
                             setActivePage('applicants');
                           }}
-                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold"
+                          className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shrink-0 flex items-center gap-1"
                         >
-                          Inspect
+                          <span>Inspect</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ))}
-                </div>
-              </div>
 
-              {/* Right Card: REVENUE TREND */}
-              <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs flex flex-col justify-between gap-4">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-                      REVENUE TREND
-                    </h3>
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                      +18.4% this month
-                    </span>
-                  </div>
+                    {/* PAYMENTS TAB */}
+                    {dashboardTab === 'payments' && (
+                      <div className="space-y-2">
+                        {transactionsState.slice(0, 5).map((tx) => (
+                          <div
+                            key={tx.id}
+                            className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between hover:bg-slate-100 transition-colors"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-900">{tx.driverName}</span>
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800 uppercase">
+                                  {tx.allocation.replace('_', ' ')}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 mt-0.5">
+                                {new Date(tx.timestamp).toLocaleDateString('en-ZA')} · {tx.paymentMethod.replace('_', ' ')} · Ref: {tx.yocoPaymentId}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs font-black text-emerald-600">+R{tx.amountZar.toFixed(2)}</div>
+                              {tx.proofOfPaymentUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveDocImage({ title: `POP - ${tx.driverName}`, url: tx.proofOfPaymentUrl! })}
+                                  className="text-[10px] text-cyan-600 hover:underline font-bold flex items-center gap-0.5 justify-end"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                  <span>View POP</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
-                  {/* Summary Metric Chips */}
-                  <div className="grid grid-cols-3 gap-3 mt-4">
-                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Collected This Month</span>
-                      <span className="text-base font-black text-slate-900">
-                        R{transactionsState.reduce((sum, tx) => sum + (tx.amountZar || 0), 0).toLocaleString()}
-                      </span>
-                    </div>
-
-                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Deposits Banked</span>
-                      <span className="text-base font-black text-cyan-700">
-                        R{transactionsState.filter((tx) => tx.allocation === 'deposit').reduce((sum, tx) => sum + (tx.amountZar || 0), 0).toLocaleString()}
-                      </span>
-                    </div>
-
-                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Active Deployed</span>
-                      <span className="text-base font-black text-emerald-700">
-                        {vehiclesState.filter((v) => v.status === 'assigned_active').length} Bikes
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* SVG Line Graph */}
-                  <div className="mt-5 h-36 w-full flex items-end">
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 400 120">
-                      <defs>
-                        <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.3" />
-                          <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.0" />
-                        </linearGradient>
-                      </defs>
-                      <path
-                        d="M 10 100 Q 80 80, 140 60 T 260 40 T 390 15 L 390 120 L 10 120 Z"
-                        fill="url(#revenueGrad)"
-                      />
-                      <path
-                        d="M 10 100 Q 80 80, 140 60 T 260 40 T 390 15"
-                        fill="none"
-                        stroke="#0891b2"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                      />
-                      <circle cx="390" cy="15" r="4" fill="#0891b2" className="animate-ping" />
-                      <circle cx="390" cy="15" r="4" fill="#0891b2" />
-                    </svg>
+                    {/* EMPTY STATE */}
+                    {((dashboardTab === 'all' && overdueDrivers.length === 0 && pendingAppsList.length === 0) ||
+                      (dashboardTab === 'overdue' && overdueDrivers.length === 0) ||
+                      (dashboardTab === 'applications' && pendingAppsList.length === 0) ||
+                      (dashboardTab === 'payments' && transactionsState.length === 0)) && (
+                      <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 flex flex-col items-center justify-center gap-2">
+                        <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                        <h4 className="text-xs font-black text-slate-800 uppercase">All Caught Up!</h4>
+                        <p className="text-xs text-slate-500 max-w-sm">
+                          {dashboardTab === 'overdue'
+                            ? 'No drivers currently have overdue balances. All accounts are settled!'
+                            : dashboardTab === 'applications'
+                            ? 'No applications are pending review. The pipeline is up to date!'
+                            : dashboardTab === 'payments'
+                            ? 'No transaction records found in this cycle.'
+                            : 'No pending priority items requiring attention right now.'}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-100">
-                  <span>Target: R250,000 / month</span>
-                  <span className="font-bold text-slate-800">74% Target Achieved</span>
+                {/* Right Card: REVENUE TREND */}
+                <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs flex flex-col justify-between gap-4">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                          REVENUE & SETTLEMENTS
+                        </h3>
+                        <p className="text-[11px] text-slate-500">Real-time collections & target progress</p>
+                      </div>
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Live Sync</span>
+                      </span>
+                    </div>
+
+                    {/* Summary Metric Chips */}
+                    <div className="grid grid-cols-3 gap-3 mt-4">
+                      <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Collected</span>
+                        <span className="text-base font-black text-slate-900">
+                          R{totalRevenueCollected.toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Deposits Banked</span>
+                        <span className="text-base font-black text-cyan-700">
+                          R{totalDepositsBanked.toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Active Deployed</span>
+                        <span className="text-base font-black text-emerald-700">
+                          {activeAssignedCount} Bikes
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* SVG Line Graph / Bar visualization */}
+                    <div className="mt-5 h-36 w-full flex items-end">
+                      <svg className="w-full h-full overflow-visible" viewBox="0 0 400 120">
+                        <defs>
+                          <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.3" />
+                            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.0" />
+                          </linearGradient>
+                        </defs>
+                        <path
+                          d="M 10 100 Q 80 80, 140 60 T 260 40 T 390 15 L 390 120 L 10 120 Z"
+                          fill="url(#revenueGrad)"
+                        />
+                        <path
+                          d="M 10 100 Q 80 80, 140 60 T 260 40 T 390 15"
+                          fill="none"
+                          stroke="#0891b2"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                        />
+                        <circle cx="390" cy="15" r="4" fill="#0891b2" className="animate-ping" />
+                        <circle cx="390" cy="15" r="4" fill="#0891b2" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-3 border-t border-slate-100">
+                    <div className="flex items-center justify-between text-xs text-slate-600">
+                      <span>Monthly Target: <strong className="text-slate-900 font-mono">R{monthlyTarget.toLocaleString()}</strong></span>
+                      <span className="font-black text-cyan-700">{targetPct}% Achieved</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-cyan-500 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${targetPct}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* PAGE 2: APPLICANTS PIPELINE & MANAGEMENT */}
         {(activePage === 'applicant' || activePage === 'applicants') && (
@@ -3324,6 +3512,279 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                 <span>Yes, Delete Application</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* DEDICATED DRIVER FINANCE MODAL */}
+      {selectedFinanceDriver && (
+        <DriverFinanceModal
+          driver={selectedFinanceDriver}
+          transactions={transactionsState}
+          onClose={() => setSelectedFinanceDriver(null)}
+          onUpdateDriver={handleUpdateDriver}
+          onAddTransaction={handleAddTransaction}
+        />
+      )}
+
+      {/* QUICK RECORD PAYMENT MODAL */}
+      {isQuickRecordPaymentOpen && (
+        <div
+          onClick={() => setIsQuickRecordPaymentOpen(false)}
+          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150 my-auto"
+          >
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">Record Payment</h3>
+                  <p className="text-xs text-slate-500">Capture Manual EFT, Cash, or Card Payment with POP</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQuickRecordPaymentOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const targetDriver = driversState.find((d) => d.id === quickPayDriverId) || driversState[0];
+                if (!targetDriver) {
+                  alert('Please select a driver to allocate the payment.');
+                  return;
+                }
+                const amt = Number(quickPayAmount) || 0;
+                if (amt <= 0) {
+                  alert('Please enter a valid payment amount.');
+                  return;
+                }
+
+                const newTx: YocoTransaction = {
+                  id: `tx-${Date.now()}`,
+                  yocoChargeId: `MANUAL-${Date.now().toString().slice(-6)}`,
+                  driverId: targetDriver.id,
+                  driverName: targetDriver.fullName,
+                  amountZar: amt,
+                  currency: 'ZAR',
+                  status: 'successful',
+                  paymentMethod: (quickPayMethod as any) || 'manual_eft',
+                  allocation: (quickPayAllocation as any) || 'weekly_rental',
+                  yocoFeeZar: 0,
+                  netAmountZar: amt,
+                  reconciliationStatus: 'reconciled',
+                  transactionDate: new Date().toISOString(),
+                  notes: quickPayNotes || 'Manually captured via Dashboard Quick Actions',
+                  proofOfPaymentUrl: quickPayProofFile || undefined,
+                  recordedBy: 'Admin Portal',
+                };
+
+                handleAddTransaction(newTx);
+
+                // Update driver balance / deposit
+                const currentBal = targetDriver.balanceDue || 0;
+                let newBal = currentBal;
+                let newDeposit = targetDriver.depositPaid || 0;
+
+                if (quickPayAllocation === 'weekly_rental' || (quickPayAllocation as string) === 'weekly_installment') {
+                  newBal = Math.max(0, currentBal - amt);
+                } else if (quickPayAllocation === 'security_deposit' || (quickPayAllocation as string) === 'deposit') {
+                  newDeposit += amt;
+                }
+
+                const updatedDriver: Driver = {
+                  ...targetDriver,
+                  balanceDue: newBal,
+                  depositPaid: newDeposit,
+                  totalPaid: (targetDriver.totalPaid || 0) + amt,
+                  status: newBal <= 0 ? 'active' : targetDriver.status,
+                };
+
+                handleUpdateDriver(updatedDriver);
+
+                // Reset & Close
+                setQuickPayNotes('');
+                setQuickPayProofFile(null);
+                setQuickPayProofFileName('');
+                setIsQuickRecordPaymentOpen(false);
+              }}
+              className="space-y-4 text-xs"
+            >
+              {/* Select Driver */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Approved Customer / Driver</label>
+                <select
+                  value={quickPayDriverId}
+                  onChange={(e) => {
+                    setQuickPayDriverId(e.target.value);
+                    const d = driversState.find((drv) => drv.id === e.target.value);
+                    if (d && d.weeklyRate) {
+                      setQuickPayAmount(d.weeklyRate);
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-bold outline-none focus:border-amber-500"
+                  required
+                >
+                  <option value="">-- Select Customer --</option>
+                  {driversState.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.fullName} (Bike: {d.assignedVehiclePlate || 'None'}) - Due: R{d.balanceDue || 0}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Amount & Method */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Amount (ZAR)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">R</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="1"
+                      value={quickPayAmount}
+                      onChange={(e) => setQuickPayAmount(parseFloat(e.target.value) || 0)}
+                      className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 bg-white font-mono font-bold text-slate-900 outline-none focus:border-amber-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Payment Method</label>
+                  <select
+                    value={quickPayMethod}
+                    onChange={(e: any) => setQuickPayMethod(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-bold text-slate-900 outline-none focus:border-amber-500"
+                  >
+                    <option value="manual_eft">Instant EFT</option>
+                    <option value="cash">Cash Received</option>
+                    <option value="card_present">Card POS (Physical)</option>
+                    <option value="yoco_app">Yoco Gateway</option>
+                    <option value="debit_order">Debit Order</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Allocation */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Payment Allocation</label>
+                <select
+                  value={quickPayAllocation}
+                  onChange={(e: any) => setQuickPayAllocation(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-bold text-slate-900 outline-none focus:border-amber-500"
+                >
+                  <option value="weekly_installment">Weekly Rent-to-Own Installment (Tue-Thu)</option>
+                  <option value="deposit">Deposit Payment</option>
+                  <option value="repair">Workshop / Repair Cost</option>
+                  <option value="fine">Traffic Fine Settlement</option>
+                  <option value="tracker">Tracker / Security Fee</option>
+                  <option value="unallocated">Unallocated / Advance Credit</option>
+                </select>
+              </div>
+
+              {/* Proof of Payment Upload */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Upload Proof of Payment (POP)</label>
+                <input
+                  ref={quickPayFileRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setIsQuickPayUploading(true);
+                    try {
+                      const base64 = await compressImageFile(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.85 });
+                      setQuickPayProofFile(base64);
+                      setQuickPayProofFileName(file.name);
+                    } catch (err: any) {
+                      console.error('POP upload error:', err);
+                      alert('Could not process document file.');
+                    } finally {
+                      setIsQuickPayUploading(false);
+                      if (quickPayFileRef.current) quickPayFileRef.current.value = '';
+                    }
+                  }}
+                />
+
+                {quickPayProofFile ? (
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-emerald-800 font-bold truncate">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="truncate">{quickPayProofFileName || 'Proof of Payment Attached'}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuickPayProofFile(null);
+                        setQuickPayProofFileName('');
+                      }}
+                      className="text-slate-400 hover:text-rose-600 p-1"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isQuickPayUploading}
+                    onClick={() => quickPayFileRef.current?.click()}
+                    className="w-full py-3 px-4 rounded-xl border-2 border-dashed border-slate-300 hover:border-amber-400 hover:bg-amber-50/40 text-slate-600 hover:text-amber-900 transition-colors flex items-center justify-center gap-2 font-bold"
+                  >
+                    {isQuickPayUploading ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                    ) : (
+                      <Upload className="w-4 h-4 text-amber-600" />
+                    )}
+                    <span>{isQuickPayUploading ? 'Processing File...' : 'Attach POP Slip / Bank Receipt (Optional)'}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Notes / Internal Reference</label>
+                <input
+                  type="text"
+                  value={quickPayNotes}
+                  onChange={(e) => setQuickPayNotes(e.target.value)}
+                  placeholder="e.g. Capitec EFT ref #82910 - Week 4 payment"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white font-medium text-slate-900 outline-none focus:border-amber-500"
+                />
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsQuickRecordPaymentOpen(false)}
+                  className="px-4 py-2 rounded-xl font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl font-black bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all shadow-md flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Log & Reconcile Payment</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
