@@ -151,6 +151,9 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     insurancePolicyNumber: string;
     insuranceExpiryDate: string;
     licenseDiskExpiryDate: string;
+    licenseDiskDocumentUrl: string;
+    licenseDiskDocumentName: string;
+    licenseDiskNumber: string;
   }>({
     rc1DocumentUrl: '',
     rc1DocumentName: '',
@@ -160,6 +163,9 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     insurancePolicyNumber: '',
     insuranceExpiryDate: '',
     licenseDiskExpiryDate: '',
+    licenseDiskDocumentUrl: '',
+    licenseDiskDocumentName: '',
+    licenseDiskNumber: '',
   });
   const [isSavingDocs, setIsSavingDocs] = useState<boolean>(false);
 
@@ -185,6 +191,9 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     telematics_imei: `CT-${Math.floor(10000 + Math.random() * 90000)}-SA`,
     telematics_battery_health: 98,
     license_disk_expiry_date: '2027-04-30',
+    license_disk_document_url: '',
+    license_disk_document_name: '',
+    license_disk_number: '',
     tracker_provider: 'Cartrack SA',
     insurance_policy_number: '',
     insurance_provider: 'Santam Commercial',
@@ -215,6 +224,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     insuranceDocumentName: string;
     rc1DocumentUrl: string;
     rc1DocumentName: string;
+    licenseDiskExpiryDate: string;
+    licenseDiskDocumentUrl: string;
+    licenseDiskDocumentName: string;
+    licenseDiskNumber: string;
     notes: string;
   }>({
     status: 'available_showroom',
@@ -231,12 +244,16 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     insuranceDocumentName: '',
     rc1DocumentUrl: '',
     rc1DocumentName: '',
+    licenseDiskExpiryDate: '',
+    licenseDiskDocumentUrl: '',
+    licenseDiskDocumentName: '',
+    licenseDiskNumber: '',
     notes: '',
   });
 
   const handleDocumentUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
-    docType: 'rc1' | 'insurance',
+    docType: 'rc1' | 'insurance' | 'license_disc',
     isNewForm: boolean = false
   ) => {
     const file = e.target.files?.[0];
@@ -252,11 +269,17 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
             rc1_document_url: dataUrl,
             rc1_document_name: file.name,
           }));
-        } else {
+        } else if (docType === 'insurance') {
           setNewVehicleForm((prev) => ({
             ...prev,
             insurance_document_url: dataUrl,
             insurance_document_name: file.name,
+          }));
+        } else if (docType === 'license_disc') {
+          setNewVehicleForm((prev) => ({
+            ...prev,
+            license_disk_document_url: dataUrl,
+            license_disk_document_name: file.name,
           }));
         }
       } else {
@@ -266,11 +289,17 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
             rc1DocumentUrl: dataUrl,
             rc1DocumentName: file.name,
           }));
-        } else {
+        } else if (docType === 'insurance') {
           setEditVehicleForm((prev) => ({
             ...prev,
             insuranceDocumentUrl: dataUrl,
             insuranceDocumentName: file.name,
+          }));
+        } else if (docType === 'license_disc') {
+          setEditVehicleForm((prev) => ({
+            ...prev,
+            licenseDiskDocumentUrl: dataUrl,
+            licenseDiskDocumentName: file.name,
           }));
         }
       }
@@ -280,7 +309,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
   const handleManageDocsUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
-    docType: 'rc1' | 'insurance'
+    docType: 'rc1' | 'insurance' | 'license_disc'
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -294,11 +323,17 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
           rc1DocumentUrl: dataUrl,
           rc1DocumentName: file.name,
         }));
-      } else {
+      } else if (docType === 'insurance') {
         setManagingDocsForm((prev) => ({
           ...prev,
           insuranceDocumentUrl: dataUrl,
           insuranceDocumentName: file.name,
+        }));
+      } else if (docType === 'license_disc') {
+        setManagingDocsForm((prev) => ({
+          ...prev,
+          licenseDiskDocumentUrl: dataUrl,
+          licenseDiskDocumentName: file.name,
         }));
       }
     };
@@ -316,6 +351,9 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       insurancePolicyNumber: veh.insurancePolicyNumber || (veh as any).insurance_policy_number || '',
       insuranceExpiryDate: veh.insuranceExpiryDate || (veh as any).insurance_expiry_date || '',
       licenseDiskExpiryDate: veh.licenseDiskExpiryDate || (veh as any).license_disk_expiry_date || '',
+      licenseDiskDocumentUrl: veh.licenseDiskDocumentUrl || (veh as any).license_disk_document_url || '',
+      licenseDiskDocumentName: veh.licenseDiskDocumentName || (veh as any).license_disk_document_name || '',
+      licenseDiskNumber: veh.licenseDiskNumber || (veh as any).license_disk_number || '',
     });
   };
 
@@ -342,6 +380,12 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       insurance_expiry_date: managingDocsForm.insuranceExpiryDate,
       licenseDiskExpiryDate: managingDocsForm.licenseDiskExpiryDate,
       license_disk_expiry_date: managingDocsForm.licenseDiskExpiryDate,
+      licenseDiskDocumentUrl: managingDocsForm.licenseDiskDocumentUrl,
+      license_disk_document_url: managingDocsForm.licenseDiskDocumentUrl,
+      licenseDiskDocumentName: managingDocsForm.licenseDiskDocumentName,
+      license_disk_document_name: managingDocsForm.licenseDiskDocumentName,
+      licenseDiskNumber: managingDocsForm.licenseDiskNumber,
+      license_disk_number: managingDocsForm.licenseDiskNumber,
     };
 
     onUpdateVehicle(updatedVehicle);
@@ -352,12 +396,52 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     if (dbRes.success) {
       setDbNotification({
         type: 'success',
-        message: `✓ Documents updated for ${updatedVehicle.registrationPlate} and synced to Supabase database!`,
+        message: `✓ Documents & License Disc updated for ${updatedVehicle.registrationPlate} and synced to Supabase database!`,
       });
     } else if (dbRes.error) {
       setDbNotification({
         type: 'error',
         message: `Saved locally, but Supabase reported: ${dbRes.error}`,
+      });
+    }
+  };
+
+  // Quick Inline Status Changer (Damaged, Stolen, Decommissioned, Available, Assigned, Maintenance, etc.)
+  const handleQuickStatusChange = async (veh: Vehicle, newStatus: VehicleStatus) => {
+    const updatedVehicle: Vehicle = {
+      ...veh,
+      status: newStatus,
+    };
+
+    // If bike is decommissioned, stolen, or damaged, alert if assigned driver
+    if (['stolen', 'damaged', 'decommissioned', 'impounded'].includes(newStatus) && veh.assignedDriverName) {
+      console.log(`Status changed to ${newStatus} for bike ${veh.registrationPlate} previously assigned to ${veh.assignedDriverName}`);
+    }
+
+    onUpdateVehicle(updatedVehicle);
+    const dbRes = await saveSingleVehicleAsync(updatedVehicle);
+
+    const statusLabels: Record<string, string> = {
+      available: 'Available on Showroom',
+      available_showroom: 'Available on Showroom',
+      assigned: 'Assigned to Courier',
+      in_maintenance: 'In Workshop / Maintenance',
+      damaged: 'Damaged (Awaiting Repairs)',
+      stolen: 'Stolen (SAPS Alert Registered)',
+      decommissioned: 'Decommissioned / Written Off',
+      impounded: 'Impounded (Metro / JMPD)',
+      retired: 'Retired / Sold',
+    };
+
+    if (dbRes.success) {
+      setDbNotification({
+        type: newStatus === 'stolen' || newStatus === 'damaged' ? 'error' : 'success',
+        message: `✓ Status of ${veh.registrationPlate} updated to "${statusLabels[newStatus] || newStatus}" and synced to Supabase!`,
+      });
+    } else {
+      setDbNotification({
+        type: 'info',
+        message: `Status updated locally to "${statusLabels[newStatus] || newStatus}". Supabase: ${dbRes.error || 'Synced'}`,
       });
     }
   };
@@ -419,6 +503,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       insuranceDocumentName: veh.insuranceDocumentName || (veh as any).insurance_document_name || '',
       rc1DocumentUrl: veh.rc1DocumentUrl || (veh as any).rc1_document_url || '',
       rc1DocumentName: veh.rc1DocumentName || (veh as any).rc1_document_name || '',
+      licenseDiskExpiryDate: veh.licenseDiskExpiryDate || (veh as any).license_disk_expiry_date || '',
+      licenseDiskDocumentUrl: veh.licenseDiskDocumentUrl || (veh as any).license_disk_document_url || '',
+      licenseDiskDocumentName: veh.licenseDiskDocumentName || (veh as any).license_disk_document_name || '',
+      licenseDiskNumber: veh.licenseDiskNumber || (veh as any).license_disk_number || '',
       notes: veh.notes || (veh as any).bike_notes || (veh as any).bikeNotes || '',
     });
   };
@@ -475,6 +563,14 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       rc1_document_url: editVehicleForm.rc1DocumentUrl,
       rc1DocumentName: editVehicleForm.rc1DocumentName,
       rc1_document_name: editVehicleForm.rc1DocumentName,
+      licenseDiskExpiryDate: editVehicleForm.licenseDiskExpiryDate,
+      license_disk_expiry_date: editVehicleForm.licenseDiskExpiryDate,
+      licenseDiskDocumentUrl: editVehicleForm.licenseDiskDocumentUrl,
+      license_disk_document_url: editVehicleForm.licenseDiskDocumentUrl,
+      licenseDiskDocumentName: editVehicleForm.licenseDiskDocumentName,
+      license_disk_document_name: editVehicleForm.licenseDiskDocumentName,
+      licenseDiskNumber: editVehicleForm.licenseDiskNumber,
+      license_disk_number: editVehicleForm.licenseDiskNumber,
       notes: editVehicleForm.notes,
       bike_notes: editVehicleForm.notes,
       bikeNotes: editVehicleForm.notes,
@@ -1449,9 +1545,13 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 className="py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:bg-white focus:outline-none"
               >
                 <option value="all">All Statuses</option>
-                <option value="assigned">Assigned</option>
-                <option value="available">Available</option>
+                <option value="available">Available on Showroom</option>
+                <option value="assigned">Assigned to Courier</option>
                 <option value="in_maintenance">In Maintenance</option>
+                <option value="damaged">Damaged</option>
+                <option value="stolen">Stolen</option>
+                <option value="decommissioned">Decommissioned</option>
+                <option value="impounded">Impounded</option>
               </select>
             </div>
 
@@ -1486,10 +1586,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                     <th className="py-3 px-4">Plate & Model</th>
                     <th className="py-3 px-4">VIN & Engine Number</th>
                     <th className="py-3 px-4">Assigned Courier</th>
-                    <th className="py-3 px-4">Odometer & Next Service</th>
-                    <th className="py-3 px-4">Cartrack SA (Track)</th>
+                    <th className="py-3 px-4">Odometer & Service</th>
+                    <th className="py-3 px-4">GPS (Track)</th>
                     <th className="py-3 px-4">Bike Notes</th>
-                    <th className="py-3 px-4">Manage Documents</th>
+                    <th className="py-3 px-4">Bike Documents & Disc</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
@@ -1510,6 +1610,29 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                     const driverRef = assignedDriver?.refNumber || (assignedDriver?.id ? `DRV-${assignedDriver.id.slice(-4)}` : undefined);
                     const isAssigned = Boolean(driverName && driverName.trim() !== '' && driverName.toLowerCase() !== 'none' && driverName.toLowerCase() !== 'unassigned');
                     const bikeNotesText = veh.notes || (veh as any).bike_notes || (veh as any).bikeNotes || '';
+
+                    // License Disc Expiry calculations
+                    const discExpiryDate = veh.licenseDiskExpiryDate || (veh as any).license_disk_expiry_date || '';
+                    const discDocUrl = veh.licenseDiskDocumentUrl || (veh as any).license_disk_document_url || '';
+                    const discDocName = veh.licenseDiskDocumentName || (veh as any).license_disk_document_name || 'License_Disc.pdf';
+                    
+                    let discStatusBadge = { label: 'No Disc', color: 'bg-slate-100 text-slate-400 border-slate-200' };
+                    if (discExpiryDate) {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const exp = new Date(discExpiryDate);
+                      const diffTime = exp.getTime() - today.getTime();
+                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                      if (diffDays < 0) {
+                        discStatusBadge = { label: `Disc Expired (${discExpiryDate})`, color: 'bg-rose-50 text-rose-700 border-rose-300 font-bold' };
+                      } else if (diffDays <= 30) {
+                        discStatusBadge = { label: `Disc: ${diffDays}d rem (${discExpiryDate})`, color: 'bg-amber-50 text-amber-800 border-amber-300 font-bold' };
+                      } else {
+                        discStatusBadge = { label: `Disc: ${discExpiryDate}`, color: 'bg-emerald-50 text-emerald-800 border-emerald-300 font-bold' };
+                      }
+                    } else if (discDocUrl) {
+                      discStatusBadge = { label: 'Disc Doc ✓', color: 'bg-emerald-50 text-emerald-800 border-emerald-300 font-bold' };
+                    }
 
                     return (
                       <tr key={veh.id} className="hover:bg-slate-50/80 transition-colors">
@@ -1630,11 +1753,11 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                           )}
                         </td>
 
-                        {/* Manage Documents (RC1 & Insurance) */}
+                        {/* Bike Documents & Disc Section (RC1, Insurance, License Disc) */}
                         <td className="py-3.5 px-4">
                           <div className="space-y-1.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              {/* RC1 Document Badge */}
+                              {/* 1. RC1 Document Badge */}
                               {veh.rc1DocumentUrl || (veh as any).rc1_document_url ? (
                                 <button
                                   type="button"
@@ -1655,7 +1778,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                                 </span>
                               )}
 
-                              {/* Insurance Document Badge */}
+                              {/* 2. Insurance Document Badge */}
                               {veh.insuranceDocumentUrl || (veh as any).insurance_document_url ? (
                                 <button
                                   type="button"
@@ -1675,32 +1798,73 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                                   No Policy
                                 </span>
                               )}
+
+                              {/* 3. License Disc Badge */}
+                              {discDocUrl ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveDocViewer({
+                                    title: `NATIS License Disc: ${veh.registrationPlate}`,
+                                    url: discDocUrl,
+                                    fileName: discDocName
+                                  })}
+                                  className={`px-2 py-0.5 rounded-md text-[10px] border inline-flex items-center gap-1 cursor-pointer transition-colors ${discStatusBadge.color}`}
+                                  title="Click to preview NATIS License Disc"
+                                >
+                                  <Receipt className="w-3 h-3" />
+                                  <span>{discStatusBadge.label}</span>
+                                </button>
+                              ) : (
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] border ${discStatusBadge.color}`}>
+                                  {discStatusBadge.label}
+                                </span>
+                              )}
                             </div>
 
-                            {/* Prominent Manage Documents Button */}
+                            {/* Unified Manage Documents & Disc Button */}
                             <button
                               type="button"
                               onClick={() => handleOpenManageDocs(veh)}
                               className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold transition-colors inline-flex items-center gap-1 border border-indigo-200 shadow-2xs cursor-pointer w-full justify-center"
-                              title="Upload and manage RC1 and Insurance compliance documents"
+                              title="Upload RC1, Insurance & License Disc documents"
                             >
                               <Upload className="w-3 h-3 text-indigo-600" />
-                              <span>Manage Documents</span>
+                              <span>Manage Documents & Disc</span>
                             </button>
                           </div>
                         </td>
 
-                        {/* Status */}
+                        {/* Operational Status (Interactive Dropdown & Quick Changer) */}
                         <td className="py-3.5 px-4">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                            veh.status === 'assigned'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : veh.status === 'available' || veh.status === 'available_showroom'
-                              ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                              : 'bg-amber-100 text-amber-800 border border-amber-200'
-                          }`}>
-                            {veh.status === 'available_showroom' ? 'Showroom Stock' : veh.status.replace('_', ' ')}
-                          </span>
+                          <select
+                            value={veh.status || 'available_showroom'}
+                            onChange={(e) => handleQuickStatusChange(veh, e.target.value as VehicleStatus)}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border cursor-pointer outline-none transition-all shadow-2xs ${
+                              veh.status === 'assigned'
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                : veh.status === 'available' || veh.status === 'available_showroom'
+                                ? 'bg-blue-100 text-blue-900 border-blue-300'
+                                : veh.status === 'in_maintenance'
+                                ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                : veh.status === 'damaged'
+                                ? 'bg-orange-100 text-orange-900 border-orange-300'
+                                : veh.status === 'stolen'
+                                ? 'bg-rose-100 text-rose-900 border-rose-300 animate-pulse'
+                                : veh.status === 'impounded'
+                                ? 'bg-purple-100 text-purple-900 border-purple-300'
+                                : 'bg-slate-100 text-slate-800 border-slate-300'
+                            }`}
+                          >
+                            <option value="available_showroom">Showroom Stock</option>
+                            <option value="available">Available for Deploy</option>
+                            <option value="assigned">Assigned to Courier</option>
+                            <option value="in_maintenance">In Maintenance</option>
+                            <option value="damaged">Damaged (Repairs Needed)</option>
+                            <option value="stolen">Stolen (SAPS Alert)</option>
+                            <option value="decommissioned">Decommissioned / Written Off</option>
+                            <option value="impounded">Impounded (Metro / JMPD)</option>
+                            <option value="retired">Retired / Sold</option>
+                          </select>
                         </td>
 
                         {/* Actions */}
@@ -1709,25 +1873,16 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                             <button
                               type="button"
                               onClick={() => handleOpenEditVehicle(veh)}
-                              className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 shadow-2xs"
-                              title="Manage Vehicle Status, Odometer & Next Service"
+                              className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 shadow-2xs cursor-pointer"
+                              title="Manage Vehicle Status, Odometer & Maintenance"
                             >
                               <Edit className="w-3.5 h-3.5 text-indigo-300" />
                               <span>Manage</span>
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleOpenManageDocs(veh)}
-                              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 border border-indigo-200/80 shadow-2xs"
-                              title="Upload & Manage Documents"
-                            >
-                              <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                              <span>Docs</span>
-                            </button>
-                            <button
-                              type="button"
                               onClick={() => handleOpenNotes(veh)}
-                              className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 border border-amber-200 shadow-2xs"
+                              className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 border border-amber-200 shadow-2xs cursor-pointer"
                               title="View or edit bike notes"
                             >
                               <StickyNote className="w-3.5 h-3.5 text-amber-600" />
@@ -2737,53 +2892,53 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </div>
               </div>
 
-              {/* Section 5: Ownership & Compliance Documents (RC1 & Insurance) */}
+              {/* Section 5: Ownership & Compliance Documents (RC1, Insurance & License Disc) */}
               <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-indigo-700">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>5. Compliance & Ownership Documents (Required for Fleet Deploy)</span>
+                    <span>5. Bike Documents & Compliance (Required for Fleet Deployment)</span>
                   </div>
                   <span className="text-[10px] font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded">
                     NATIS & Underwriting
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                   {/* DOCUMENT 1: RC1 NATIS OWNERSHIP DOCUMENT */}
-                  <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm space-y-3">
+                  <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm space-y-2.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
                         <FileText className="w-4 h-4 text-indigo-600" />
-                        <span className="text-xs font-black text-slate-900">RC1 Document (Ownership)</span>
+                        <span className="text-xs font-black text-slate-900">1. RC1 Document</span>
                       </div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
                         NATIS RC1
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500">
-                      Upload the official RSA NATIS RC1 Certificate of Registration proving company ownership.
+                    <p className="text-[10px] text-slate-500">
+                      Proof of legal company ownership.
                     </p>
 
                     {newVehicleForm.rc1_document_url ? (
-                      <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2">
+                      <div className="p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 truncate">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                            <span className="text-xs font-bold text-emerald-900 truncate">
-                              {newVehicleForm.rc1_document_name || 'RC1_Ownership_Doc.pdf'}
+                          <div className="flex items-center gap-1.5 truncate">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="text-[11px] font-bold text-emerald-900 truncate">
+                              {newVehicleForm.rc1_document_name || 'RC1_Doc.pdf'}
                             </span>
                           </div>
                           <button
                             type="button"
                             onClick={() => setNewVehicleForm(prev => ({ ...prev, rc1_document_url: '', rc1_document_name: '' }))}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                            className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition-colors"
                             title="Remove Document"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => setActiveDocViewer({
@@ -2791,13 +2946,13 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                               url: newVehicleForm.rc1_document_url,
                               fileName: newVehicleForm.rc1_document_name || 'RC1_Doc.pdf'
                             })}
-                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm transition-colors"
+                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
                           >
                             <Eye className="w-3 h-3" />
-                            <span>Preview RC1</span>
+                            <span>Preview</span>
                           </button>
-                          <label className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-emerald-300 text-emerald-800 rounded-lg text-[10px] font-bold cursor-pointer transition-colors">
-                            <span>Change File</span>
+                          <label className="px-2 py-0.5 bg-white hover:bg-slate-50 border border-emerald-300 text-emerald-800 rounded text-[10px] font-bold cursor-pointer transition-colors">
+                            <span>Change</span>
                             <input
                               type="file"
                               accept=".pdf,image/png,image/jpeg,image/jpg"
@@ -2808,13 +2963,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                         </div>
                       </div>
                     ) : (
-                      <label className="border-2 border-dashed border-slate-300 hover:border-indigo-400 rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50/50 hover:bg-indigo-50/30 transition-all group">
-                        <Upload className="w-5 h-5 text-slate-400 group-hover:text-indigo-600 transition-colors" />
-                        <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-900">
-                          Upload RC1 Ownership File
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          PDF, PNG, or JPG (Max 15MB)
+                      <label className="border-2 border-dashed border-slate-300 hover:border-indigo-400 rounded-xl p-3 flex flex-col items-center justify-center gap-1 cursor-pointer bg-slate-50/50 hover:bg-indigo-50/30 transition-all group">
+                        <Upload className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+                        <span className="text-[11px] font-bold text-slate-700 group-hover:text-indigo-900">
+                          Upload RC1
                         </span>
                         <input
                           type="file"
@@ -2826,40 +2978,40 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                     )}
                   </div>
 
-                  {/* DOCUMENT 2: INSURANCE DOCUMENT & POLICY DETAILS */}
-                  <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm space-y-3">
+                  {/* DOCUMENT 2: INSURANCE DOCUMENT & POLICY */}
+                  <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm space-y-2.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
                         <Shield className="w-4 h-4 text-indigo-600" />
-                        <span className="text-xs font-black text-slate-900">Insurance Policy Document</span>
+                        <span className="text-xs font-black text-slate-900">2. Insurance Policy</span>
                       </div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
-                        Fleet Policy
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">
+                        Insurance
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500">
-                      Upload active comprehensive cover schedule or fleet insurance policy note.
+                    <p className="text-[10px] text-slate-500">
+                      Commercial underwriter schedule.
                     </p>
 
                     {newVehicleForm.insurance_document_url ? (
-                      <div className="p-3 bg-sky-50/70 border border-sky-200 rounded-xl space-y-2">
+                      <div className="p-2.5 bg-sky-50/70 border border-sky-200 rounded-xl space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 truncate">
-                            <CheckCircle2 className="w-4 h-4 text-sky-600 shrink-0" />
-                            <span className="text-xs font-bold text-sky-900 truncate">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                            <span className="text-[11px] font-bold text-sky-900 truncate">
                               {newVehicleForm.insurance_document_name || 'Insurance_Policy.pdf'}
                             </span>
                           </div>
                           <button
                             type="button"
                             onClick={() => setNewVehicleForm(prev => ({ ...prev, insurance_document_url: '', insurance_document_name: '' }))}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                            className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition-colors"
                             title="Remove Document"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => setActiveDocViewer({
@@ -2867,13 +3019,13 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                               url: newVehicleForm.insurance_document_url,
                               fileName: newVehicleForm.insurance_document_name || 'Insurance_Policy.pdf'
                             })}
-                            className="px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm transition-colors"
+                            className="px-2 py-0.5 bg-sky-600 hover:bg-sky-700 text-white rounded text-[10px] font-bold flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
                           >
                             <Eye className="w-3 h-3" />
-                            <span>Preview Insurance</span>
+                            <span>Preview</span>
                           </button>
-                          <label className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-sky-300 text-sky-800 rounded-lg text-[10px] font-bold cursor-pointer transition-colors">
-                            <span>Change File</span>
+                          <label className="px-2 py-0.5 bg-white hover:bg-slate-50 border border-sky-300 text-sky-800 rounded text-[10px] font-bold cursor-pointer transition-colors">
+                            <span>Change</span>
                             <input
                               type="file"
                               accept=".pdf,image/png,image/jpeg,image/jpg"
@@ -2884,13 +3036,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                         </div>
                       </div>
                     ) : (
-                      <label className="border-2 border-dashed border-slate-300 hover:border-sky-400 rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50/50 hover:bg-sky-50/30 transition-all group">
-                        <Upload className="w-5 h-5 text-slate-400 group-hover:text-sky-600 transition-colors" />
-                        <span className="text-xs font-bold text-slate-700 group-hover:text-sky-900">
-                          Upload Insurance Document
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          PDF, PNG, or JPG (Max 15MB)
+                      <label className="border-2 border-dashed border-slate-300 hover:border-sky-400 rounded-xl p-3 flex flex-col items-center justify-center gap-1 cursor-pointer bg-slate-50/50 hover:bg-sky-50/30 transition-all group">
+                        <Upload className="w-4 h-4 text-slate-400 group-hover:text-sky-600 transition-colors" />
+                        <span className="text-[11px] font-bold text-slate-700 group-hover:text-sky-900">
+                          Upload Insurance
                         </span>
                         <input
                           type="file"
@@ -2902,40 +3051,117 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                     )}
 
                     {/* Policy Metadata Inputs */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-100">
+                    <div className="space-y-1.5 pt-1.5 border-t border-slate-100 text-[10px]">
                       <div>
-                        <label className="text-[10px] font-bold text-slate-600 block mb-1">Provider</label>
-                        <select
-                          value={newVehicleForm.insurance_provider}
-                          onChange={(e) => setNewVehicleForm({ ...newVehicleForm, insurance_provider: e.target.value })}
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-[11px] font-medium bg-white"
-                        >
-                          <option value="Santam Commercial">Santam Commercial</option>
-                          <option value="Discovery Insure">Discovery Insure</option>
-                          <option value="Hollard Commercial">Hollard Commercial</option>
-                          <option value="Old Mutual Insure">Old Mutual Insure</option>
-                          <option value="Outsurance Fleet">Outsurance Fleet</option>
-                          <option value="Guardrisk">Guardrisk</option>
-                          <option value="Other">Other Underwriter</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-600 block mb-1">Policy Number</label>
                         <input
                           type="text"
-                          placeholder="e.g. POL-90241-FLT"
+                          placeholder="Policy #: POL-90241-FLT"
                           value={newVehicleForm.insurance_policy_number}
                           onChange={(e) => setNewVehicleForm({ ...newVehicleForm, insurance_policy_number: e.target.value })}
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-[11px] font-mono"
+                          className="w-full px-2 py-1 border border-slate-200 rounded text-[11px] font-mono"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold text-slate-600 block mb-1">Expiry Date</label>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase block">Policy Expiry</label>
                         <input
                           type="date"
                           value={newVehicleForm.insurance_expiry_date}
                           onChange={(e) => setNewVehicleForm({ ...newVehicleForm, insurance_expiry_date: e.target.value })}
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-[11px]"
+                          className="w-full px-2 py-1 border border-slate-200 rounded text-[11px]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DOCUMENT 3: NATIS LICENSE DISC */}
+                  <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Receipt className="w-4 h-4 text-indigo-600" />
+                        <span className="text-xs font-black text-slate-900">3. License Disc</span>
+                      </div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                        NATIS Disc
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      Motor vehicle license disc scan/photo.
+                    </p>
+
+                    {newVehicleForm.license_disk_document_url ? (
+                      <div className="p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="text-[11px] font-bold text-emerald-900 truncate">
+                              {newVehicleForm.license_disk_document_name || 'License_Disc.pdf'}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setNewVehicleForm(prev => ({ ...prev, license_disk_document_url: '', license_disk_document_name: '' }))}
+                            className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                            title="Remove Document"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setActiveDocViewer({
+                              title: `License Disc Preview - ${newVehicleForm.registration_plate || 'New Vehicle'}`,
+                              url: newVehicleForm.license_disk_document_url,
+                              fileName: newVehicleForm.license_disk_document_name || 'License_Disc.pdf'
+                            })}
+                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>Preview</span>
+                          </button>
+                          <label className="px-2 py-0.5 bg-white hover:bg-slate-50 border border-emerald-300 text-emerald-800 rounded text-[10px] font-bold cursor-pointer transition-colors">
+                            <span>Change</span>
+                            <input
+                              type="file"
+                              accept=".pdf,image/png,image/jpeg,image/jpg"
+                              onChange={(e) => handleDocumentUpload(e, 'license_disc', true)}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="border-2 border-dashed border-slate-300 hover:border-emerald-400 rounded-xl p-3 flex flex-col items-center justify-center gap-1 cursor-pointer bg-slate-50/50 hover:bg-emerald-50/30 transition-all group">
+                        <Upload className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
+                        <span className="text-[11px] font-bold text-slate-700 group-hover:text-emerald-900">
+                          Upload Disc Photo
+                        </span>
+                        <input
+                          type="file"
+                          accept=".pdf,image/png,image/jpeg,image/jpg"
+                          onChange={(e) => handleDocumentUpload(e, 'license_disc', true)}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+
+                    <div className="space-y-1.5 pt-1.5 border-t border-slate-100 text-[10px]">
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="Disc #: DISC-88291-GP"
+                          value={newVehicleForm.license_disk_number}
+                          onChange={(e) => setNewVehicleForm({ ...newVehicleForm, license_disk_number: e.target.value })}
+                          className="w-full px-2 py-1 border border-slate-200 rounded text-[11px] font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase block">Disc Expiry Date</label>
+                        <input
+                          type="date"
+                          value={newVehicleForm.license_disk_expiry_date}
+                          onChange={(e) => setNewVehicleForm({ ...newVehicleForm, license_disk_expiry_date: e.target.value })}
+                          className="w-full px-2 py-1 border border-slate-200 rounded text-[11px]"
                         />
                       </div>
                     </div>
@@ -3090,7 +3316,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div>
                     <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Vehicle Status *
+                      Vehicle Operational Status *
                     </label>
                     <select
                       value={editVehicleForm.status}
@@ -3101,8 +3327,11 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       <option value="available">Available for Deployment</option>
                       <option value="assigned">Assigned / Active with Courier</option>
                       <option value="in_maintenance">In Workshop / Scheduled Maintenance</option>
-                      <option value="impounded">Impounded / Grounded</option>
-                      <option value="decommissioned">Decommissioned / Retired</option>
+                      <option value="damaged">Damaged (Awaiting Repairs / Assessment)</option>
+                      <option value="stolen">Stolen (SAPS Alert & Tracking Immobilized)</option>
+                      <option value="decommissioned">Decommissioned / Written Off</option>
+                      <option value="impounded">Impounded / Metro Police</option>
+                      <option value="retired">Retired / Sold</option>
                     </select>
                   </div>
 
@@ -3283,50 +3512,50 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </div>
               </div>
 
-              {/* EDITABLE SECTION 4: OWNERSHIP & COMPLIANCE DOCUMENTS (RC1 & INSURANCE) */}
+              {/* EDITABLE SECTION 4: OWNERSHIP & COMPLIANCE DOCUMENTS (RC1, INSURANCE & LICENSE DISC) */}
               <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-indigo-700">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>4. Compliance & Ownership Documents (RC1 & Insurance)</span>
+                    <span>4. Bike Documents & Compliance (RC1, Insurance & License Disc)</span>
                   </div>
                   <span className="text-[10px] font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded">
                     NATIS & Underwriting
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                   {/* DOCUMENT 1: RC1 NATIS OWNERSHIP DOCUMENT */}
-                  <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm space-y-3">
+                  <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm space-y-2.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
                         <FileText className="w-4 h-4 text-indigo-600" />
-                        <span className="text-xs font-black text-slate-900">RC1 Document (Ownership)</span>
+                        <span className="text-xs font-black text-slate-900">1. RC1 Document</span>
                       </div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
                         NATIS RC1
                       </span>
                     </div>
 
                     {editVehicleForm.rc1DocumentUrl ? (
-                      <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2">
+                      <div className="p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 truncate">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                            <span className="text-xs font-bold text-emerald-900 truncate">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="text-[11px] font-bold text-emerald-900 truncate">
                               {editVehicleForm.rc1DocumentName || 'RC1_Ownership_Doc.pdf'}
                             </span>
                           </div>
                           <button
                             type="button"
                             onClick={() => setEditVehicleForm(prev => ({ ...prev, rc1DocumentUrl: '', rc1DocumentName: '' }))}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                            className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition-colors"
                             title="Remove Document"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => setActiveDocViewer({
@@ -3334,13 +3563,13 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                               url: editVehicleForm.rc1DocumentUrl,
                               fileName: editVehicleForm.rc1DocumentName || 'RC1_Ownership_Doc.pdf'
                             })}
-                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm transition-colors"
+                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
                           >
                             <Eye className="w-3 h-3" />
-                            <span>Preview RC1</span>
+                            <span>Preview</span>
                           </button>
-                          <label className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-emerald-300 text-emerald-800 rounded-lg text-[10px] font-bold cursor-pointer transition-colors">
-                            <span>Replace File</span>
+                          <label className="px-2 py-0.5 bg-white hover:bg-slate-50 border border-emerald-300 text-emerald-800 rounded text-[10px] font-bold cursor-pointer transition-colors">
+                            <span>Replace</span>
                             <input
                               type="file"
                               accept=".pdf,image/png,image/jpeg,image/jpg"
@@ -3351,13 +3580,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                         </div>
                       </div>
                     ) : (
-                      <label className="border-2 border-dashed border-slate-300 hover:border-indigo-400 rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50/50 hover:bg-indigo-50/30 transition-all group">
-                        <Upload className="w-5 h-5 text-slate-400 group-hover:text-indigo-600 transition-colors" />
-                        <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-900">
-                          Upload RC1 Ownership File
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          PDF, PNG, or JPG (Max 15MB)
+                      <label className="border-2 border-dashed border-slate-300 hover:border-indigo-400 rounded-xl p-3 flex flex-col items-center justify-center gap-1 cursor-pointer bg-slate-50/50 hover:bg-indigo-50/30 transition-all group">
+                        <Upload className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+                        <span className="text-[11px] font-bold text-slate-700 group-hover:text-indigo-900">
+                          Upload RC1 File
                         </span>
                         <input
                           type="file"
@@ -3370,36 +3596,36 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   </div>
 
                   {/* DOCUMENT 2: INSURANCE DOCUMENT & POLICY DETAILS */}
-                  <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm space-y-3">
+                  <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm space-y-2.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
                         <Shield className="w-4 h-4 text-indigo-600" />
-                        <span className="text-xs font-black text-slate-900">Insurance Policy Document</span>
+                        <span className="text-xs font-black text-slate-900">2. Insurance Policy</span>
                       </div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">
                         Fleet Policy
                       </span>
                     </div>
 
                     {editVehicleForm.insuranceDocumentUrl ? (
-                      <div className="p-3 bg-sky-50/70 border border-sky-200 rounded-xl space-y-2">
+                      <div className="p-2.5 bg-sky-50/70 border border-sky-200 rounded-xl space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 truncate">
-                            <CheckCircle2 className="w-4 h-4 text-sky-600 shrink-0" />
-                            <span className="text-xs font-bold text-sky-900 truncate">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                            <span className="text-[11px] font-bold text-sky-900 truncate">
                               {editVehicleForm.insuranceDocumentName || 'Insurance_Policy.pdf'}
                             </span>
                           </div>
                           <button
                             type="button"
                             onClick={() => setEditVehicleForm(prev => ({ ...prev, insuranceDocumentUrl: '', insuranceDocumentName: '' }))}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                            className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition-colors"
                             title="Remove Document"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => setActiveDocViewer({
@@ -3407,13 +3633,13 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                               url: editVehicleForm.insuranceDocumentUrl,
                               fileName: editVehicleForm.insuranceDocumentName || 'Insurance_Policy.pdf'
                             })}
-                            className="px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm transition-colors"
+                            className="px-2 py-0.5 bg-sky-600 hover:bg-sky-700 text-white rounded text-[10px] font-bold flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
                           >
                             <Eye className="w-3 h-3" />
-                            <span>Preview Insurance</span>
+                            <span>Preview</span>
                           </button>
-                          <label className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-sky-300 text-sky-800 rounded-lg text-[10px] font-bold cursor-pointer transition-colors">
-                            <span>Replace File</span>
+                          <label className="px-2 py-0.5 bg-white hover:bg-slate-50 border border-sky-300 text-sky-800 rounded text-[10px] font-bold cursor-pointer transition-colors">
+                            <span>Replace</span>
                             <input
                               type="file"
                               accept=".pdf,image/png,image/jpeg,image/jpg"
@@ -3424,13 +3650,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                         </div>
                       </div>
                     ) : (
-                      <label className="border-2 border-dashed border-slate-300 hover:border-sky-400 rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50/50 hover:bg-sky-50/30 transition-all group">
-                        <Upload className="w-5 h-5 text-slate-400 group-hover:text-sky-600 transition-colors" />
-                        <span className="text-xs font-bold text-slate-700 group-hover:text-sky-900">
-                          Upload Insurance Document
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          PDF, PNG, or JPG (Max 15MB)
+                      <label className="border-2 border-dashed border-slate-300 hover:border-sky-400 rounded-xl p-3 flex flex-col items-center justify-center gap-1 cursor-pointer bg-slate-50/50 hover:bg-sky-50/30 transition-all group">
+                        <Upload className="w-4 h-4 text-slate-400 group-hover:text-sky-600 transition-colors" />
+                        <span className="text-[11px] font-bold text-slate-700 group-hover:text-sky-900">
+                          Upload Insurance File
                         </span>
                         <input
                           type="file"
@@ -3442,40 +3665,114 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                     )}
 
                     {/* Policy Metadata Inputs */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-100">
+                    <div className="space-y-1.5 pt-1.5 border-t border-slate-100 text-[10px]">
                       <div>
-                        <label className="text-[10px] font-bold text-slate-600 block mb-1">Provider</label>
-                        <select
-                          value={editVehicleForm.insuranceProvider}
-                          onChange={(e) => setEditVehicleForm({ ...editVehicleForm, insuranceProvider: e.target.value })}
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-[11px] font-medium bg-white"
-                        >
-                          <option value="Santam Commercial">Santam Commercial</option>
-                          <option value="Discovery Insure">Discovery Insure</option>
-                          <option value="Hollard Commercial">Hollard Commercial</option>
-                          <option value="Old Mutual Insure">Old Mutual Insure</option>
-                          <option value="Outsurance Fleet">Outsurance Fleet</option>
-                          <option value="Guardrisk">Guardrisk</option>
-                          <option value="Other">Other Underwriter</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-600 block mb-1">Policy Number</label>
                         <input
                           type="text"
-                          placeholder="e.g. POL-90241-FLT"
+                          placeholder="Policy #: POL-90241-FLT"
                           value={editVehicleForm.insurancePolicyNumber}
                           onChange={(e) => setEditVehicleForm({ ...editVehicleForm, insurancePolicyNumber: e.target.value })}
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-[11px] font-mono"
+                          className="w-full px-2 py-1 border border-slate-200 rounded text-[11px] font-mono"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold text-slate-600 block mb-1">Expiry Date</label>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase block">Renewal Date</label>
                         <input
                           type="date"
                           value={editVehicleForm.insuranceExpiryDate}
                           onChange={(e) => setEditVehicleForm({ ...editVehicleForm, insuranceExpiryDate: e.target.value })}
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-[11px]"
+                          className="w-full px-2 py-1 border border-slate-200 rounded text-[11px]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DOCUMENT 3: NATIS LICENSE DISC */}
+                  <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Receipt className="w-4 h-4 text-indigo-600" />
+                        <span className="text-xs font-black text-slate-900">3. License Disc</span>
+                      </div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                        NATIS Disc
+                      </span>
+                    </div>
+
+                    {editVehicleForm.licenseDiskDocumentUrl ? (
+                      <div className="p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="text-[11px] font-bold text-emerald-900 truncate">
+                              {editVehicleForm.licenseDiskDocumentName || 'License_Disc.pdf'}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setEditVehicleForm(prev => ({ ...prev, licenseDiskDocumentUrl: '', licenseDiskDocumentName: '' }))}
+                            className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                            title="Remove Document"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setActiveDocViewer({
+                              title: `License Disc: ${editingVehicle.registrationPlate}`,
+                              url: editVehicleForm.licenseDiskDocumentUrl,
+                              fileName: editVehicleForm.licenseDiskDocumentName || 'License_Disc.pdf'
+                            })}
+                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>Preview</span>
+                          </button>
+                          <label className="px-2 py-0.5 bg-white hover:bg-slate-50 border border-emerald-300 text-emerald-800 rounded text-[10px] font-bold cursor-pointer transition-colors">
+                            <span>Replace</span>
+                            <input
+                              type="file"
+                              accept=".pdf,image/png,image/jpeg,image/jpg"
+                              onChange={(e) => handleDocumentUpload(e, 'license_disc', false)}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="border-2 border-dashed border-slate-300 hover:border-emerald-400 rounded-xl p-3 flex flex-col items-center justify-center gap-1 cursor-pointer bg-slate-50/50 hover:bg-emerald-50/30 transition-all group">
+                        <Upload className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
+                        <span className="text-[11px] font-bold text-slate-700 group-hover:text-emerald-900">
+                          Upload Disc Photo
+                        </span>
+                        <input
+                          type="file"
+                          accept=".pdf,image/png,image/jpeg,image/jpg"
+                          onChange={(e) => handleDocumentUpload(e, 'license_disc', false)}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+
+                    <div className="space-y-1.5 pt-1.5 border-t border-slate-100 text-[10px]">
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="Disc #: DISC-88291-GP"
+                          value={editVehicleForm.licenseDiskNumber}
+                          onChange={(e) => setEditVehicleForm({ ...editVehicleForm, licenseDiskNumber: e.target.value })}
+                          className="w-full px-2 py-1 border border-slate-200 rounded text-[11px] font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase block">Disc Expiry Date</label>
+                        <input
+                          type="date"
+                          value={editVehicleForm.licenseDiskExpiryDate}
+                          onChange={(e) => setEditVehicleForm({ ...editVehicleForm, licenseDiskExpiryDate: e.target.value })}
+                          className="w-full px-2 py-1 border border-slate-200 rounded text-[11px]"
                         />
                       </div>
                     </div>
@@ -4887,17 +5184,157 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </div>
               </div>
 
-              {/* DOCUMENT 3: LICENSE DISK EXPIRY */}
-              <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-200/80">
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                  NATIS License Disk Expiry Date
-                </label>
-                <input
-                  type="date"
-                  value={managingDocsForm.licenseDiskExpiryDate}
-                  onChange={(e) => setManagingDocsForm({ ...managingDocsForm, licenseDiskExpiryDate: e.target.value })}
-                  className="w-full sm:w-1/2 px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white"
-                />
+              {/* DOCUMENT 3: NATIS LICENSE DISC */}
+              <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                      <Receipt className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                        3. NATIS Motor Vehicle License Disc
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Official circular roadworthy license disc displayed on windscreen / disc holder.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    Roadworthy Disc
+                  </span>
+                </div>
+
+                {managingDocsForm.licenseDiskDocumentUrl ? (
+                  <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span className="text-xs font-bold text-emerald-950 truncate">
+                          {managingDocsForm.licenseDiskDocumentName || 'License_Disc.pdf'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setManagingDocsForm(prev => ({ ...prev, licenseDiskDocumentUrl: '', licenseDiskDocumentName: '' }))}
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                        title="Remove attached License Disc"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setActiveDocViewer({
+                          title: `NATIS License Disc: ${managingDocsVehicle.registrationPlate}`,
+                          url: managingDocsForm.licenseDiskDocumentUrl,
+                          fileName: managingDocsForm.licenseDiskDocumentName || 'License_Disc.pdf'
+                        })}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Preview Disc</span>
+                      </button>
+                      <a
+                        href={managingDocsForm.licenseDiskDocumentUrl}
+                        download={managingDocsForm.licenseDiskDocumentName || 'License_Disc.pdf'}
+                        className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-emerald-300 text-emerald-800 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download</span>
+                      </a>
+                      <label className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold cursor-pointer transition-colors ml-auto">
+                        <span>Replace File</span>
+                        <input
+                          type="file"
+                          accept=".pdf,image/png,image/jpeg,image/jpg"
+                          onChange={(e) => handleManageDocsUpload(e, 'license_disc')}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="border-2 border-dashed border-slate-300 hover:border-emerald-400 rounded-2xl p-5 flex flex-col items-center justify-center gap-2 cursor-pointer bg-white hover:bg-emerald-50/30 transition-all group">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 group-hover:bg-emerald-100 text-slate-500 group-hover:text-emerald-600 flex items-center justify-center transition-colors">
+                      <Upload className="w-5 h-5" />
+                    </div>
+                    <div className="text-center">
+                      <span className="text-xs font-bold text-slate-800 group-hover:text-emerald-950 block">
+                        Upload License Disc Photo / Scan
+                      </span>
+                      <span className="text-[10px] text-slate-400 mt-0.5 block">
+                        Supports PDF, PNG, JPG, or JPEG (Max 15MB)
+                      </span>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".pdf,image/png,image/jpeg,image/jpg"
+                      onChange={(e) => handleManageDocsUpload(e, 'license_disc')}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+
+                {/* License Disc Metadata */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      License Disc / Control Number
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. DISC-90241-GP"
+                      value={managingDocsForm.licenseDiskNumber}
+                      onChange={(e) => setManagingDocsForm({ ...managingDocsForm, licenseDiskNumber: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      NATIS License Disk Expiry Date
+                    </label>
+                    <input
+                      type="date"
+                      value={managingDocsForm.licenseDiskExpiryDate}
+                      onChange={(e) => setManagingDocsForm({ ...managingDocsForm, licenseDiskExpiryDate: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Expiry status calculation preview */}
+                {managingDocsForm.licenseDiskExpiryDate && (
+                  <div className="pt-1 flex items-center gap-2 text-xs">
+                    {(() => {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const exp = new Date(managingDocsForm.licenseDiskExpiryDate);
+                      const diffTime = exp.getTime() - today.getTime();
+                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                      if (diffDays < 0) {
+                        return (
+                          <span className="px-2.5 py-1 rounded-md text-[11px] font-black bg-rose-100 text-rose-800 border border-rose-300">
+                            ⚠ Disc Expired by {Math.abs(diffDays)} days! Renew immediately.
+                          </span>
+                        );
+                      } else if (diffDays <= 30) {
+                        return (
+                          <span className="px-2.5 py-1 rounded-md text-[11px] font-black bg-amber-100 text-amber-900 border border-amber-300">
+                            ⏳ Disc Expiring Soon ({diffDays} days remaining).
+                          </span>
+                        );
+                      } else {
+                        return (
+                          <span className="px-2.5 py-1 rounded-md text-[11px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            ✓ Disc Active & Valid ({diffDays} days remaining).
+                          </span>
+                        );
+                      }
+                    })()}
+                  </div>
+                )}
               </div>
 
               {/* Modal Actions */}

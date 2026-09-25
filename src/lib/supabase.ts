@@ -911,6 +911,12 @@ function mapDbToVehicle(row: any): Vehicle {
     rc1_document_name: row.rc1_document_name || '',
     licenseDiskExpiryDate: row.license_disk_expiry_date || '',
     license_disk_expiry_date: row.license_disk_expiry_date || '',
+    licenseDiskDocumentUrl: row.license_disk_document_url || '',
+    license_disk_document_url: row.license_disk_document_url || '',
+    licenseDiskDocumentName: row.license_disk_document_name || '',
+    license_disk_document_name: row.license_disk_document_name || '',
+    licenseDiskNumber: row.license_disk_number || '',
+    license_disk_number: row.license_disk_number || '',
     imageUrl: row.image_url || '',
     image_url: row.image_url || '',
     notes: row.notes || row.bike_notes || row.bikeNotes || '',
@@ -932,7 +938,7 @@ function mapVehicleToDb(veh: Vehicle) {
   const driverId = veh.assignedDriverId || (veh as any).assigned_driver_id || null;
   const driverName = veh.assignedDriverName || (veh as any).assigned_driver_name || null;
   
-  // Standardize status for PostgreSQL check constraints (e.g. 'available', 'assigned', 'in_maintenance')
+  // Standardize status for PostgreSQL check constraints (e.g. 'available', 'assigned', 'in_maintenance', 'damaged', 'stolen', 'decommissioned', 'impounded')
   let vehicleStatus = (veh.status || 'available').trim();
   if (vehicleStatus === 'available_showroom' || vehicleStatus === 'showroom' || vehicleStatus === 'in_stock') {
     vehicleStatus = 'available';
@@ -965,6 +971,9 @@ function mapVehicleToDb(veh: Vehicle) {
     rc1_document_url: veh.rc1DocumentUrl || veh.rc1_document_url || null,
     rc1_document_name: veh.rc1DocumentName || veh.rc1_document_name || null,
     license_disk_expiry_date: veh.licenseDiskExpiryDate || veh.license_disk_expiry_date || null,
+    license_disk_document_url: veh.licenseDiskDocumentUrl || (veh as any).license_disk_document_url || null,
+    license_disk_document_name: veh.licenseDiskDocumentName || (veh as any).license_disk_document_name || null,
+    license_disk_number: veh.licenseDiskNumber || (veh as any).license_disk_number || null,
     image_url: veh.imageUrl || veh.image_url || null,
     notes: vehicleNotes,
     bike_notes: vehicleNotes,

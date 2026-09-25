@@ -233,7 +233,7 @@ export interface DriverNote {
   updatedAt?: string;
 }
 
-export type VehicleStatus = 'available' | 'available_showroom' | 'assigned' | 'in_maintenance' | 'impounded' | 'retired';
+export type VehicleStatus = 'available' | 'available_showroom' | 'assigned' | 'in_maintenance' | 'impounded' | 'damaged' | 'stolen' | 'decommissioned' | 'retired';
 
 export interface Vehicle {
   id: string;
@@ -294,6 +294,12 @@ export interface Vehicle {
   rc1_document_name?: string;
   licenseDiskExpiryDate?: string;
   license_disk_expiry_date?: string;
+  licenseDiskDocumentUrl?: string;
+  license_disk_document_url?: string;
+  licenseDiskDocumentName?: string;
+  license_disk_document_name?: string;
+  licenseDiskNumber?: string;
+  license_disk_number?: string;
   imageUrl?: string;
   image_url?: string;
   notes?: string;
