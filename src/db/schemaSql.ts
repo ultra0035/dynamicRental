@@ -145,8 +145,13 @@ CREATE TABLE IF NOT EXISTS vehicles (
     current_lng NUMERIC(10, 6) DEFAULT 27.9734,
     last_location_address TEXT DEFAULT '304 Tungsten Rd, Strijdom Park, Randburg',
     last_ping_time TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    last_ping_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     insurance_policy_number TEXT,
+    insurance_provider TEXT,
+    insurance_expiry_date DATE,
+    insurance_document_url TEXT,
+    insurance_document_name TEXT,
+    rc1_document_url TEXT,
+    rc1_document_name TEXT,
     license_disk_expiry_date DATE,
     image_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -177,6 +182,12 @@ ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS longitude NUMERIC(10, 6) DEFAULT 2
 ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS last_location_address TEXT;
 ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS last_ping_time TIMESTAMP WITH TIME ZONE DEFAULT NOW();
 ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS insurance_policy_number TEXT;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS insurance_provider TEXT;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS insurance_expiry_date DATE;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS insurance_document_url TEXT;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS insurance_document_name TEXT;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS rc1_document_url TEXT;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS rc1_document_name TEXT;
 ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS license_disk_expiry_date DATE;
 ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS image_url TEXT;
 

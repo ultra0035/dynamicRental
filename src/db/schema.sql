@@ -147,10 +147,29 @@ CREATE TABLE IF NOT EXISTS public.vehicles (
   last_known_location TEXT DEFAULT 'Randburg Fleet Hub',
   last_telematics_ping TIMESTAMPTZ DEFAULT NOW(),
   is_immobilized BOOLEAN DEFAULT false,
-  ignition_state BOOLEAN DEFAULT false,
+  insurance_policy_number TEXT,
+  insurance_provider TEXT,
+  insurance_expiry_date DATE,
+  insurance_document_url TEXT,
+  insurance_document_name TEXT,
+  rc1_document_url TEXT,
+  rc1_document_name TEXT,
+  license_disk_expiry_date DATE,
+  image_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- In-place Migrations for existing vehicles tables
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS insurance_policy_number TEXT;
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS insurance_provider TEXT;
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS insurance_expiry_date DATE;
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS insurance_document_url TEXT;
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS insurance_document_name TEXT;
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS rc1_document_url TEXT;
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS rc1_document_name TEXT;
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS license_disk_expiry_date DATE;
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS image_url TEXT;
 
 -- ==============================================================================
 -- 5. PARTS INVENTORY TABLE

@@ -896,10 +896,26 @@ function mapDbToVehicle(row: any): Vehicle {
     lastLocationAddress: row.last_location_address || row.last_known_location || '304 Tungsten Rd, Strijdom Park, Randburg',
     lastPingTime: row.last_ping_time || row.last_ping_at || row.last_telematics_ping || new Date().toISOString(),
     insurancePolicyNumber: row.insurance_policy_number || '',
+    insurance_policy_number: row.insurance_policy_number || '',
+    insuranceProvider: row.insurance_provider || '',
+    insurance_provider: row.insurance_provider || '',
+    insuranceExpiryDate: row.insurance_expiry_date || '',
+    insurance_expiry_date: row.insurance_expiry_date || '',
+    insuranceDocumentUrl: row.insurance_document_url || '',
+    insurance_document_url: row.insurance_document_url || '',
+    insuranceDocumentName: row.insurance_document_name || '',
+    insurance_document_name: row.insurance_document_name || '',
+    rc1DocumentUrl: row.rc1_document_url || '',
+    rc1_document_url: row.rc1_document_url || '',
+    rc1DocumentName: row.rc1_document_name || '',
+    rc1_document_name: row.rc1_document_name || '',
     licenseDiskExpiryDate: row.license_disk_expiry_date || '',
     license_disk_expiry_date: row.license_disk_expiry_date || '',
     imageUrl: row.image_url || '',
     image_url: row.image_url || '',
+    notes: row.notes || row.bike_notes || row.bikeNotes || '',
+    bike_notes: row.bike_notes || row.notes || row.bikeNotes || '',
+    bikeNotes: row.bikeNotes || row.bike_notes || row.notes || '',
   };
 }
 
@@ -912,6 +928,9 @@ function mapVehicleToDb(veh: Vehicle) {
   const telematicsImei = veh.telematics_imei || veh.telematicsImei || veh.trackerDeviceId || null;
   const telematicsBattery = Number(veh.telematics_battery_health ?? veh.telematicsBatteryHealth ?? veh.batteryHealthPercent ?? 98);
   const vehicleColor = veh.color || 'Fleet White';
+  const vehicleNotes = veh.notes || veh.bike_notes || veh.bikeNotes || null;
+  const driverId = veh.assignedDriverId || (veh as any).assigned_driver_id || null;
+  const driverName = veh.assignedDriverName || (veh as any).assigned_driver_name || null;
   
   // Standardize status for PostgreSQL check constraints (e.g. 'available', 'assigned', 'in_maintenance')
   let vehicleStatus = (veh.status || 'available').trim();
@@ -921,7 +940,6 @@ function mapVehicleToDb(veh: Vehicle) {
     vehicleStatus = 'in_maintenance';
   }
 
-  // Exact 14 columns present in public.vehicles table
   return {
     id: veh.id,
     registration_plate: (veh.registrationPlate || (veh as any).registration_plate || '').toUpperCase().trim(),
@@ -932,11 +950,24 @@ function mapVehicleToDb(veh: Vehicle) {
     year: Number(veh.year) || 2025,
     color: vehicleColor,
     status: vehicleStatus,
+    assigned_driver_id: driverId,
+    assigned_driver_name: driverName,
     current_mileage_km: currentMileage,
     last_service_mileage_km: lastServiceMileage,
     next_service_mileage_km: nextServiceMileage,
     telematics_imei: telematicsImei,
     telematics_battery_health: telematicsBattery,
+    insurance_policy_number: veh.insurancePolicyNumber || veh.insurance_policy_number || null,
+    insurance_provider: veh.insuranceProvider || veh.insurance_provider || null,
+    insurance_expiry_date: veh.insuranceExpiryDate || veh.insurance_expiry_date || null,
+    insurance_document_url: veh.insuranceDocumentUrl || veh.insurance_document_url || null,
+    insurance_document_name: veh.insuranceDocumentName || veh.insurance_document_name || null,
+    rc1_document_url: veh.rc1DocumentUrl || veh.rc1_document_url || null,
+    rc1_document_name: veh.rc1DocumentName || veh.rc1_document_name || null,
+    license_disk_expiry_date: veh.licenseDiskExpiryDate || veh.license_disk_expiry_date || null,
+    image_url: veh.imageUrl || veh.image_url || null,
+    notes: vehicleNotes,
+    bike_notes: vehicleNotes,
   };
 }
 

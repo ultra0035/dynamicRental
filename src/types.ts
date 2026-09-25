@@ -279,10 +279,26 @@ export interface Vehicle {
   lastLocationAddress?: string;
   lastPingTime?: string;
   insurancePolicyNumber?: string;
+  insurance_policy_number?: string;
+  insuranceProvider?: string;
+  insurance_provider?: string;
+  insuranceExpiryDate?: string;
+  insurance_expiry_date?: string;
+  insuranceDocumentUrl?: string;
+  insurance_document_url?: string;
+  insuranceDocumentName?: string;
+  insurance_document_name?: string;
+  rc1DocumentUrl?: string;
+  rc1_document_url?: string;
+  rc1DocumentName?: string;
+  rc1_document_name?: string;
   licenseDiskExpiryDate?: string;
   license_disk_expiry_date?: string;
   imageUrl?: string;
   image_url?: string;
+  notes?: string;
+  bike_notes?: string;
+  bikeNotes?: string;
 }
 
 export interface PartsInventoryItem {
