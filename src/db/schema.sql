@@ -284,7 +284,50 @@ CREATE TABLE IF NOT EXISTS public.driver_referrals (
 );
 
 -- ==============================================================================
--- 11. SITE CUSTOMIZATION & BRANDING SETTINGS
+-- 11. FLAGGED RISK REGISTRY (Internal Company Defaulter & Incident Log)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.flagged_risk_registry (
+  id TEXT PRIMARY KEY DEFAULT ('risk-' || gen_random_uuid()),
+  driver_id TEXT,
+  full_name TEXT NOT NULL,
+  id_or_passport_number TEXT NOT NULL,
+  phone TEXT,
+  whatsapp_number TEXT,
+  nationality_country TEXT DEFAULT 'South Africa',
+  risk_tier TEXT NOT NULL DEFAULT 'high',
+  flag_reason TEXT NOT NULL,
+  reason_description TEXT NOT NULL,
+  outstanding_balance_zar NUMERIC(10, 2) DEFAULT 0.00,
+  police_case_number TEXT,
+  reported_by_operator TEXT DEFAULT 'Randburg Workshop Hub',
+  reported_date DATE DEFAULT CURRENT_DATE,
+  status TEXT NOT NULL DEFAULT 'active',
+  is_cross_operator_shared BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==============================================================================
+-- 12. DRIVER NOTES TABLE (Administrative Remarks, Inspection Logs & Actions)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.driver_notes (
+  id TEXT PRIMARY KEY DEFAULT ('note-' || gen_random_uuid()),
+  driver_id TEXT NOT NULL,
+  driver_name TEXT,
+  author TEXT DEFAULT 'Operations Admin',
+  category TEXT NOT NULL DEFAULT 'general',
+  note_text TEXT NOT NULL,
+  priority TEXT DEFAULT 'normal',
+  is_pinned BOOLEAN DEFAULT false,
+  action_required BOOLEAN DEFAULT false,
+  action_due_date DATE,
+  action_resolved BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==============================================================================
+-- 13. SITE CUSTOMIZATION & BRANDING SETTINGS
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.site_settings (
   id TEXT PRIMARY KEY DEFAULT 'global',
@@ -308,6 +351,8 @@ ALTER TABLE public.traffic_fines ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.yoco_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rental_agreements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.driver_referrals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.flagged_risk_registry ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.driver_notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies if already defined to prevent collision
@@ -321,6 +366,8 @@ DROP POLICY IF EXISTS "Allow full access to traffic_fines" ON public.traffic_fin
 DROP POLICY IF EXISTS "Allow full access to yoco_transactions" ON public.yoco_transactions;
 DROP POLICY IF EXISTS "Allow full access to rental_agreements" ON public.rental_agreements;
 DROP POLICY IF EXISTS "Allow full access to driver_referrals" ON public.driver_referrals;
+DROP POLICY IF EXISTS "Allow full access to flagged_risk_registry" ON public.flagged_risk_registry;
+DROP POLICY IF EXISTS "Allow full access to driver_notes" ON public.driver_notes;
 DROP POLICY IF EXISTS "Allow full access to site_settings" ON public.site_settings;
 
 CREATE POLICY "Allow full access to applications" ON public.applications FOR ALL USING (true) WITH CHECK (true);
@@ -333,6 +380,8 @@ CREATE POLICY "Allow full access to traffic_fines" ON public.traffic_fines FOR A
 CREATE POLICY "Allow full access to yoco_transactions" ON public.yoco_transactions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow full access to rental_agreements" ON public.rental_agreements FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow full access to driver_referrals" ON public.driver_referrals FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow full access to flagged_risk_registry" ON public.flagged_risk_registry FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow full access to driver_notes" ON public.driver_notes FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow full access to site_settings" ON public.site_settings FOR ALL USING (true) WITH CHECK (true);
 
 -- ==============================================================================
@@ -350,3 +399,7 @@ CREATE INDEX IF NOT EXISTS idx_traffic_fines_vehicle_plate ON public.traffic_fin
 CREATE INDEX IF NOT EXISTS idx_yoco_tx_driver_id ON public.yoco_transactions(driver_id);
 CREATE INDEX IF NOT EXISTS idx_rental_agreements_driver_id ON public.rental_agreements(driver_id);
 CREATE INDEX IF NOT EXISTS idx_rental_agreements_vehicle_id ON public.rental_agreements(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_driver_notes_driver_id ON public.driver_notes(driver_id);
+CREATE INDEX IF NOT EXISTS idx_driver_notes_category ON public.driver_notes(category);
+CREATE INDEX IF NOT EXISTS idx_driver_notes_created_at ON public.driver_notes(created_at);
+CREATE INDEX IF NOT EXISTS idx_risk_registry_driver_id ON public.flagged_risk_registry(driver_id);

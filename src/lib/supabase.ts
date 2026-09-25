@@ -10,7 +10,8 @@ import {
   YocoTransaction, 
   RentalAgreement, 
   DriverReferral,
-  FlaggedRiskEntry
+  FlaggedRiskEntry,
+  DriverNote
 } from '../types';
 import { STATIC_BRANDING } from '../config/branding';
 
@@ -25,6 +26,7 @@ const LOCAL_FINES_KEY = 'dyn_fleet_fines_v1';
 const LOCAL_TRANSACTIONS_KEY = 'dyn_fleet_transactions_v1';
 const LOCAL_AGREEMENTS_KEY = 'dyn_fleet_agreements_v1';
 const LOCAL_REFERRALS_KEY = 'dyn_fleet_referrals_v1';
+const LOCAL_NOTES_KEY = 'dyn_fleet_driver_notes_v1';
 const LOCAL_CUSTOMIZATION_KEY = 'dynamic_rental_customization_v2';
 
 export interface SupabaseConfig {
@@ -2232,3 +2234,200 @@ export async function deleteRiskEntry(entryId: string): Promise<void> {
     }
   }
 }
+
+// ============================================================================
+// DRIVER NOTES DATABASE METHODS (driver_notes table)
+// ============================================================================
+
+export async function fetchDriverNotes(driverId?: string): Promise<DriverNote[]> {
+  const client = getSupabaseClient();
+  let localNotes: DriverNote[] = [];
+
+  try {
+    const cached = localStorage.getItem(LOCAL_NOTES_KEY);
+    if (cached) {
+      localNotes = JSON.parse(cached);
+    }
+  } catch {
+    localNotes = [];
+  }
+
+  if (!client) {
+    return driverId ? localNotes.filter((n) => n.driverId === driverId) : localNotes;
+  }
+
+  try {
+    let query = client.from('driver_notes').select('*').order('created_at', { ascending: false });
+    if (driverId) {
+      query = query.eq('driver_id', driverId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn('Supabase fetch driver_notes error, using local fallback:', error.message);
+      return driverId ? localNotes.filter((n) => n.driverId === driverId) : localNotes;
+    }
+
+    if (data && Array.isArray(data)) {
+      const mapped: DriverNote[] = data.map((d: any) => ({
+        id: d.id,
+        driverId: d.driver_id,
+        driverName: d.driver_name,
+        author: d.author || 'Operations Staff',
+        category: d.category || 'general',
+        noteText: d.note_text,
+        priority: d.priority || 'normal',
+        isPinned: Boolean(d.is_pinned),
+        actionRequired: Boolean(d.action_required),
+        actionDueDate: d.action_due_date,
+        actionResolved: Boolean(d.action_resolved),
+        createdAt: d.created_at || new Date().toISOString(),
+        updatedAt: d.updated_at,
+      }));
+
+      // Cache locally
+      try {
+        localStorage.setItem(LOCAL_NOTES_KEY, JSON.stringify(mapped));
+      } catch {
+        // ignore
+      }
+
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('Error querying driver_notes table:', err);
+  }
+
+  return driverId ? localNotes.filter((n) => n.driverId === driverId) : localNotes;
+}
+
+export async function saveDriverNote(note: DriverNote): Promise<{ success: boolean; data?: DriverNote; error?: string }> {
+  // 1. Update local cache
+  try {
+    const cached = localStorage.getItem(LOCAL_NOTES_KEY);
+    let list: DriverNote[] = cached ? JSON.parse(cached) : [];
+    const idx = list.findIndex((n) => n.id === note.id);
+    if (idx >= 0) {
+      list[idx] = note;
+    } else {
+      list.unshift(note);
+    }
+    localStorage.setItem(LOCAL_NOTES_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.warn('Local cache error for driver note:', e);
+  }
+
+  // 2. Persist to Supabase driver_notes table
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const dbRecord = {
+        id: note.id,
+        driver_id: note.driverId,
+        driver_name: note.driverName || null,
+        author: note.author || 'Operations Admin',
+        category: note.category || 'general',
+        note_text: note.noteText,
+        priority: note.priority || 'normal',
+        is_pinned: note.isPinned,
+        action_required: note.actionRequired,
+        action_due_date: note.actionDueDate || null,
+        action_resolved: note.actionResolved,
+        created_at: note.createdAt || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await client.from('driver_notes').upsert(dbRecord, { onConflict: 'id' }).select();
+      if (error) {
+        console.warn('Supabase driver_notes upsert error:', error.message);
+        return { success: false, error: error.message };
+      }
+      return { success: true, data: note };
+    } catch (err: any) {
+      console.warn('Supabase driver_notes save error:', err);
+      return { success: false, error: err?.message || 'Database error' };
+    }
+  }
+
+  return { success: true, data: note };
+}
+
+export async function deleteDriverNote(noteId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const cached = localStorage.getItem(LOCAL_NOTES_KEY);
+    if (cached) {
+      const list: DriverNote[] = JSON.parse(cached);
+      const filtered = list.filter((n) => n.id !== noteId);
+      localStorage.setItem(LOCAL_NOTES_KEY, JSON.stringify(filtered));
+    }
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { error } = await client.from('driver_notes').delete().eq('id', noteId);
+      if (error) {
+        console.warn('Supabase delete driver_note error:', error.message);
+        return { success: false, error: error.message };
+      }
+    } catch (err: any) {
+      console.warn('Supabase delete driver_note exception:', err);
+      return { success: false, error: err?.message };
+    }
+  }
+
+  return { success: true };
+}
+
+export async function togglePinDriverNote(noteId: string, isPinned: boolean): Promise<{ success: boolean; error?: string }> {
+  try {
+    const cached = localStorage.getItem(LOCAL_NOTES_KEY);
+    if (cached) {
+      const list: DriverNote[] = JSON.parse(cached);
+      const updated = list.map((n) => (n.id === noteId ? { ...n, isPinned } : n));
+      localStorage.setItem(LOCAL_NOTES_KEY, JSON.stringify(updated));
+    }
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { error } = await client.from('driver_notes').update({ is_pinned: isPinned, updated_at: new Date().toISOString() }).eq('id', noteId);
+      if (error) return { success: false, error: error.message };
+    } catch (err: any) {
+      return { success: false, error: err?.message };
+    }
+  }
+
+  return { success: true };
+}
+
+export async function resolveDriverNoteAction(noteId: string, actionResolved: boolean): Promise<{ success: boolean; error?: string }> {
+  try {
+    const cached = localStorage.getItem(LOCAL_NOTES_KEY);
+    if (cached) {
+      const list: DriverNote[] = JSON.parse(cached);
+      const updated = list.map((n) => (n.id === noteId ? { ...n, actionResolved } : n));
+      localStorage.setItem(LOCAL_NOTES_KEY, JSON.stringify(updated));
+    }
+  } catch {
+    // ignore
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { error } = await client.from('driver_notes').update({ action_resolved: actionResolved, updated_at: new Date().toISOString() }).eq('id', noteId);
+      if (error) return { success: false, error: error.message };
+    } catch (err: any) {
+      return { success: false, error: err?.message };
+    }
+  }
+
+  return { success: true };
+}
+

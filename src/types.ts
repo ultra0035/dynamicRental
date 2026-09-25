@@ -208,6 +208,31 @@ export interface Driver {
   handoverOdometerKm?: number;
 }
 
+export type DriverNoteCategory = 
+  | 'payment_followup' 
+  | 'maintenance' 
+  | 'conduct_warning' 
+  | 'compliance_kyc' 
+  | 'general';
+
+export type DriverNotePriority = 'low' | 'normal' | 'high' | 'urgent';
+
+export interface DriverNote {
+  id: string;
+  driverId: string;
+  driverName?: string;
+  author: string;
+  category: DriverNoteCategory;
+  noteText: string;
+  priority: DriverNotePriority;
+  isPinned: boolean;
+  actionRequired: boolean;
+  actionDueDate?: string;
+  actionResolved: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export type VehicleStatus = 'available' | 'available_showroom' | 'assigned' | 'in_maintenance' | 'impounded' | 'retired';
 
 export interface Vehicle {
@@ -284,6 +309,15 @@ export type ServiceType =
   | 'electrical_tracker' 
   | 'cosmetic_box';
 
+export interface ServicePartItem {
+  partId: string;
+  name: string;
+  sku: string;
+  quantity: number;
+  unitPriceZar: number;
+  totalZar: number;
+}
+
 export interface RepairAndService {
   id: string;
   vehicleId: string;
@@ -294,6 +328,9 @@ export interface RepairAndService {
   serviceType: ServiceType;
   odometerKm: number;
   costZar: number;
+  laborCostZar?: number;
+  partsCostZar?: number;
+  itemsBought?: ServicePartItem[];
   technicianName: string;
   garageLocation: string;
   serviceDate: string;
@@ -301,6 +338,7 @@ export interface RepairAndService {
   partsUsed?: string[];
   notes?: string;
   invoiceUrl?: string;
+  billedToDriver?: boolean;
 }
 
 export interface TrafficFine {
@@ -331,7 +369,15 @@ export type YocoPaymentMethod =
   | 'card_pos'
   | 'manual_pop';
 
-export type PaymentAllocation = 'weekly_rental' | 'security_deposit' | 'traffic_fine' | 'repair_deductible' | 'other';
+export type PaymentAllocation = 
+  | 'weekly_rental' 
+  | 'security_deposit' 
+  | 'deposit' 
+  | 'repairs_service' 
+  | 'parts_purchase' 
+  | 'traffic_fine' 
+  | 'repair_deductible' 
+  | 'other';
 
 export interface YocoTransaction {
   id: string;

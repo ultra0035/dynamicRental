@@ -386,7 +386,32 @@ CREATE TABLE IF NOT EXISTS flagged_risk_registry (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 12. SITE SETTINGS TABLE
+-- 12. DRIVER NOTES TABLE (Administrative Log & Operation Remarks)
+CREATE TABLE IF NOT EXISTS driver_notes (
+    id TEXT PRIMARY KEY,
+    driver_id TEXT NOT NULL,
+    driver_name TEXT,
+    author TEXT DEFAULT 'Operations Admin',
+    category TEXT NOT NULL DEFAULT 'general',
+    note_text TEXT NOT NULL,
+    priority TEXT DEFAULT 'normal',
+    is_pinned BOOLEAN DEFAULT FALSE,
+    action_required BOOLEAN DEFAULT FALSE,
+    action_due_date DATE,
+    action_resolved BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- In-place Migrations for driver_notes
+ALTER TABLE driver_notes ADD COLUMN IF NOT EXISTS author TEXT DEFAULT 'Operations Admin';
+ALTER TABLE driver_notes ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'normal';
+ALTER TABLE driver_notes ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE;
+ALTER TABLE driver_notes ADD COLUMN IF NOT EXISTS action_required BOOLEAN DEFAULT FALSE;
+ALTER TABLE driver_notes ADD COLUMN IF NOT EXISTS action_due_date DATE;
+ALTER TABLE driver_notes ADD COLUMN IF NOT EXISTS action_resolved BOOLEAN DEFAULT FALSE;
+
+-- 13. SITE SETTINGS TABLE
 CREATE TABLE IF NOT EXISTS site_settings (
     id TEXT PRIMARY KEY DEFAULT 'global',
     logo_url TEXT,
@@ -410,6 +435,7 @@ ALTER TABLE yoco_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rental_agreements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE driver_referrals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE flagged_risk_registry ENABLE ROW LEVEL SECURITY;
+ALTER TABLE driver_notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
 
 -- Drop legacy restrictive policies to prevent conflicts
@@ -426,6 +452,7 @@ DROP POLICY IF EXISTS "Authenticated Full Access Transactions" ON yoco_transacti
 DROP POLICY IF EXISTS "Authenticated Full Access Agreements" ON rental_agreements;
 DROP POLICY IF EXISTS "Authenticated Full Access Referrals" ON driver_referrals;
 DROP POLICY IF EXISTS "Authenticated Full Access Risk Registry" ON flagged_risk_registry;
+DROP POLICY IF EXISTS "Authenticated Full Access Driver Notes" ON driver_notes;
 DROP POLICY IF EXISTS "Authenticated Full Access Settings" ON site_settings;
 
 -- Create Open Operational Policies (allowing staff portal anon key and authenticated users full access)
@@ -440,5 +467,6 @@ CREATE POLICY "Allow Full Fleet Access Transactions" ON yoco_transactions FOR AL
 CREATE POLICY "Allow Full Fleet Access Agreements" ON rental_agreements FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow Full Fleet Access Referrals" ON driver_referrals FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow Full Fleet Access Risk Registry" ON flagged_risk_registry FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow Full Fleet Access Driver Notes" ON driver_notes FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow Full Fleet Access Settings" ON site_settings FOR ALL USING (true) WITH CHECK (true);
 `;

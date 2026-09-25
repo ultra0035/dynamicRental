@@ -2871,6 +2871,8 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
             referrals={referralsState}
             vehicles={vehiclesState}
             applications={applications}
+            services={servicesState}
+            parts={partsState}
             activeSubTab={
               activePage === 'driver_risk_registry' 
                 ? 'risk_registry' 

@@ -720,7 +720,26 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
   // -------------------------------------------------------------
   // REPAIRS & SERVICE SYNCHRONIZATION HANDLERS
   // -------------------------------------------------------------
+  const [selectedServiceParts, setSelectedServiceParts] = useState<Array<{
+    partId: string;
+    name: string;
+    sku: string;
+    quantity: number;
+    unitPriceZar: number;
+    totalZar: number;
+  }>>([]);
+  const [serviceLaborCost, setServiceLaborCost] = useState<number>(250);
+  const [servicePartsCost, setServicePartsCost] = useState<number>(0);
+  const [billServiceToDriver, setBillServiceToDriver] = useState<boolean>(true);
+  const [serviceAssignmentError, setServiceAssignmentError] = useState<string | null>(null);
+
   const handleOpenAddService = (defaultPlate?: string) => {
+    setServiceAssignmentError(null);
+    setSelectedServiceParts([]);
+    setServiceLaborCost(250);
+    setServicePartsCost(0);
+    setBillServiceToDriver(true);
+
     const plate = defaultPlate || (vehicles[0]?.registrationPlate ?? '');
     const matchedVeh = vehicles.find((v) => v.registrationPlate === plate);
     const matchedDriver = drivers.find(
@@ -734,7 +753,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       driverPhone: matchedDriver?.phone || '',
       serviceType: 'routine_5000km',
       odometerKm: matchedVeh?.odometerKm || 5000,
-      costZar: 350,
+      costZar: 250,
       technicianName: 'Master Siphesihle',
       garageLocation: 'Randburg Hub Workshop - 304 Tungsten Rd',
       status: 'completed',
@@ -745,6 +764,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
   };
 
   const handleServiceVehicleChange = (plate: string) => {
+    setServiceAssignmentError(null);
     const matchedVeh = vehicles.find((v) => v.registrationPlate === plate);
     const matchedDriver = drivers.find(
       (d) => d.id === matchedVeh?.assignedDriverId || d.fullName === matchedVeh?.assignedDriverName
@@ -760,6 +780,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
   };
 
   const handleServiceDriverChange = (driverId: string) => {
+    setServiceAssignmentError(null);
     if (driverId === 'none') {
       setNewServiceForm((prev) => ({
         ...prev,
@@ -771,13 +792,80 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     }
     const d = drivers.find((drv) => drv.id === driverId);
     if (d) {
-      setNewServiceForm((prev) => ({
-        ...prev,
-        driverId: d.id,
-        driverName: d.fullName,
-        driverPhone: d.phone,
-      }));
+      // Check if driver has an assigned bike
+      const assignedPlate = d.assignedBikeVinOrPlate || d.assignedVehiclePlate;
+      const assignedVeh = vehicles.find(
+        (v) => v.id === d.assignedVehicleId || v.registrationPlate === assignedPlate || v.assignedDriverId === d.id
+      );
+
+      if (!assignedVeh && !assignedPlate) {
+        setServiceAssignmentError(`⚠️ ${d.fullName} does not have an assigned bike. A driver cannot service a bike that is not assigned to them.`);
+        setNewServiceForm((prev) => ({
+          ...prev,
+          driverId: d.id,
+          driverName: d.fullName,
+          driverPhone: d.phone,
+          vehiclePlate: '',
+        }));
+      } else {
+        const plate = assignedVeh?.registrationPlate || assignedPlate || '';
+        setNewServiceForm((prev) => ({
+          ...prev,
+          driverId: d.id,
+          driverName: d.fullName,
+          driverPhone: d.phone,
+          vehiclePlate: plate,
+          odometerKm: assignedVeh?.odometerKm || prev.odometerKm || 5000,
+        }));
+      }
     }
+  };
+
+  const handleAddPartToService = (partId: string) => {
+    const part = parts.find((p) => p.id === partId);
+    if (!part) return;
+    if (part.quantityInStock <= 0) {
+      alert(`Part "${part.name}" is out of stock in the workshop inventory.`);
+      return;
+    }
+
+    setSelectedServiceParts((prev) => {
+      const existing = prev.find((p) => p.partId === partId);
+      let updated;
+      if (existing) {
+        updated = prev.map((p) =>
+          p.partId === partId
+            ? { ...p, quantity: p.quantity + 1, totalZar: (p.quantity + 1) * p.unitPriceZar }
+            : p
+        );
+      } else {
+        updated = [
+          ...prev,
+          {
+            partId: part.id,
+            name: part.name,
+            sku: part.sku,
+            quantity: 1,
+            unitPriceZar: part.sellingPriceZar,
+            totalZar: part.sellingPriceZar,
+          },
+        ];
+      }
+      const newPartsSum = updated.reduce((sum, item) => sum + item.totalZar, 0);
+      setServicePartsCost(newPartsSum);
+      setNewServiceForm((f) => ({ ...f, costZar: serviceLaborCost + newPartsSum }));
+      return updated;
+    });
+  };
+
+  const handleRemovePartFromService = (partId: string) => {
+    setSelectedServiceParts((prev) => {
+      const updated = prev.filter((p) => p.partId !== partId);
+      const newPartsSum = updated.reduce((sum, item) => sum + item.totalZar, 0);
+      setServicePartsCost(newPartsSum);
+      setNewServiceForm((f) => ({ ...f, costZar: serviceLaborCost + newPartsSum }));
+      return updated;
+    });
   };
 
   const sendServiceWhatsApp = (srv: RepairAndService, phoneOverride?: string) => {
@@ -787,16 +875,35 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       return;
     }
     const cleanPhone = phone.replace(/[^0-9]/g, '');
-    const msg = `Good day ${srv.driverName || 'Rider'}! 🏍️\n\nYour motorbike (*${srv.vehiclePlate}*) service record has been logged by *Dynamic Rental Workshop*:\n\n🔧 *Service Type:* ${srv.serviceType.replace(/_/g, ' ').toUpperCase()}\n📍 *Workshop:* ${srv.garageLocation}\n👨‍🔧 *Technician:* ${srv.technicianName}\n⏱️ *Odometer:* ${(srv.odometerKm || 0).toLocaleString()} KM\n📝 *Notes:* ${srv.notes || 'Routine 5,000 km maintenance completed.'}\n💰 *Cost:* R${srv.costZar}\n\nYour motorbike is roadworthy and cleared for operations! Safe riding!`;
+    const partsList = srv.partsUsed && srv.partsUsed.length > 0 ? `\n📦 *Parts / Items Bought:* ${srv.partsUsed.join(', ')}` : '';
+    const msg = `Good day ${srv.driverName || 'Rider'}! 🏍️\n\nYour assigned motorbike (*${srv.vehiclePlate}*) service record has been logged by *Dynamic Rental Workshop*:\n\n🔧 *Service Type:* ${srv.serviceType.replace(/_/g, ' ').toUpperCase()}\n📍 *Workshop:* ${srv.garageLocation}\n👨‍🔧 *Technician:* ${srv.technicianName}\n⏱️ *Odometer:* ${(srv.odometerKm || 0).toLocaleString()} KM${partsList}\n📝 *Notes:* ${srv.notes || 'Routine 5,000 km maintenance completed.'}\n💰 *Total Service Cost:* R${srv.costZar}\n\nYour motorbike is roadworthy and cleared for operations! Safe riding!`;
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   // Submit Service Log
   const handleCreateService = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newServiceForm.vehiclePlate) {
+      alert('Please select a valid assigned motorbike plate.');
+      return;
+    }
+
     const matchedVeh = vehicles.find((v) => v.registrationPlate === newServiceForm.vehiclePlate);
     const assignedDrv = drivers.find((d) => d.id === newServiceForm.driverId || d.fullName === newServiceForm.driverName) || 
       drivers.find((d) => d.id === matchedVeh?.assignedDriverId || d.fullName === matchedVeh?.assignedDriverName);
+
+    // Enforce driver-vehicle assignment rule
+    if (newServiceForm.driverId && newServiceForm.driverId !== 'none') {
+      const selectedDriver = drivers.find((d) => d.id === newServiceForm.driverId);
+      const assignedPlate = selectedDriver?.assignedBikeVinOrPlate || selectedDriver?.assignedVehiclePlate;
+      if (assignedPlate && assignedPlate !== newServiceForm.vehiclePlate) {
+        alert(`Rule Violation: Driver ${selectedDriver?.fullName} is assigned to bike ${assignedPlate}. A driver cannot repair a bike (${newServiceForm.vehiclePlate}) that is not assigned to them.`);
+        return;
+      }
+    }
+
+    const partsNames = selectedServiceParts.map((p) => `${p.name} (x${p.quantity})`);
+    const totalCost = serviceLaborCost + servicePartsCost;
 
     const srv: RepairAndService = {
       id: `srv-${Date.now()}`,
@@ -807,18 +914,34 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       driverPhone: newServiceForm.driverPhone || assignedDrv?.phone,
       serviceType: newServiceForm.serviceType || 'routine_5000km',
       odometerKm: Number(newServiceForm.odometerKm) || 0,
-      costZar: Number(newServiceForm.costZar) || 0,
+      costZar: totalCost,
+      laborCostZar: serviceLaborCost,
+      partsCostZar: servicePartsCost,
+      itemsBought: selectedServiceParts,
       technicianName: newServiceForm.technicianName || '',
       garageLocation: newServiceForm.garageLocation || 'Workshop',
       serviceDate: new Date().toISOString().split('T')[0],
       status: 'completed',
-      partsUsed: [],
+      partsUsed: partsNames,
       notes: newServiceForm.notes || '',
+      billedToDriver: billServiceToDriver,
     };
 
     onAddService(srv);
 
-    // Update vehicle next service KM
+    // 1. Deduct parts inventory quantities
+    selectedServiceParts.forEach((sp) => {
+      const originalPart = parts.find((p) => p.id === sp.partId);
+      if (originalPart) {
+        const updatedPart: PartsInventoryItem = {
+          ...originalPart,
+          quantityInStock: Math.max(0, originalPart.quantityInStock - sp.quantity),
+        };
+        onUpdatePart(updatedPart);
+      }
+    });
+
+    // 2. Update vehicle next service KM and odometer
     if (matchedVeh) {
       const nextKm = (Number(newServiceForm.odometerKm) || matchedVeh.odometerKm) + 5000;
       onUpdateVehicle({
@@ -830,12 +953,12 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       });
     }
 
-    // Persist directly to Supabase
+    // 3. Persist directly to Supabase
     const dbRes = await saveSingleServiceAsync(srv);
     if (dbRes.success) {
       setDbNotification({
         type: 'success',
-        message: `✓ Workshop service record for ${srv.vehiclePlate} (${srv.serviceType.replace(/_/g, ' ')}) successfully logged and saved to Supabase repairs_and_services!`,
+        message: `✓ Workshop service & parts record for ${srv.vehiclePlate} (${srv.serviceType.replace(/_/g, ' ')}) logged and saved to Supabase!`,
       });
     } else if (dbRes.error) {
       setDbNotification({
@@ -2576,10 +2699,13 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
       {/* MODAL: LOG SERVICE */}
       {/* ------------------------------------------------------------- */}
       {isAddServiceOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 my-8">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 my-6 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-900 text-base">Log Workshop Service</h3>
+              <div className="flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-blue-600" />
+                <h3 className="font-black text-slate-900 text-base">Log Workshop Service & Maintenance</h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsAddServiceOpen(false)}
@@ -2589,30 +2715,22 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleCreateService} className="mt-4 space-y-3.5">
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Select Motorcycle *</label>
-                <select
-                  value={newServiceForm.vehiclePlate}
-                  onChange={(e) => handleServiceVehicleChange(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold bg-slate-50 focus:bg-white"
-                >
-                  {vehicles.map((v) => (
-                    <option key={v.id} value={v.registrationPlate}>
-                      {v.registrationPlate} ({v.make} {v.model}) — Assigned: {v.assignedDriverName || 'Showroom Stock'}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <form onSubmit={handleCreateService} className="mt-4 space-y-4">
+              {serviceAssignmentError && (
+                <div className="p-3 bg-rose-50 border border-rose-300 text-rose-900 rounded-xl text-xs font-bold flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{serviceAssignmentError}</span>
+                </div>
+              )}
 
-              {/* Driver Linkage */}
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+              {/* Courier / Driver Selection First (Enforces Driver-Bike Lock) */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <UserCheck className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Courier / Assigned Driver</span>
+                    <UserCheck className="w-4 h-4 text-blue-600" />
+                    <span>Courier / Assigned Driver *</span>
                   </label>
-                  <span className="text-[10px] text-slate-500 font-medium">Auto-synced from bike</span>
+                  <span className="text-[10px] text-slate-500 font-medium">Bike locked to driver's assigned asset</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2622,10 +2740,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       onChange={(e) => handleServiceDriverChange(e.target.value)}
                       className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold bg-white"
                     >
-                      <option value="none">Unassigned / Showroom Stock</option>
+                      <option value="none">Unassigned / Showroom Inventory</option>
                       {drivers.map((d) => (
                         <option key={d.id} value={d.id}>
-                          {d.fullName} ({d.phone || 'No phone'})
+                          {d.fullName} ({d.assignedBikeVinOrPlate || d.assignedVehiclePlate || 'No bike'})
                         </option>
                       ))}
                     </select>
@@ -2639,6 +2757,26 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                       className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-mono bg-white"
                     />
                   </div>
+                </div>
+
+                {/* Assigned Motorcycle (Locked to Driver) */}
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                    Assigned Motorbike Plate *
+                  </label>
+                  <select
+                    value={newServiceForm.vehiclePlate}
+                    onChange={(e) => handleServiceVehicleChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold bg-white text-slate-900"
+                    required
+                  >
+                    <option value="" disabled>-- Select Motorbike --</option>
+                    {vehicles.map((v) => (
+                      <option key={v.id} value={v.registrationPlate}>
+                        {v.registrationPlate} ({v.make} {v.model}) — Driver: {v.assignedDriverName || 'Stock'}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {newServiceForm.driverPhone && (
@@ -2657,20 +2795,22 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Service Details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Service Type</label>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Service / Repair Type *</label>
                   <select
                     value={newServiceForm.serviceType}
                     onChange={(e) => setNewServiceForm({ ...newServiceForm, serviceType: e.target.value as any })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
                   >
                     <option value="routine_5000km">Routine 5,000 KM Maintenance</option>
-                    <option value="oil_change">Oil Change & Filter</option>
-                    <option value="brake_replacement">Brake Shoes / Pads</option>
-                    <option value="chain_sprocket">Chain & Sprocket Replacement</option>
-                    <option value="tyre_replacement">Tyre & Tube Replacement</option>
-                    <option value="major_overhaul">Major 10,000 KM Overhaul</option>
+                    <option value="brake_replacement">Brake Shoes / Pads Replacement</option>
+                    <option value="tire_change">Tire & Tube Replacement</option>
+                    <option value="accident_repair">Accident & Body Repair</option>
+                    <option value="electrical_tracker">Electrical & GPS Tracker</option>
+                    <option value="major_overhaul">Major Overhaul / Engine Service</option>
+                    <option value="cosmetic_box">Delivery Box / Mount Repair</option>
                   </select>
                 </div>
 
@@ -2685,9 +2825,74 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Workshop Items Bought / Spares Used Section */}
+              <div className="p-3.5 bg-indigo-50/40 rounded-2xl border border-indigo-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-indigo-700" />
+                    <span className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
+                      Parts & Items Bought from Workshop ({selectedServiceParts.length})
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-500">Auto-deducted from stock</span>
+                </div>
+
+                {/* Part selector */}
+                <div className="flex items-center gap-2">
+                  <select
+                    id="add-part-to-service-select"
+                    className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleAddPartToService(e.target.value);
+                        e.target.value = '';
+                      }
+                    }}
+                  >
+                    <option value="" disabled>+ Select part to add to repair...</option>
+                    {parts.map((p) => (
+                      <option key={p.id} value={p.id} disabled={p.quantityInStock <= 0}>
+                        {p.name} (SKU: {p.sku}) — R{p.sellingPriceZar} ({p.quantityInStock} in stock)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Selected Parts List */}
+                {selectedServiceParts.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {selectedServiceParts.map((sp) => (
+                      <div key={sp.partId} className="p-2 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+                        <div>
+                          <strong className="text-slate-900 font-bold">{sp.name}</strong>
+                          <span className="text-slate-500 ml-2">Qty: {sp.quantity} @ R{sp.unitPriceZar}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-black text-emerald-700">R{sp.totalZar}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePartFromService(sp.partId)}
+                            className="p-1 text-rose-500 hover:text-rose-700"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="text-right text-xs font-bold text-indigo-950 pt-1">
+                      Parts Subtotal: <strong className="font-mono text-indigo-900">R{servicePartsCost}</strong>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400 italic">No parts added yet. Select a part above if spares/consumables were bought.</p>
+                )}
+              </div>
+
+              {/* Technician & Labor Cost Breakdown */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Technician</label>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Technician Name</label>
                   <input
                     type="text"
                     value={newServiceForm.technicianName}
@@ -2695,14 +2900,27 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
                   />
                 </div>
+
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Workshop Cost (ZAR)</label>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Labor / Service Fee (ZAR)</label>
                   <input
                     type="number"
-                    value={newServiceForm.costZar}
-                    onChange={(e) => setNewServiceForm({ ...newServiceForm, costZar: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                    min={0}
+                    value={serviceLaborCost}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setServiceLaborCost(val);
+                      setNewServiceForm((f) => ({ ...f, costZar: val + servicePartsCost }));
+                    }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold font-mono"
                   />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Total Cost (Labor + Parts)</label>
+                  <div className="px-3 py-2 bg-emerald-50 border border-emerald-300 rounded-lg text-sm font-black font-mono text-emerald-800">
+                    R{(serviceLaborCost + servicePartsCost).toLocaleString()}
+                  </div>
                 </div>
               </div>
 
@@ -2710,6 +2928,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 <label className="text-xs font-bold text-slate-700 block mb-1">Service Notes & Completed Work</label>
                 <textarea
                   rows={2}
+                  placeholder="Details of inspection, parts replaced, road clearance..."
                   value={newServiceForm.notes}
                   onChange={(e) => setNewServiceForm({ ...newServiceForm, notes: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
@@ -2726,9 +2945,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black shadow-md"
+                  disabled={Boolean(serviceAssignmentError)}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black shadow-md disabled:opacity-50"
                 >
-                  Save Service Record
+                  Save Service Record & Update Bike
                 </button>
               </div>
             </form>

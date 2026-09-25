@@ -9,7 +9,8 @@ import {
   DriverReferral,
   RiderApplication,
   PaymentAllocation,
-  YocoPaymentMethod
+  YocoPaymentMethod,
+  DriverNote
 } from '../types';
 import {
   INITIAL_VEHICLES,
@@ -42,6 +43,11 @@ import {
   saveReferral as dbSaveReferral,
   deleteReferral as dbDeleteReferral,
   syncAllPendingVehiclesToSupabase as dbSyncAllVehicles,
+  fetchDriverNotes as dbFetchDriverNotes,
+  saveDriverNote as dbSaveDriverNote,
+  deleteDriverNote as dbDeleteDriverNote,
+  togglePinDriverNote as dbTogglePinDriverNote,
+  resolveDriverNoteAction as dbResolveDriverNoteAction,
 } from './supabase';
 
 const STORAGE_KEYS = {
@@ -53,6 +59,7 @@ const STORAGE_KEYS = {
   TRANSACTIONS: 'dyn_fleet_yoco_tx_v1',
   AGREEMENTS: 'dyn_fleet_agreements_v1',
   REFERRALS: 'dyn_fleet_referrals_v1',
+  DRIVER_NOTES: 'dyn_fleet_driver_notes_v1',
   YOCO_SETTINGS: 'dyn_fleet_yoco_settings_v1',
 };
 
@@ -889,5 +896,58 @@ export function cascadeDeleteApplication(
     deletedDriver: matchedDriver,
     freedVehicle,
   };
+}
+
+// ==============================================================================
+// DRIVER NOTES STORE & SYNC
+// ==============================================================================
+export function getFleetDriverNotes(): DriverNote[] {
+  return loadFromStorage(STORAGE_KEYS.DRIVER_NOTES, []);
+}
+
+export function saveFleetDriverNotes(notes: DriverNote[]): void {
+  saveToStorage(STORAGE_KEYS.DRIVER_NOTES, notes);
+}
+
+export async function fetchAllDriverNotes(driverId?: string): Promise<DriverNote[]> {
+  const notes = await dbFetchDriverNotes(driverId);
+  if (notes && notes.length > 0) {
+    saveFleetDriverNotes(notes);
+  }
+  return notes;
+}
+
+export async function saveSingleDriverNote(note: DriverNote): Promise<{ success: boolean; data?: DriverNote; error?: string }> {
+  const current = getFleetDriverNotes();
+  const idx = current.findIndex((n) => n.id === note.id);
+  let updatedList: DriverNote[];
+  if (idx >= 0) {
+    updatedList = current.map((n) => (n.id === note.id ? note : n));
+  } else {
+    updatedList = [note, ...current];
+  }
+  saveFleetDriverNotes(updatedList);
+  return await dbSaveDriverNote(note);
+}
+
+export async function deleteSingleDriverNote(noteId: string): Promise<{ success: boolean; error?: string }> {
+  const current = getFleetDriverNotes();
+  const filtered = current.filter((n) => n.id !== noteId);
+  saveFleetDriverNotes(filtered);
+  return await dbDeleteDriverNote(noteId);
+}
+
+export async function toggleSingleDriverNotePin(noteId: string, isPinned: boolean): Promise<{ success: boolean; error?: string }> {
+  const current = getFleetDriverNotes();
+  const updated = current.map((n) => (n.id === noteId ? { ...n, isPinned } : n));
+  saveFleetDriverNotes(updated);
+  return await dbTogglePinDriverNote(noteId, isPinned);
+}
+
+export async function resolveSingleDriverNoteAction(noteId: string, actionResolved: boolean): Promise<{ success: boolean; error?: string }> {
+  const current = getFleetDriverNotes();
+  const updated = current.map((n) => (n.id === noteId ? { ...n, actionResolved } : n));
+  saveFleetDriverNotes(updated);
+  return await dbResolveDriverNoteAction(noteId, actionResolved);
 }
 

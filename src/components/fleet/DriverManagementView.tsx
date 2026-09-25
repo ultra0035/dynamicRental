@@ -8,17 +8,20 @@ import {
   RiderApplication, 
   RentalAgreement,
   FlaggedRiskEntry,
-  FlaggedReasonCategory 
+  FlaggedReasonCategory,
+  RepairAndService,
+  PartsInventoryItem
 } from '../../types';
 import { DriverDetailModal } from './DriverDetailModal';
 import { DriverFinanceModal } from './DriverFinanceModal';
+import { DriverNotesModal } from './DriverNotesModal';
 import { 
   getFlaggedRiskEntries, 
   addFlaggedRiskEntry, 
   updateFlaggedRiskEntry, 
   deleteFlaggedRiskEntry
 } from '../../lib/riskStore';
-import { saveReferral } from '../../lib/supabase';
+import { saveReferral, saveDriver, fetchDriverNotes } from '../../lib/supabase';
 import { 
   Users, 
   ShieldAlert, 
@@ -53,7 +56,9 @@ import {
   ExternalLink,
   Lock,
   UserX,
-  UserCheck
+  UserCheck,
+  StickyNote,
+  Send
 } from 'lucide-react';
 
 export type DriverSubTab = 'directory' | 'risk_registry' | 'referrals';
@@ -64,6 +69,8 @@ interface DriverManagementViewProps {
   referrals: DriverReferral[];
   applications?: RiderApplication[];
   agreements?: RentalAgreement[];
+  services?: RepairAndService[];
+  parts?: PartsInventoryItem[];
   onUpdateDriver: (driver: Driver) => void;
   onAddDriver: (driver: Driver) => void;
   onDeleteDriver?: (driverId: string) => void;
@@ -83,6 +90,8 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
   referrals,
   applications = [],
   agreements = [],
+  services = [],
+  parts = [],
   onUpdateDriver,
   onAddDriver,
   onDeleteDriver,
@@ -164,6 +173,33 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
 
   // Selected Driver for Dedicated Track Finance & Agreements Modal
   const [selectedFinanceDriver, setSelectedFinanceDriver] = useState<Driver | null>(null);
+
+  // Admin Driver Notes Modal State
+  const [notesDriver, setNotesDriver] = useState<Driver | null>(null);
+  const [notesCountMap, setNotesCountMap] = useState<Record<string, number>>({});
+
+  // Load all driver notes counts on mount or when drivers change
+  useEffect(() => {
+    let isMounted = true;
+    const loadCounts = async () => {
+      try {
+        const allNotes = await fetchDriverNotes();
+        if (isMounted && allNotes) {
+          const counts: Record<string, number> = {};
+          allNotes.forEach((n) => {
+            if (n.driverId) {
+              counts[n.driverId] = (counts[n.driverId] || 0) + 1;
+            }
+          });
+          setNotesCountMap(counts);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    loadCounts();
+    return () => { isMounted = false; };
+  }, [drivers]);
 
   // Add Incident Modal
   const [incidentDriver, setIncidentDriver] = useState<Driver | null>(null);
@@ -874,14 +910,22 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
                             <span>Track Finance</span>
                           </button>
 
-                          {/* WhatsApp Statement */}
+                          {/* Driver Notes Button with Live Badge */}
                           <button
                             type="button"
-                            onClick={() => sendDriverWhatsApp(driver, driver.balanceDue > 0 ? 'arrears' : 'statement')}
-                            title="Send WhatsApp Statement"
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-200"
+                            onClick={() => {
+                              setNotesDriver(driver);
+                            }}
+                            title="Open Driver Notes, Remarks & Action Items"
+                            className="p-1.5 rounded-lg bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200 transition-colors font-bold flex items-center gap-1.5 text-[11px] px-2.5 cursor-pointer shadow-2xs relative"
                           >
-                            <MessageSquare className="w-3.5 h-3.5" />
+                            <StickyNote className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Notes</span>
+                            {(notesCountMap[driver.id] || 0) > 0 && (
+                              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-200 text-amber-900 border border-amber-300">
+                                {notesCountMap[driver.id]}
+                              </span>
+                            )}
                           </button>
 
                           {/* Log Incident */}
@@ -2049,6 +2093,8 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
         driver={selectedFinanceDriver}
         agreements={agreements}
         vehicles={vehicles}
+        services={services}
+        parts={parts}
         onClose={() => setSelectedFinanceDriver(null)}
         onUpdateDriver={(updated) => {
           onUpdateDriver(updated);
@@ -2057,6 +2103,22 @@ export const DriverManagementView: React.FC<DriverManagementViewProps> = ({
         onOpenYocoPayment={(drv) => {
           setSelectedFinanceDriver(null);
           onOpenYocoPaymentForDriver(drv);
+        }}
+      />
+
+      {/* ========================================================= */}
+      {/* FULL-FEATURED DEDICATED DRIVER NOTES MODAL (driver_notes table) */}
+      {/* ========================================================= */}
+      <DriverNotesModal
+        isOpen={!!notesDriver}
+        driver={notesDriver}
+        onClose={() => setNotesDriver(null)}
+        onUpdateDriver={(updated) => {
+          onUpdateDriver(updated);
+          setNotesDriver(updated);
+        }}
+        onNotesCountUpdate={(driverId, count) => {
+          setNotesCountMap((prev) => ({ ...prev, [driverId]: count }));
         }}
       />
     </div>
