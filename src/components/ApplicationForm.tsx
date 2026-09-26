@@ -27,7 +27,9 @@ import {
   Clock, 
   Phone, 
   Copy,
-  Printer
+  Printer,
+  Users,
+  Briefcase
 } from 'lucide-react';
 
 interface ApplicationFormProps {
@@ -80,6 +82,27 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
   const [primaryPlatform, setPrimaryPlatform] = useState<string>('Checkers Sixty60');
   const [deliveryExperience, setDeliveryExperience] = useState<string>('1-2 years');
   const [approxWeeklyEarnings, setApproxWeeklyEarnings] = useState<number>(4500);
+
+  // 3 Next of Kin Contacts
+  const [nextOfKin1, setNextOfKin1] = useState<{ name: string; relationship: string; phone: string }>({
+    name: '',
+    relationship: 'Parent / Guardian',
+    phone: '',
+  });
+  const [nextOfKin2, setNextOfKin2] = useState<{ name: string; relationship: string; phone: string }>({
+    name: '',
+    relationship: 'Sibling / Family Member',
+    phone: '',
+  });
+  const [nextOfKin3, setNextOfKin3] = useState<{ name: string; relationship: string; phone: string }>({
+    name: '',
+    relationship: 'Spouse / Partner / Friend',
+    phone: '',
+  });
+
+  // Courier Supervisor
+  const [supervisorName, setSupervisorName] = useState<string>('');
+  const [supervisorPhone, setSupervisorPhone] = useState<string>('');
 
   // Documents
   const [documents, setDocuments] = useState<ApplicationDocuments>({});
@@ -157,6 +180,22 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
       }
       if (!address.trim() || !suburb.trim()) {
         setErrorMsg('Please provide your residential address and suburb in Gauteng.');
+        return;
+      }
+      if (!nextOfKin1.name.trim() || !nextOfKin1.phone.trim()) {
+        setErrorMsg('Please enter Next of Kin 1 (Name and Mobile Phone).');
+        return;
+      }
+      if (!nextOfKin2.name.trim() || !nextOfKin2.phone.trim()) {
+        setErrorMsg('Please enter Next of Kin 2 (Name and Mobile Phone).');
+        return;
+      }
+      if (!nextOfKin3.name.trim() || !nextOfKin3.phone.trim()) {
+        setErrorMsg('Please enter Next of Kin 3 (Name and Mobile Phone).');
+        return;
+      }
+      if (!supervisorName.trim()) {
+        setErrorMsg('Please enter your Delivery / Hub Supervisor Name.');
         return;
       }
       setStep(3);
@@ -244,6 +283,25 @@ export const ApplicationForm: React.FC<ApplicationFormProps> = ({
       primaryPlatform,
       deliveryExperience,
       approxWeeklyEarnings,
+      nextOfKin1: {
+        name: nextOfKin1.name.trim(),
+        relationship: nextOfKin1.relationship.trim(),
+        phone: nextOfKin1.phone.trim(),
+      },
+      nextOfKin2: {
+        name: nextOfKin2.name.trim(),
+        relationship: nextOfKin2.relationship.trim(),
+        phone: nextOfKin2.phone.trim(),
+      },
+      nextOfKin3: {
+        name: nextOfKin3.name.trim(),
+        relationship: nextOfKin3.relationship.trim(),
+        phone: nextOfKin3.phone.trim(),
+      },
+      alternativeContactName: nextOfKin1.name.trim(),
+      alternativeContactPhone: nextOfKin1.phone.trim(),
+      supervisorName: supervisorName.trim(),
+      supervisorPhone: supervisorPhone.trim(),
       documents,
       verification: {
         idVerified: false,
@@ -822,6 +880,224 @@ All my documents & signature are uploaded. Please let me know once approved for 
                   <option value="1-2 years">1-2 years</option>
                   <option value="3+ years">3+ years (Experienced)</option>
                 </select>
+              </div>
+            </div>
+
+            {/* SECTION: 3 NEXT OF KIN CONTACTS */}
+            <div className="mt-8 pt-6 border-t border-slate-200">
+              <div className="flex items-center gap-2 mb-1">
+                <Users className="w-5 h-5 text-blue-600" />
+                <h3 className="text-base font-black text-slate-900">
+                  3 Next of Kin Contacts (Mandatory References) *
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mb-5">
+                Please provide details for 3 separate next-of-kin or emergency contacts (family members, spouse, or relatives).
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Next of Kin 1 */}
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-blue-700 bg-blue-100/80 px-2.5 py-1 rounded-lg">
+                      1. Next of Kin 1 (Primary) *
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1 block">
+                      Full Name & Surname *
+                    </label>
+                    <input
+                      type="text"
+                      value={nextOfKin1.name}
+                      onChange={(e) => setNextOfKin1(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="e.g. Nomsa Ndlovu"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1 block">
+                      Relationship *
+                    </label>
+                    <select
+                      value={nextOfKin1.relationship}
+                      onChange={(e) => setNextOfKin1(prev => ({ ...prev, relationship: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:border-blue-500 outline-none"
+                    >
+                      <option value="Parent / Guardian">Parent / Guardian</option>
+                      <option value="Spouse / Partner">Spouse / Partner</option>
+                      <option value="Sibling (Brother/Sister)">Sibling (Brother/Sister)</option>
+                      <option value="Child (Adult Son/Daughter)">Child (Adult Son/Daughter)</option>
+                      <option value="Uncle / Aunt">Uncle / Aunt</option>
+                      <option value="Cousin / Relative">Cousin / Relative</option>
+                      <option value="Close Friend">Close Friend</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1 block">
+                      Mobile Phone Number *
+                    </label>
+                    <input
+                      type="tel"
+                      value={nextOfKin1.phone}
+                      onChange={(e) => setNextOfKin1(prev => ({ ...prev, phone: e.target.value }))}
+                      placeholder="e.g. 082 123 4567"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-mono text-slate-900 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Next of Kin 2 */}
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-indigo-700 bg-indigo-100/80 px-2.5 py-1 rounded-lg">
+                      2. Next of Kin 2 *
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1 block">
+                      Full Name & Surname *
+                    </label>
+                    <input
+                      type="text"
+                      value={nextOfKin2.name}
+                      onChange={(e) => setNextOfKin2(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="e.g. Thabo Ndlovu"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1 block">
+                      Relationship *
+                    </label>
+                    <select
+                      value={nextOfKin2.relationship}
+                      onChange={(e) => setNextOfKin2(prev => ({ ...prev, relationship: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:border-blue-500 outline-none"
+                    >
+                      <option value="Sibling (Brother/Sister)">Sibling (Brother/Sister)</option>
+                      <option value="Parent / Guardian">Parent / Guardian</option>
+                      <option value="Spouse / Partner">Spouse / Partner</option>
+                      <option value="Child (Adult Son/Daughter)">Child (Adult Son/Daughter)</option>
+                      <option value="Uncle / Aunt">Uncle / Aunt</option>
+                      <option value="Cousin / Relative">Cousin / Relative</option>
+                      <option value="Close Friend">Close Friend</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1 block">
+                      Mobile Phone Number *
+                    </label>
+                    <input
+                      type="tel"
+                      value={nextOfKin2.phone}
+                      onChange={(e) => setNextOfKin2(prev => ({ ...prev, phone: e.target.value }))}
+                      placeholder="e.g. 073 456 7890"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-mono text-slate-900 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Next of Kin 3 */}
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-cyan-700 bg-cyan-100/80 px-2.5 py-1 rounded-lg">
+                      3. Next of Kin 3 *
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1 block">
+                      Full Name & Surname *
+                    </label>
+                    <input
+                      type="text"
+                      value={nextOfKin3.name}
+                      onChange={(e) => setNextOfKin3(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="e.g. Tendai Moyo"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1 block">
+                      Relationship *
+                    </label>
+                    <select
+                      value={nextOfKin3.relationship}
+                      onChange={(e) => setNextOfKin3(prev => ({ ...prev, relationship: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 focus:border-blue-500 outline-none"
+                    >
+                      <option value="Spouse / Partner">Spouse / Partner</option>
+                      <option value="Parent / Guardian">Parent / Guardian</option>
+                      <option value="Sibling (Brother/Sister)">Sibling (Brother/Sister)</option>
+                      <option value="Child (Adult Son/Daughter)">Child (Adult Son/Daughter)</option>
+                      <option value="Uncle / Aunt">Uncle / Aunt</option>
+                      <option value="Cousin / Relative">Cousin / Relative</option>
+                      <option value="Close Friend">Close Friend</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1 block">
+                      Mobile Phone Number *
+                    </label>
+                    <input
+                      type="tel"
+                      value={nextOfKin3.phone}
+                      onChange={(e) => setNextOfKin3(prev => ({ ...prev, phone: e.target.value }))}
+                      placeholder="e.g. 061 987 6543"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-mono text-slate-900 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION: DELIVERY HUB SUPERVISOR */}
+            <div className="mt-8 pt-6 border-t border-slate-200">
+              <div className="flex items-center gap-2 mb-1">
+                <Briefcase className="w-5 h-5 text-purple-600" />
+                <h3 className="text-base font-black text-slate-900">
+                  Delivery Hub Supervisor / Team Leader Reference *
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mb-5">
+                Enter your current shift manager, hub controller, or team leader details for employment verification.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 mb-1 block">
+                    Supervisor / Hub Manager Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={supervisorName}
+                    onChange={(e) => setSupervisorName(e.target.value)}
+                    placeholder="e.g. Supervisor Peter / Manager Sibusiso"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-100 outline-none text-slate-900 bg-white text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 mb-1 block">
+                    Supervisor Mobile Phone Number (Optional)
+                  </label>
+                  <input
+                    type="tel"
+                    value={supervisorPhone}
+                    onChange={(e) => setSupervisorPhone(e.target.value)}
+                    placeholder="e.g. 082 555 0192"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-100 outline-none text-slate-900 font-mono bg-white text-sm"
+                  />
+                </div>
               </div>
             </div>
           </div>

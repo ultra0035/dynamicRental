@@ -87,6 +87,12 @@ export interface DocumentCheckState {
   notes?: string;
 }
 
+export interface NextOfKinContact {
+  name: string;
+  relationship: string;
+  phone: string;
+}
+
 export interface RiderApplication {
   id: string;
   refNumber: string; // e.g. DR-7492-JHB
@@ -118,9 +124,18 @@ export interface RiderApplication {
   province?: string;
   postalCode?: string;
 
-  // Alternative Contact / Next of Kin
+  // 3 Next of Kin Contacts & References
+  nextOfKin1?: NextOfKinContact;
+  nextOfKin2?: NextOfKinContact;
+  nextOfKin3?: NextOfKinContact;
+
+  // Alternative Contact / Next of Kin (Legacy fields kept for compatibility)
   alternativeContactName?: string;
   alternativeContactPhone?: string;
+
+  // Courier Supervisor & Fleet Reference
+  supervisorName?: string;
+  supervisorPhone?: string;
   
   // Courier / Delivery Work
   primaryPlatform: string; // e.g. "Checkers Sixty60", "Uber Eats", "Mr D", "Bolt", "Takealot", "Private Courier"
@@ -200,6 +215,11 @@ export interface Driver {
   yocoCustomerToken?: string;
   referredBy?: string;
   notes?: string;
+  nextOfKin1?: NextOfKinContact;
+  nextOfKin2?: NextOfKinContact;
+  nextOfKin3?: NextOfKinContact;
+  supervisorName?: string;
+  supervisorPhone?: string;
   documents?: ApplicationDocuments;
   verification?: DocumentCheckState;
   signatureDataUrl?: string;

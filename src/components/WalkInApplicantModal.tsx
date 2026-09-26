@@ -95,9 +95,29 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
   const [city, setCity] = useState<string>('Johannesburg');
   const [province, setProvince] = useState<string>('Gauteng');
 
-  // Alternative Contact
+  // Alternative Contact & 3 Next of Kin
   const [altContactName, setAltContactName] = useState<string>('');
   const [altContactPhone, setAltContactPhone] = useState<string>('');
+
+  const [kin1, setKin1] = useState<{ name: string; relationship: string; phone: string }>({
+    name: '',
+    relationship: 'Parent / Guardian',
+    phone: '',
+  });
+  const [kin2, setKin2] = useState<{ name: string; relationship: string; phone: string }>({
+    name: '',
+    relationship: 'Sibling / Family Member',
+    phone: '',
+  });
+  const [kin3, setKin3] = useState<{ name: string; relationship: string; phone: string }>({
+    name: '',
+    relationship: 'Spouse / Partner / Friend',
+    phone: '',
+  });
+
+  // Courier Supervisor
+  const [supervisorName, setSupervisorName] = useState<string>('');
+  const [supervisorPhone, setSupervisorPhone] = useState<string>('');
 
   // Work & Delivery Platforms
   const [selectedApps, setSelectedApps] = useState<string[]>(['Checkers Sixty60']);
@@ -267,9 +287,29 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
         address: address.trim() || 'Walk-in Intake',
         suburb: suburb.trim() || 'Randburg',
         city: city.trim() || 'Johannesburg',
-        province: province.trim() || 'Gauteng',
-        alternativeContactName: altContactName.trim() || undefined,
-        alternativeContactPhone: altContactPhone.trim() || undefined,
+        alternativeContactName: kin1.name.trim() || altContactName.trim() || undefined,
+        alternativeContactPhone: kin1.phone.trim() || altContactPhone.trim() || undefined,
+        nextOfKin1: kin1.name.trim() ? {
+          name: kin1.name.trim(),
+          relationship: kin1.relationship.trim(),
+          phone: kin1.phone.trim(),
+        } : (altContactName.trim() ? {
+          name: altContactName.trim(),
+          relationship: 'Relative',
+          phone: altContactPhone.trim(),
+        } : undefined),
+        nextOfKin2: kin2.name.trim() ? {
+          name: kin2.name.trim(),
+          relationship: kin2.relationship.trim(),
+          phone: kin2.phone.trim(),
+        } : undefined,
+        nextOfKin3: kin3.name.trim() ? {
+          name: kin3.name.trim(),
+          relationship: kin3.relationship.trim(),
+          phone: kin3.phone.trim(),
+        } : undefined,
+        supervisorName: supervisorName.trim() || undefined,
+        supervisorPhone: supervisorPhone.trim() || undefined,
         primaryPlatform: selectedApps[0] || 'Checkers Sixty60',
         deliveryApps: selectedApps.length > 0 ? selectedApps : ['Checkers Sixty60'],
         deliveryExperience,
@@ -574,32 +614,142 @@ export const WalkInApplicantModal: React.FC<WalkInApplicantModalProps> = ({
                 </select>
               </div>
 
-              {/* Alternative Contact Name */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Alternative Contact Name
-                </label>
-                <input
-                  type="text"
-                  value={altContactName}
-                  onChange={(e) => setAltContactName(e.target.value)}
-                  placeholder="Next of Kin / Spouse Name"
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
-                />
-              </div>
+            </div>
 
-              {/* Alternative Contact Number */}
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Alternative Contact Number
-                </label>
-                <input
-                  type="tel"
-                  value={altContactPhone}
-                  onChange={(e) => setAltContactPhone(e.target.value)}
-                  placeholder="079 098 8764"
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
-                />
+            {/* 3 NEXT OF KIN CONTACTS */}
+            <div className="pt-3 border-t border-slate-200">
+              <span className="text-xs font-black text-slate-800 uppercase tracking-wider block mb-2.5">
+                3 Next of Kin Contacts & References
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* Kin 1 */}
+                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                  <span className="text-[11px] font-black text-cyan-800 block">1. Next of Kin 1 (Primary)</span>
+                  <input
+                    type="text"
+                    value={kin1.name}
+                    onChange={(e) => setKin1(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Full Name"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                  />
+                  <select
+                    value={kin1.relationship}
+                    onChange={(e) => setKin1(prev => ({ ...prev, relationship: e.target.value }))}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                  >
+                    <option value="Parent / Guardian">Parent / Guardian</option>
+                    <option value="Spouse / Partner">Spouse / Partner</option>
+                    <option value="Sibling (Brother/Sister)">Sibling (Brother/Sister)</option>
+                    <option value="Child (Adult Son/Daughter)">Child (Adult Son/Daughter)</option>
+                    <option value="Uncle / Aunt">Uncle / Aunt</option>
+                    <option value="Cousin / Relative">Cousin / Relative</option>
+                    <option value="Close Friend">Close Friend</option>
+                  </select>
+                  <input
+                    type="tel"
+                    value={kin1.phone}
+                    onChange={(e) => setKin1(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="Mobile Phone"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono"
+                  />
+                </div>
+
+                {/* Kin 2 */}
+                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                  <span className="text-[11px] font-black text-cyan-800 block">2. Next of Kin 2</span>
+                  <input
+                    type="text"
+                    value={kin2.name}
+                    onChange={(e) => setKin2(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Full Name"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                  />
+                  <select
+                    value={kin2.relationship}
+                    onChange={(e) => setKin2(prev => ({ ...prev, relationship: e.target.value }))}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                  >
+                    <option value="Sibling (Brother/Sister)">Sibling (Brother/Sister)</option>
+                    <option value="Parent / Guardian">Parent / Guardian</option>
+                    <option value="Spouse / Partner">Spouse / Partner</option>
+                    <option value="Child (Adult Son/Daughter)">Child (Adult Son/Daughter)</option>
+                    <option value="Uncle / Aunt">Uncle / Aunt</option>
+                    <option value="Cousin / Relative">Cousin / Relative</option>
+                    <option value="Close Friend">Close Friend</option>
+                  </select>
+                  <input
+                    type="tel"
+                    value={kin2.phone}
+                    onChange={(e) => setKin2(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="Mobile Phone"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono"
+                  />
+                </div>
+
+                {/* Kin 3 */}
+                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                  <span className="text-[11px] font-black text-cyan-800 block">3. Next of Kin 3</span>
+                  <input
+                    type="text"
+                    value={kin3.name}
+                    onChange={(e) => setKin3(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Full Name"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                  />
+                  <select
+                    value={kin3.relationship}
+                    onChange={(e) => setKin3(prev => ({ ...prev, relationship: e.target.value }))}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                  >
+                    <option value="Spouse / Partner">Spouse / Partner</option>
+                    <option value="Parent / Guardian">Parent / Guardian</option>
+                    <option value="Sibling (Brother/Sister)">Sibling (Brother/Sister)</option>
+                    <option value="Child (Adult Son/Daughter)">Child (Adult Son/Daughter)</option>
+                    <option value="Uncle / Aunt">Uncle / Aunt</option>
+                    <option value="Cousin / Relative">Cousin / Relative</option>
+                    <option value="Close Friend">Close Friend</option>
+                  </select>
+                  <input
+                    type="tel"
+                    value={kin3.phone}
+                    onChange={(e) => setKin3(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="Mobile Phone"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* SUPERVISOR REFERENCE */}
+            <div className="pt-3 border-t border-slate-200">
+              <span className="text-xs font-black text-slate-800 uppercase tracking-wider block mb-2.5">
+                Delivery Hub Supervisor / Fleet Reference
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Supervisor / Hub Manager Name
+                  </label>
+                  <input
+                    type="text"
+                    value={supervisorName}
+                    onChange={(e) => setSupervisorName(e.target.value)}
+                    placeholder="e.g. Peter Khumalo / Sibusiso"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Supervisor Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={supervisorPhone}
+                    onChange={(e) => setSupervisorPhone(e.target.value)}
+                    placeholder="082 555 0192"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
               </div>
             </div>
           </div>

@@ -18,6 +18,7 @@ import { COMPANY_DETAILS, BIKES } from '../data/bikes';
 import { ContractModal } from './ContractModal';
 import { WalkInApplicantModal } from './WalkInApplicantModal';
 import { SupabaseConfigModal } from './SupabaseConfigModal';
+import { ApplicantDetailModal } from './ApplicantDetailModal';
 import { DriverManagementView } from './fleet/DriverManagementView';
 import { VehicleManagementView } from './fleet/VehicleManagementView';
 import { FleetFinancialsView } from './fleet/FleetFinancialsView';
@@ -269,14 +270,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   // Walk-in modal state
   const [isWalkinModalOpen, setIsWalkinModalOpen] = useState<boolean>(false);
 
-  // Application Pipeline View Mode: 'board' (Kanban) or 'list' (Master-Detail)
-  const [pipelineViewMode, setPipelineViewMode] = useState<'board' | 'list'>('board');
+  // Applicant Inspector Modal State
+  const [inspectingAppId, setInspectingAppId] = useState<string | null>(null);
 
   // Applications Filter & Search
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [citizenshipFilter, setCitizenshipFilter] = useState<string>('all');
-  const [selectedAppId, setSelectedAppId] = useState<string>(applications[0]?.id || '');
   
   // Document Viewer Lightbox
   const [activeDocImage, setActiveDocImage] = useState<{ title: string; url: string } | null>(null);
@@ -294,8 +294,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [isUploadingBikeImg, setIsUploadingBikeImg] = useState<boolean>(false);
   const bikeFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Selected Application
-  const activeApp = applications.find((a) => a.id === selectedAppId) || applications[0] || null;
+  // Active Inspecting Application
+  const inspectingApp = applications.find((a) => a.id === inspectingAppId) || null;
 
   // -------------------------------------------------------------
   // FLEET STATE & YOCO INTEGRATION (Section II, III, IV)
@@ -392,15 +392,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   // Verification Checklist Toggle
   const handleChecklistToggle = (
+    targetApp: RiderApplication,
     key: 'idVerified' | 'licenseVerified' | 'workPermitVerified' | 'trafficRegisterVerified'
   ) => {
-    if (!activeApp) return;
+    if (!targetApp) return;
     const newVerification = {
-      ...activeApp.verification,
-      [key]: !activeApp.verification[key],
+      ...targetApp.verification,
+      [key]: !targetApp.verification[key],
     };
     const updated: RiderApplication = {
-      ...activeApp,
+      ...targetApp,
       updatedAt: new Date().toISOString(),
       verification: newVerification,
     };
@@ -610,9 +611,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setVehiclesState(res.updatedVehicles);
     setAgreementsState(res.updatedAgreements);
 
-    if (selectedAppId === appId) {
-      const remaining = applications.filter((a) => a.id !== appId);
-      setSelectedAppId(remaining[0]?.id || '');
+    if (inspectingAppId === appId) {
+      setInspectingAppId(null);
     }
 
     if (onDeleteApplication) {
@@ -794,7 +794,7 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
     } else {
       await onUpdateApplication(newApp);
     }
-    setSelectedAppId(newApp.id);
+    setInspectingAppId(newApp.id);
     setActivePage('applicant');
     setIsWalkinModalOpen(false);
   };
@@ -1852,13 +1852,12 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                         <button
                           type="button"
                           onClick={() => {
-                            setSelectedAppId(a.id);
-                            setActivePage('applicants');
+                            setInspectingAppId(a.id);
                           }}
                           className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shrink-0 flex items-center gap-1"
                         >
+                          <Eye className="w-3.5 h-3.5 text-cyan-400" />
                           <span>Inspect</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ))}
@@ -2051,36 +2050,6 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Pipeline View Mode Switcher */}
-                <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
-                  <button
-                    type="button"
-                    onClick={() => setPipelineViewMode('board')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                      pipelineViewMode === 'board'
-                        ? 'bg-white text-blue-700 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                    title="Kanban Board View - Move drivers across stages"
-                  >
-                    <LayoutGrid className="w-3.5 h-3.5" />
-                    <span>Pipeline Board</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPipelineViewMode('list')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                      pipelineViewMode === 'list'
-                        ? 'bg-white text-blue-700 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                    title="Master Detail Inspector View"
-                  >
-                    <ListFilter className="w-3.5 h-3.5" />
-                    <span>List & Inspector</span>
-                  </button>
-                </div>
-
                 <button
                   type="button"
                   onClick={handleExportCSV}
@@ -2101,9 +2070,8 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
               </div>
             </div>
 
-            {/* VIEW MODE 1: KANBAN STAGE PIPELINE BOARD */}
-            {pipelineViewMode === 'board' && (
-              <div className="flex gap-4 items-start overflow-x-auto pb-4 pt-1 w-full min-w-0">
+            {/* KANBAN STAGE PIPELINE BOARD */}
+            <div className="flex gap-4 items-start overflow-x-auto pb-4 pt-1 w-full min-w-0">
                 {PIPELINE_STAGES.map((stage) => {
                   const stageApps = filteredApps.filter((a) => a.status === stage.id);
                   const StageIcon = stage.icon;
@@ -2292,19 +2260,19 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                                     </button>
                                   )}
 
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedAppId(app.id);
-                                      setPipelineViewMode('list');
-                                    }}
-                                    className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-0.5"
-                                  >
-                                    <span>Inspect</span>
-                                    <ChevronRight className="w-3 h-3" />
-                                  </button>
-                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setInspectingAppId(app.id);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-black flex items-center gap-1 border border-blue-200 transition-colors shadow-2xs"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                  <span>Inspect</span>
+                                </button>
                               </div>
+                            </div>
                           ))
                         )}
                       </div>
@@ -2312,436 +2280,8 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
                   );
                 })}
               </div>
-            )}
-
-            {/* VIEW MODE 2: MASTER DETAIL INSPECTOR */}
-            {pipelineViewMode === 'list' && (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                {/* Left Column: Applications List */}
-                <div className="lg:col-span-5 flex flex-col gap-3 max-h-[800px] overflow-y-auto pr-1">
-                  {filteredApps.length === 0 ? (
-                    <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 text-xs">
-                      No applications match your filter criteria.
-                    </div>
-                  ) : (
-                    filteredApps.map((app) => {
-                      const isSelected = selectedAppId === app.id;
-                      const stageConfig = PIPELINE_STAGES.find((s) => s.id === app.status) || PIPELINE_STAGES[0];
-
-                      return (
-                        <div
-                          key={app.id}
-                          onClick={() => setSelectedAppId(app.id)}
-                          className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col gap-2.5 ${
-                            isSelected
-                              ? 'border-blue-500 bg-blue-50/70 shadow-md ring-1 ring-blue-400'
-                              : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-xs'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-sm font-black text-slate-900">{app.fullName}</span>
-                                <span className="text-[10px] font-mono text-blue-700 bg-white px-1.5 py-0.2 rounded border border-blue-200 font-bold">
-                                  {app.refNumber}
-                                </span>
-                              </div>
-                              <div className="text-xs text-slate-500 mt-0.5">
-                                {app.primaryPlatform} · {app.suburb}
-                              </div>
-                            </div>
-
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${stageConfig.badgeClass}`}>
-                              {stageConfig.label}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200/80">
-                            <div className="text-slate-600 font-medium">
-                              {app.bikeName} ({app.bikeCondition.toUpperCase()})
-                            </div>
-                            <div className="font-mono font-bold text-blue-600">
-                              R{app.weeklyRate}/wk · R{app.depositAmount} dep
-                            </div>
-                          </div>
-
-                          {/* Fast Quick-Move Status Row */}
-                          <div className="flex items-center justify-between gap-1 pt-1">
-                            <span className="text-[10px] text-slate-400">
-                              {app.citizenship === 'south_african' ? '🇿🇦 SA Citizen' : `🌍 Foreign (${app.nationalityCountry || 'TRN'})`}
-                            </span>
-
-                            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                              <select
-                                value={app.status}
-                                onChange={(e) => handleMoveStatus(app, e.target.value as ApplicationStatus)}
-                                className="text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg px-2 py-1 border border-slate-300 focus:outline-none focus:border-blue-500"
-                              >
-                                <option value="pending_review">⏳ Pending</option>
-                                <option value="needs_more_info">⚠️ Needs TRN</option>
-                                <option value="approved_for_collection">✅ Approved</option>
-                                <option value="contract_signed">🤝 Delivered</option>
-                                <option value="declined">❌ Declined</option>
-                              </select>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {/* Right Column: Application Inspector */}
-                {activeApp ? (
-                  <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-200 p-6 shadow-md flex flex-col gap-6">
-                    {/* Inspector Header */}
-                    <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h2 className="text-xl font-black text-slate-900">{activeApp.fullName}</h2>
-                          <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                            {activeApp.refNumber}
-                          </span>
-                        </div>
-                        <div className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-3">
-                          <span>Applied: {new Date(activeApp.createdAt).toLocaleString('en-ZA')}</span>
-                          <span>•</span>
-                          <span>Phone: <strong className="text-slate-800 font-mono">{activeApp.phone}</strong></span>
-                        </div>
-                      </div>
-
-                      {/* 1-Click WhatsApp Dispatch Triggers */}
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => sendApprovalWhatsApp(activeApp)}
-                          className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-xs transition-colors"
-                          title="Send WhatsApp pickup notice"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          <span>WhatsApp Approval</span>
-                        </button>
-
-                        {activeApp.citizenship === 'foreign_national' && (
-                          <button
-                            type="button"
-                            onClick={() => sendMissingTRNWhatsApp(activeApp)}
-                            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 flex items-center gap-1.5 shadow-xs transition-colors"
-                            title="Request mandatory TRN"
-                          >
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            <span>Request TRN</span>
-                          </button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => setContractApp(activeApp)}
-                          className="p-1.5 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-slate-100 border border-slate-200 transition-colors"
-                          title="View & Print Contract"
-                        >
-                          <FileText className="w-4 h-4" />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteApp(activeApp)}
-                          className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition-colors"
-                          title="Delete Applicant Record"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Visual Stage Progression Stepper */}
-                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                      <div className="flex items-center justify-between mb-3">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                          Pipeline Stage Tracker:
-                        </label>
-                        {activeApp.status === 'contract_signed' && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-100 px-2.5 py-0.5 rounded-full">
-                            <Lock className="w-3 h-3 text-indigo-600" />
-                            Locked in Delivered Stage
-                          </span>
-                        )}
-                      </div>
-
-                      {activeApp.status === 'contract_signed' ? (
-                        <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
-                          <div className="flex items-center gap-2.5">
-                            <CheckCircle2 className="w-5 h-5 text-indigo-600 shrink-0" />
-                            <div>
-                              <p className="text-xs font-bold text-indigo-950">
-                                Handover Complete • Lease Active
-                              </p>
-                              <p className="text-[11px] text-indigo-700">
-                                Driver record is active in the Approved Customers directory. Stage transitions are locked to prevent duplicates.
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedAppId(null);
-                              setActivePage('drivers');
-                            }}
-                            className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors whitespace-nowrap shadow-xs flex items-center gap-1.5"
-                          >
-                            <UserCheck className="w-3.5 h-3.5" />
-                            <span>Approved Customers →</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                          {PIPELINE_STAGES.map((st) => {
-                            const isCurrent = activeApp.status === st.id;
-                            const StageIcon = st.icon;
-
-                            return (
-                              <button
-                                key={st.id}
-                                type="button"
-                                onClick={() => handleMoveStatus(activeApp, st.id)}
-                                className={`p-2.5 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center text-center gap-1 border ${
-                                  isCurrent
-                                    ? `${st.bgClass} ${st.textClass} border-${st.color}-400 ring-2 ring-${st.color}-400 shadow-sm`
-                                    : 'bg-white text-slate-600 hover:bg-slate-100 border-slate-200'
-                                }`}
-                              >
-                                <StageIcon className="w-4 h-4" />
-                                <span className="text-[11px] leading-tight">{st.shortLabel}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Lease Details Summary */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs">
-                      <div>
-                        <span className="text-slate-500 block">Bike Model:</span>
-                        <strong className="text-slate-900 text-sm block">{activeApp.bikeName}</strong>
-                        <span className="text-[10px] text-blue-600 font-bold uppercase">{activeApp.bikeCondition}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block">Weekly Rent:</span>
-                        <strong className="text-blue-600 text-base font-mono block">R{activeApp.weeklyRate}/wk</strong>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block">Deposit:</span>
-                        <strong className="text-amber-800 text-base font-mono block">R{activeApp.depositAmount}</strong>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 block">Term Duration:</span>
-                        <strong className="text-slate-900 text-sm block">{activeApp.termMonths} Months</strong>
-                      </div>
-                    </div>
-
-                    {/* Document Verification & Lightbox Section */}
-                    <div>
-                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-                        Submitted Documents (Click image to zoom)
-                      </h3>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-                        {(activeApp.documents.idDocumentFront || activeApp.documents.saIdFront) && (
-                          <div
-                            onClick={() => setActiveDocImage({ title: 'SA ID (Front)', url: (activeApp.documents.idDocumentFront || activeApp.documents.saIdFront)! })}
-                            className="group relative h-28 rounded-xl border border-slate-200 overflow-hidden bg-slate-100 cursor-pointer shadow-xs"
-                          >
-                            <img src={activeApp.documents.idDocumentFront || activeApp.documents.saIdFront} alt="ID Front" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
-                              <ZoomIn className="w-4 h-4" /> Zoom
-                            </div>
-                            <div className="absolute bottom-0 inset-x-0 bg-slate-900/80 text-white text-[10px] font-bold p-1 truncate text-center">
-                              SA ID Front
-                            </div>
-                          </div>
-                        )}
-
-                        {activeApp.documents.passport && (
-                          <div
-                            onClick={() => setActiveDocImage({ title: 'Passport Bio Page', url: activeApp.documents.passport! })}
-                            className="group relative h-28 rounded-xl border border-slate-200 overflow-hidden bg-slate-100 cursor-pointer shadow-xs"
-                          >
-                            <img src={activeApp.documents.passport} alt="Passport" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
-                              <ZoomIn className="w-4 h-4" /> Zoom
-                            </div>
-                            <div className="absolute bottom-0 inset-x-0 bg-slate-900/80 text-white text-[10px] font-bold p-1 truncate text-center">
-                              Passport Bio
-                            </div>
-                          </div>
-                        )}
-
-                        {(activeApp.documents.asylumDocument || activeApp.documents.workPermit) && (
-                          <div
-                            onClick={() => setActiveDocImage({ title: 'Asylum / Work Permit', url: (activeApp.documents.asylumDocument || activeApp.documents.workPermit)! })}
-                            className="group relative h-28 rounded-xl border border-slate-200 overflow-hidden bg-slate-100 cursor-pointer shadow-xs"
-                          >
-                            <img src={activeApp.documents.asylumDocument || activeApp.documents.workPermit} alt="Asylum / Work Permit" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
-                              <ZoomIn className="w-4 h-4" /> Zoom
-                            </div>
-                            <div className="absolute bottom-0 inset-x-0 bg-slate-900/80 text-white text-[10px] font-bold p-1 truncate text-center">
-                              Asylum / Permit
-                            </div>
-                          </div>
-                        )}
-
-                        {(activeApp.documents.driversLicense || activeApp.documents.driversLicenseFront) && (
-                          <div
-                            onClick={() => setActiveDocImage({ title: "Driver's License", url: (activeApp.documents.driversLicense || activeApp.documents.driversLicenseFront)! })}
-                            className="group relative h-28 rounded-xl border border-slate-200 overflow-hidden bg-slate-100 cursor-pointer shadow-xs"
-                          >
-                            <img src={activeApp.documents.driversLicense || activeApp.documents.driversLicenseFront} alt="Driver License" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
-                              <ZoomIn className="w-4 h-4" /> Zoom
-                            </div>
-                            <div className="absolute bottom-0 inset-x-0 bg-slate-900/80 text-white text-[10px] font-bold p-1 truncate text-center">
-                              Driver License
-                            </div>
-                          </div>
-                        )}
-
-                        {activeApp.documents.trafficRegisterCertificate && (
-                          <div
-                            onClick={() => setActiveDocImage({ title: 'Traffic Register (TRN)', url: activeApp.documents.trafficRegisterCertificate! })}
-                            className="group relative h-28 rounded-xl border-2 border-amber-400 overflow-hidden bg-amber-50 cursor-pointer shadow-xs"
-                          >
-                            <img src={activeApp.documents.trafficRegisterCertificate} alt="TRN" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
-                              <ZoomIn className="w-4 h-4" /> Zoom
-                            </div>
-                            <div className="absolute bottom-0 inset-x-0 bg-amber-600 text-white text-[10px] font-bold p-1 truncate text-center">
-                              TRN Certificate
-                            </div>
-                          </div>
-                        )}
-
-                        {activeApp.documents.proofOfResidence && (
-                          <div
-                            onClick={() => setActiveDocImage({ title: 'Proof of Residence', url: activeApp.documents.proofOfResidence! })}
-                            className="group relative h-28 rounded-xl border border-slate-200 overflow-hidden bg-slate-100 cursor-pointer shadow-xs"
-                          >
-                            <img src={activeApp.documents.proofOfResidence} alt="Proof of Residence" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
-                              <ZoomIn className="w-4 h-4" /> Zoom
-                            </div>
-                            <div className="absolute bottom-0 inset-x-0 bg-slate-900/80 text-white text-[10px] font-bold p-1 truncate text-center">
-                              Proof Residence
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Underwriting Verification Checklist */}
-                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-                        Staff Underwriting Checklist:
-                      </h3>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                        <label className="flex items-center gap-2 cursor-pointer p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50">
-                          <input
-                            type="checkbox"
-                            checked={activeApp.verification.idVerified}
-                            onChange={() => handleChecklistToggle('idVerified')}
-                            className="w-4 h-4 text-blue-600 rounded"
-                          />
-                          <span className="font-semibold text-slate-800">1. ID / Passport Verified</span>
-                        </label>
-
-                        <label className="flex items-center gap-2 cursor-pointer p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50">
-                          <input
-                            type="checkbox"
-                            checked={activeApp.verification.licenseVerified}
-                            onChange={() => handleChecklistToggle('licenseVerified')}
-                            className="w-4 h-4 text-blue-600 rounded"
-                          />
-                          <span className="font-semibold text-slate-800">2. Motorcycle License (Code A/A1)</span>
-                        </label>
-
-                        {activeApp.citizenship === 'foreign_national' && (
-                          <>
-                            <label className="flex items-center gap-2 cursor-pointer p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50">
-                              <input
-                                type="checkbox"
-                                checked={activeApp.verification.workPermitVerified}
-                                onChange={() => handleChecklistToggle('workPermitVerified')}
-                                className="w-4 h-4 text-blue-600 rounded"
-                              />
-                              <span className="font-semibold text-slate-800">3. Valid Work Permit / Asylum</span>
-                            </label>
-
-                            <label className="flex items-center gap-2 cursor-pointer p-2 rounded-xl bg-amber-50 border border-amber-300 hover:bg-amber-100/60">
-                              <input
-                                type="checkbox"
-                                checked={activeApp.verification.trafficRegisterVerified}
-                                onChange={() => handleChecklistToggle('trafficRegisterVerified')}
-                                className="w-4 h-4 text-amber-600 rounded"
-                              />
-                              <span className="font-bold text-amber-900">4. Traffic Register Certificate (TRN)</span>
-                            </label>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Application Timeline Audit Log */}
-                    {activeApp.timeline && activeApp.timeline.length > 0 && (
-                      <div className="border-t border-slate-200 pt-4">
-                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                          Status History & Audit Trail:
-                        </h4>
-                        <div className="space-y-2 max-h-40 overflow-y-auto text-xs">
-                          {activeApp.timeline.map((entry, idx) => (
-                            <div key={idx} className="flex items-start gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200/80">
-                              <Clock className="w-3.5 h-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
-                              <div>
-                                <div className="font-bold text-slate-800">{entry.title}</div>
-                                <div className="text-[11px] text-slate-500">{entry.description}</div>
-                                <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                                  {new Date(entry.timestamp).toLocaleString('en-ZA')}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="lg:col-span-7 bg-white rounded-3xl border border-dashed border-slate-300 p-12 text-center flex flex-col items-center justify-center gap-3 min-h-[350px]">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
-                      <Users className="w-6 h-6" />
-                    </div>
-                    <div className="font-bold text-slate-800 text-sm">
-                      {applications.length === 0 ? 'No Applications in Database' : 'No Applicant Selected'}
-                    </div>
-                    <p className="text-xs text-slate-500 max-w-sm">
-                      {applications.length === 0
-                        ? 'There are currently 0 applications in the database. When riders apply online or visit your showroom, their records will display here.'
-                        : 'Select an applicant from the list on the left to inspect documents, manage stage, and trigger WhatsApp notices.'}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setIsWalkinModalOpen(true)}
-                      className="mt-2 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs"
-                    >
-                      <UserPlus className="w-4 h-4" />
-                      <span>+ Register Walk-in Applicant</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
 
         {/* PAGE 3: BIKES & STOCK FLEET */}
         {activePage === 'bike_and_stock' && (
@@ -3791,6 +3331,21 @@ Please take a clear photo of your TRN certificate and reply directly on this Wha
           </div>
         </div>
       )}
+
+      {/* APPLICANT DETAIL INSPECTOR MODAL */}
+      <ApplicantDetailModal
+        application={inspectingApp}
+        isOpen={!!inspectingApp}
+        onClose={() => setInspectingAppId(null)}
+        onMoveStatus={handleMoveStatus}
+        onToggleChecklist={handleChecklistToggle}
+        onUpdateApplication={onUpdateApplication}
+        onOpenContract={(app) => setContractApp(app)}
+        onDeleteApp={(app) => setConfirmDeleteApp(app)}
+        onPreviewDoc={(doc) => setActiveDocImage(doc)}
+        onSendApprovalWhatsApp={sendApprovalWhatsApp}
+        onSendMissingTRNWhatsApp={sendMissingTRNWhatsApp}
+      />
     </div>
   );
 };
