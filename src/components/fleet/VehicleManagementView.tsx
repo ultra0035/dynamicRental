@@ -72,6 +72,15 @@ import {
 
 export type VehicleSubTab = 'register' | 'live_telematics' | 'parts_inventory' | 'repairs_service' | 'traffic_fines';
 
+export const parseBikeNotes = (rawNotes: string | undefined): string[] => {
+  if (!rawNotes || !rawNotes.trim()) return [];
+  const lines = rawNotes
+    .split(/\r?\n| · | \| /)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  return lines.length > 0 ? lines : [rawNotes.trim()];
+};
+
 interface VehicleManagementViewProps {
   vehicles: Vehicle[];
   drivers: Driver[];
@@ -206,10 +215,14 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
   });
 
   // -------------------------------------------------------------
-  // EDIT / MANAGE VEHICLE (STATUS, ODOMETER & SERVICE INTERVALS)
+  // EDIT / MANAGE VEHICLE (STATUS, SPECS, ODOMETER & SERVICE INTERVALS)
   // -------------------------------------------------------------
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editVehicleForm, setEditVehicleForm] = useState<{
+    make: string;
+    model: string;
+    color: string;
+    year: number;
     status: string;
     odometerKm: number;
     lastServiceMileageKm: number;
@@ -230,6 +243,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     licenseDiskNumber: string;
     notes: string;
   }>({
+    make: 'Bajaj',
+    model: 'Boxer 150 HD',
+    color: 'Fleet White',
+    year: 2025,
     status: 'available_showroom',
     odometerKm: 0,
     lastServiceMileageKm: 0,
@@ -489,6 +506,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
     const battery = Number(veh.batteryHealthPercent ?? (veh as any).telematics_battery_health ?? 98);
 
     setEditVehicleForm({
+      make: veh.make || 'Bajaj',
+      model: veh.model || (veh as any).model_name || 'Boxer 150 HD',
+      color: veh.color || 'Fleet White',
+      year: veh.year || 2025,
       status: veh.status || 'available_showroom',
       odometerKm: currKm,
       lastServiceMileageKm: lastKm,
@@ -535,6 +556,12 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
 
     const updatedVehicle: Vehicle = {
       ...editingVehicle,
+      make: editVehicleForm.make.trim() || editingVehicle.make || 'Bajaj',
+      model: editVehicleForm.model.trim() || editingVehicle.model || 'Boxer 150 HD',
+      model_name: editVehicleForm.model.trim() || editingVehicle.model || 'Boxer 150 HD',
+      modelName: editVehicleForm.model.trim() || editingVehicle.model || 'Boxer 150 HD',
+      color: editVehicleForm.color.trim() || editingVehicle.color || 'Fleet White',
+      year: Number(editVehicleForm.year) || editingVehicle.year || 2025,
       status: editVehicleForm.status as any,
       odometerKm: currOdo,
       current_mileage_km: currOdo,
@@ -1589,7 +1616,6 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                     <th className="py-3 px-4">Odometer & Service</th>
                     <th className="py-3 px-4">GPS (Track)</th>
                     <th className="py-3 px-4">Bike Notes</th>
-                    <th className="py-3 px-4">Bike Documents & Disc</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
@@ -1610,29 +1636,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                     const driverRef = assignedDriver?.refNumber || (assignedDriver?.id ? `DRV-${assignedDriver.id.slice(-4)}` : undefined);
                     const isAssigned = Boolean(driverName && driverName.trim() !== '' && driverName.toLowerCase() !== 'none' && driverName.toLowerCase() !== 'unassigned');
                     const bikeNotesText = veh.notes || (veh as any).bike_notes || (veh as any).bikeNotes || '';
-
-                    // License Disc Expiry calculations
-                    const discExpiryDate = veh.licenseDiskExpiryDate || (veh as any).license_disk_expiry_date || '';
-                    const discDocUrl = veh.licenseDiskDocumentUrl || (veh as any).license_disk_document_url || '';
-                    const discDocName = veh.licenseDiskDocumentName || (veh as any).license_disk_document_name || 'License_Disc.pdf';
-                    
-                    let discStatusBadge = { label: 'No Disc', color: 'bg-slate-100 text-slate-400 border-slate-200' };
-                    if (discExpiryDate) {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      const exp = new Date(discExpiryDate);
-                      const diffTime = exp.getTime() - today.getTime();
-                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                      if (diffDays < 0) {
-                        discStatusBadge = { label: `Disc Expired (${discExpiryDate})`, color: 'bg-rose-50 text-rose-700 border-rose-300 font-bold' };
-                      } else if (diffDays <= 30) {
-                        discStatusBadge = { label: `Disc: ${diffDays}d rem (${discExpiryDate})`, color: 'bg-amber-50 text-amber-800 border-amber-300 font-bold' };
-                      } else {
-                        discStatusBadge = { label: `Disc: ${discExpiryDate}`, color: 'bg-emerald-50 text-emerald-800 border-emerald-300 font-bold' };
-                      }
-                    } else if (discDocUrl) {
-                      discStatusBadge = { label: 'Disc Doc ✓', color: 'bg-emerald-50 text-emerald-800 border-emerald-300 font-bold' };
-                    }
+                    const bikeNoteItems = parseBikeNotes(bikeNotesText);
 
                     return (
                       <tr key={veh.id} className="hover:bg-slate-50/80 transition-colors">
@@ -1646,7 +1650,14 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                               <span className="font-mono font-black text-slate-900 text-sm block leading-tight">
                                 {veh.registrationPlate}
                               </span>
-                              <span className="text-[11px] text-slate-500">{veh.make} {veh.model} ({veh.year})</span>
+                              <span className="text-[11px] text-slate-500">
+                                {veh.make} {veh.model || (veh as any).model_name} ({veh.year || 2025})
+                              </span>
+                              {veh.color && (
+                                <span className="text-[10px] text-slate-400 block">
+                                  {veh.color}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -1726,112 +1737,46 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                           </div>
                         </td>
 
-                        {/* Bike Notes (Next to Track column) */}
+                        {/* Bike Notes (Up to 2 previewed, extras on Notes Modal without clutter) */}
                         <td className="py-3.5 px-4">
-                          {bikeNotesText ? (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenNotes(veh)}
-                              className="max-w-[170px] text-left p-1.5 bg-amber-50/90 hover:bg-amber-100 border border-amber-200 rounded-lg text-[11px] text-amber-950 font-medium transition-colors flex items-start gap-1.5 group cursor-pointer"
-                              title="Click to view or edit bike notes"
-                            >
-                              <StickyNote className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
-                              <span className="line-clamp-2 leading-tight">
-                                {bikeNotesText}
-                              </span>
-                            </button>
+                          {bikeNoteItems.length > 0 ? (
+                            <div className="space-y-1 max-w-[210px]">
+                              {bikeNoteItems.slice(0, 2).map((note, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => handleOpenNotes(veh)}
+                                  className="w-full text-left p-1.5 bg-amber-50/90 hover:bg-amber-100 border border-amber-200/90 rounded-lg text-[11px] text-amber-950 font-medium transition-colors flex items-start gap-1.5 group cursor-pointer"
+                                  title="Click to view or edit bike notes"
+                                >
+                                  <StickyNote className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                                  <span className="line-clamp-1 leading-tight">{note}</span>
+                                </button>
+                              ))}
+
+                              {bikeNoteItems.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenNotes(veh)}
+                                  className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-200/90 hover:bg-amber-300 text-amber-900 border border-amber-300 transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                                  title={`View all ${bikeNoteItems.length} notes in modal`}
+                                >
+                                  <StickyNote className="w-3 h-3 text-amber-800" />
+                                  <span>+{bikeNoteItems.length - 2} more note{bikeNoteItems.length - 2 > 1 ? 's' : ''}</span>
+                                </button>
+                              )}
+                            </div>
                           ) : (
                             <button
                               type="button"
                               onClick={() => handleOpenNotes(veh)}
-                              className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-50 text-slate-500 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-200 border border-slate-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-50 text-slate-500 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-200 border border-slate-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
                               title="Add bike notes / inspection remarks"
                             >
                               <StickyNote className="w-3 h-3 text-slate-400" />
                               <span>+ Add Note</span>
                             </button>
                           )}
-                        </td>
-
-                        {/* Bike Documents & Disc Section (RC1, Insurance, License Disc) */}
-                        <td className="py-3.5 px-4">
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {/* 1. RC1 Document Badge */}
-                              {veh.rc1DocumentUrl || (veh as any).rc1_document_url ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveDocViewer({
-                                    title: `RC1 Certificate of Registration (Proof of Ownership): ${veh.registrationPlate}`,
-                                    url: veh.rc1DocumentUrl || (veh as any).rc1_document_url,
-                                    fileName: veh.rc1DocumentName || (veh as any).rc1_document_name || 'RC1_Registration_Certificate.pdf'
-                                  })}
-                                  className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 transition-colors inline-flex items-center gap-1 cursor-pointer"
-                                  title="View Verified RC1 Proof of Ownership Document"
-                                >
-                                  <FileText className="w-3 h-3 text-emerald-600" />
-                                  <span>RC1 ✓</span>
-                                </button>
-                              ) : (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-400 border border-slate-200">
-                                  No RC1
-                                </span>
-                              )}
-
-                              {/* 2. Insurance Document Badge */}
-                              {veh.insuranceDocumentUrl || (veh as any).insurance_document_url ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveDocViewer({
-                                    title: `Comprehensive Fleet Insurance Policy: ${veh.registrationPlate}`,
-                                    url: veh.insuranceDocumentUrl || (veh as any).insurance_document_url,
-                                    fileName: veh.insuranceDocumentName || (veh as any).insurance_document_name || 'Insurance_Policy.pdf'
-                                  })}
-                                  className="px-2 py-0.5 rounded-md text-[10px] font-black bg-sky-50 text-sky-800 border border-sky-300 hover:bg-sky-100 transition-colors inline-flex items-center gap-1 cursor-pointer"
-                                  title="View Comprehensive Insurance Policy Document"
-                                >
-                                  <ShieldCheck className="w-3 h-3 text-sky-600" />
-                                  <span>Insured ✓</span>
-                                </button>
-                              ) : (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-400 border border-slate-200">
-                                  No Policy
-                                </span>
-                              )}
-
-                              {/* 3. License Disc Badge */}
-                              {discDocUrl ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveDocViewer({
-                                    title: `NATIS License Disc: ${veh.registrationPlate}`,
-                                    url: discDocUrl,
-                                    fileName: discDocName
-                                  })}
-                                  className={`px-2 py-0.5 rounded-md text-[10px] border inline-flex items-center gap-1 cursor-pointer transition-colors ${discStatusBadge.color}`}
-                                  title="Click to preview NATIS License Disc"
-                                >
-                                  <Receipt className="w-3 h-3" />
-                                  <span>{discStatusBadge.label}</span>
-                                </button>
-                              ) : (
-                                <span className={`px-1.5 py-0.5 rounded text-[9px] border ${discStatusBadge.color}`}>
-                                  {discStatusBadge.label}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Unified Manage Documents & Disc Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenManageDocs(veh)}
-                              className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold transition-colors inline-flex items-center gap-1 border border-indigo-200 shadow-2xs cursor-pointer w-full justify-center"
-                              title="Upload RC1, Insurance & License Disc documents"
-                            >
-                              <Upload className="w-3 h-3 text-indigo-600" />
-                              <span>Manage Documents & Disc</span>
-                            </button>
-                          </div>
                         </td>
 
                         {/* Operational Status (Interactive Dropdown & Quick Changer) */}
@@ -1867,26 +1812,17 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                           </select>
                         </td>
 
-                        {/* Actions */}
+                        {/* Actions (Manage Only) */}
                         <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          <div className="flex items-center justify-end">
                             <button
                               type="button"
                               onClick={() => handleOpenEditVehicle(veh)}
-                              className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 shadow-2xs cursor-pointer"
-                              title="Manage Vehicle Status, Odometer & Maintenance"
+                              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                              title="Manage Vehicle Status, Specifications, Documents & Odometer"
                             >
                               <Edit className="w-3.5 h-3.5 text-indigo-300" />
                               <span>Manage</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenNotes(veh)}
-                              className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 border border-amber-200 shadow-2xs cursor-pointer"
-                              title="View or edit bike notes"
-                            >
-                              <StickyNote className="w-3.5 h-3.5 text-amber-600" />
-                              <span>Notes</span>
                             </button>
                           </div>
                         </td>
@@ -3249,7 +3185,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
             </div>
 
             <form onSubmit={handleSaveEditVehicle} className="mt-5 space-y-4">
-              {/* LOCKED IDENTIFIERS (READ-ONLY) */}
+              {/* LOCKED IDENTIFIERS (PERMANENT / READ-ONLY) */}
               <div className="bg-slate-50 rounded-xl p-4 border border-slate-200/80">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-1.5 text-xs font-black text-slate-700 uppercase tracking-wider">
@@ -3261,7 +3197,7 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                   <div className="bg-white p-2.5 rounded-lg border border-slate-200">
                     <span className="text-[10px] text-slate-400 font-bold block uppercase">Registration Plate</span>
                     <span className="font-mono font-black text-slate-900 text-sm flex items-center gap-1">
@@ -3285,20 +3221,6 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                   </div>
 
                   <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Make & Model</span>
-                    <span className="font-bold text-slate-900 truncate block">
-                      {editingVehicle.make} {editingVehicle.model}
-                    </span>
-                  </div>
-
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Color & Year</span>
-                    <span className="font-medium text-slate-700">
-                      {editingVehicle.color || 'Fleet White'} ({editingVehicle.year || 2025})
-                    </span>
-                  </div>
-
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-200">
                     <span className="text-[10px] text-slate-400 font-bold block uppercase">Telematics IMEI</span>
                     <span className="font-mono text-slate-700 truncate block">
                       {editingVehicle.trackerDeviceId || 'Cartrack SA'}
@@ -3307,10 +3229,108 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </div>
               </div>
 
-              {/* EDITABLE SECTION 1: OPERATIONAL STATUS & COURIER */}
+              {/* EDITABLE SECTION 1: VEHICLE SPECIFICATIONS (MAKE, MODEL, COLOR & YEAR) */}
               <div className="bg-indigo-50/40 rounded-xl p-4 border border-indigo-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-indigo-900 block">
+                    1. Motorcycle Specifications (Make, Model, Color & Year)
+                  </span>
+                  <span className="text-[10px] text-indigo-600 font-bold bg-indigo-100/60 px-2 py-0.5 rounded">
+                    Editable Specs
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  {/* Make */}
+                  <div className="sm:col-span-1">
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Make / Brand *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Bajaj, Big Boy, Honda"
+                      value={editVehicleForm.make}
+                      onChange={(e) => setEditVehicleForm({ ...editVehicleForm, make: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold bg-white text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                    <div className="flex gap-1 mt-1 flex-wrap">
+                      {['Bajaj', 'Big Boy', 'Honda', 'Hero', 'TVS'].map((mk) => (
+                        <button
+                          key={mk}
+                          type="button"
+                          onClick={() => setEditVehicleForm(prev => ({ ...prev, make: mk }))}
+                          className="px-1.5 py-0.5 bg-white hover:bg-indigo-100 text-slate-600 hover:text-indigo-900 text-[9px] font-bold rounded border border-slate-200 transition-colors"
+                        >
+                          {mk}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Model */}
+                  <div className="sm:col-span-1">
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Model Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Boxer 150 HD, Velocity 150"
+                      value={editVehicleForm.model}
+                      onChange={(e) => setEditVehicleForm({ ...editVehicleForm, model: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold bg-white text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Color */}
+                  <div className="sm:col-span-1">
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Color *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Fleet White, Midnight Black"
+                      value={editVehicleForm.color}
+                      onChange={(e) => setEditVehicleForm({ ...editVehicleForm, color: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold bg-white text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                    <div className="flex gap-1 mt-1 flex-wrap">
+                      {['Fleet White', 'Midnight Black', 'Racing Red', 'Royal Blue'].map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setEditVehicleForm(prev => ({ ...prev, color: c }))}
+                          className="px-1.5 py-0.5 bg-white hover:bg-indigo-100 text-slate-600 hover:text-indigo-900 text-[9px] font-bold rounded border border-slate-200 transition-colors"
+                        >
+                          {c.split(' ')[1] || c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Year */}
+                  <div className="sm:col-span-1">
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Model Year
+                    </label>
+                    <input
+                      type="number"
+                      min={2018}
+                      max={2030}
+                      value={editVehicleForm.year}
+                      onChange={(e) => setEditVehicleForm({ ...editVehicleForm, year: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold bg-white text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* EDITABLE SECTION 2: OPERATIONAL STATUS & COURIER */}
+              <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100 space-y-3">
                 <span className="text-[11px] font-black uppercase tracking-wider text-indigo-900 block">
-                  1. Operational Status & Driver Assignment
+                  2. Operational Status & Driver Assignment
                 </span>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -3373,10 +3393,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </div>
               </div>
 
-              {/* EDITABLE SECTION 2: ODOMETER & NEXT SERVICE MILEAGE */}
+              {/* EDITABLE SECTION 3: ODOMETER & NEXT SERVICE MILEAGE */}
               <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100 space-y-3">
                 <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700 block">
-                  2. Odometer Reading & Maintenance Intervals (KM)
+                  3. Odometer Reading & Maintenance Intervals (KM)
                 </span>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
@@ -3472,10 +3492,10 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </div>
               </div>
 
-              {/* EDITABLE SECTION 3: TELEMATICS BATTERY HEALTH */}
+              {/* EDITABLE SECTION 4: TELEMATICS BATTERY HEALTH */}
               <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100">
                 <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700 block mb-2">
-                  3. Telematics & GPS Hardware Health
+                  4. Telematics & GPS Hardware Health
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 items-center">
                   <div>
@@ -3512,12 +3532,12 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </div>
               </div>
 
-              {/* EDITABLE SECTION 4: OWNERSHIP & COMPLIANCE DOCUMENTS (RC1, INSURANCE & LICENSE DISC) */}
+              {/* EDITABLE SECTION 5: OWNERSHIP & COMPLIANCE DOCUMENTS (RC1, INSURANCE & LICENSE DISC) */}
               <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-indigo-700">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>4. Bike Documents & Compliance (RC1, Insurance & License Disc)</span>
+                    <span>5. Bike Documents & Compliance (RC1, Insurance & License Disc)</span>
                   </div>
                   <span className="text-[10px] font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded">
                     NATIS & Underwriting
@@ -3780,12 +3800,12 @@ export const VehicleManagementView: React.FC<VehicleManagementViewProps> = ({
                 </div>
               </div>
 
-              {/* EDITABLE SECTION 5: BIKE NOTES & REMARKS */}
+              {/* EDITABLE SECTION 6: BIKE NOTES & REMARKS */}
               <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-100 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-indigo-700">
                     <StickyNote className="w-4 h-4 text-amber-600" />
-                    <span>5. Bike Notes & Operational Remarks</span>
+                    <span>6. Bike Notes & Operational Remarks</span>
                   </div>
                   <span className="text-[10px] text-slate-400 font-bold">Internal Hub Log</span>
                 </div>

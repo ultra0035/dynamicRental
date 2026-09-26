@@ -22,7 +22,8 @@ import {
   Plus,
   Check,
   Radio,
-  Layers
+  Layers,
+  Search
 } from 'lucide-react';
 import { compressImageFile } from '../../lib/imageUtils';
 
@@ -58,23 +59,13 @@ export const DeliverAndAssignModal: React.FC<DeliverAndAssignModalProps> = ({
   if (!isOpen || !application) return null;
 
   // STRICTLY AVAILABLE IN-STOCK BIKES ONLY
-  const availableVehicles = vehicles.filter((v) => v.status === 'available');
+  const availableVehicles = vehicles.filter((v) => v.status === 'available' || v.status === 'available_showroom');
 
   // Initial vehicle candidate
   const defaultVeh = availableVehicles.find((v) => v.bikeModelId === application.bikeId) || availableVehicles[0];
 
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>(defaultVeh?.id || '');
-  const [activeMode, setActiveMode] = useState<'stock' | 'register_new'>(availableVehicles.length > 0 ? 'stock' : 'register_new');
-  
-  // Quick Register New Bike Form State
-  const [newBikeMake, setNewBikeMake] = useState<string>('Bajaj');
-  const [newBikeModel, setNewBikeModel] = useState<string>(application.bikeName || 'Boxer 150 HD');
-  const [newBikeYear, setNewBikeYear] = useState<number>(2025);
-  const [newBikeCondition, setNewBikeCondition] = useState<'new' | 'used'>(application.bikeCondition || 'new');
-  const [newBikePlate, setNewBikePlate] = useState<string>(application.assignedBikeVinOrPlate || '');
-  const [newBikeVin, setNewBikeVin] = useState<string>('');
-  const [newBikeEngineNo, setNewBikeEngineNo] = useState<string>('');
-  const [newBikeTrackerId, setNewBikeTrackerId] = useState<string>('CT-99' + Math.floor(1000 + Math.random() * 9000));
+  const [bikeSearchQuery, setBikeSearchQuery] = useState<string>('');
 
   // Handover terms
   const [weeklyRate, setWeeklyRate] = useState<number>(application.weeklyRate || 750);
@@ -101,6 +92,17 @@ export const DeliverAndAssignModal: React.FC<DeliverAndAssignModalProps> = ({
     deliveryBoxMounted: true,
     trackerLiveVerified: true,
     keysHandedOver: true,
+  });
+
+  const filteredAvailableVehicles = availableVehicles.filter((v) => {
+    if (!bikeSearchQuery.trim()) return true;
+    const q = bikeSearchQuery.trim().toLowerCase();
+    const plate = (v.registrationPlate || v.registration_plate || '').toLowerCase();
+    const vin = (v.vin || '').toLowerCase();
+    const make = (v.make || '').toLowerCase();
+    const model = (v.model || v.model_name || '').toLowerCase();
+    const eng = (v.engineNumber || v.engine_number || '').toLowerCase();
+    return plate.includes(q) || vin.includes(q) || make.includes(q) || model.includes(q) || eng.includes(q);
   });
 
   const selectedVehicle = vehicles.find((v) => v.id === selectedVehicleId);
@@ -158,51 +160,16 @@ export const DeliverAndAssignModal: React.FC<DeliverAndAssignModalProps> = ({
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    let newVehicleObj: Vehicle | undefined;
     let chosenVehId: string | undefined = selectedVehicleId;
     let chosenVinPlate: string = '';
     let chosenBikeName: string = '';
 
-    if (activeMode === 'register_new') {
-      const generatedId = `veh-${Date.now().toString().slice(-6)}`;
-      const plate = (newBikePlate || `GP-${Math.floor(10 + Math.random() * 90)}-XX-GP`).trim().toUpperCase();
-      const vin = (newBikeVin || `MD2A${Math.random().toString(36).substring(2, 10).toUpperCase()}`).trim();
-
-      newVehicleObj = {
-        id: generatedId,
-        vin,
-        engineNumber: newBikeEngineNo.trim() || `ENG-${Math.floor(100000 + Math.random() * 900000)}`,
-        registrationPlate: plate,
-        bikeModelId: newBikeModel.toLowerCase().includes('boxer') ? 'boxer-150' : 'velocity-150',
-        make: newBikeMake.trim() || 'Bajaj',
-        model: newBikeModel.trim() || 'Boxer 150 HD',
-        year: newBikeYear,
-        category: 'boxer',
-        condition: newBikeCondition,
-        status: 'assigned',
-        assignedDriverId: undefined, // will be bound by driver creation
-        assignedDriverName: application.fullName,
-        odometerKm: startOdoKm,
-        nextServiceKm: startOdoKm + 5000,
-        trackerDeviceId: newBikeTrackerId.trim() || 'Cartrack SA',
-        trackerProvider: 'Cartrack SA',
-        batteryHealthPercent: 100,
-        fuelLevelPercent: 100,
-        isIgnitionOn: false,
-        lastPingTime: new Date().toISOString(),
-      };
-
-      chosenVehId = generatedId;
-      chosenVinPlate = plate;
-      chosenBikeName = `${newVehicleObj.make} ${newVehicleObj.model} (${plate})`;
+    if (selectedVehicle) {
+      chosenVinPlate = selectedVehicle.registrationPlate || selectedVehicle.vin;
+      chosenBikeName = `${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationPlate})`;
     } else {
-      if (selectedVehicle) {
-        chosenVinPlate = selectedVehicle.registrationPlate || selectedVehicle.vin;
-        chosenBikeName = `${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationPlate})`;
-      } else {
-        chosenVinPlate = application.assignedBikeVinOrPlate || 'GP-ASSIGNED';
-        chosenBikeName = application.bikeName;
-      }
+      chosenVinPlate = application.assignedBikeVinOrPlate || 'GP-ASSIGNED';
+      chosenBikeName = application.bikeName;
     }
 
     onConfirmAssignment({
@@ -218,7 +185,7 @@ export const DeliverAndAssignModal: React.FC<DeliverAndAssignModalProps> = ({
       adminNotes: adminNotes ? `${adminNotes} | Showroom Handover Verified on ${handoverDate}` : `Showroom Handover Verified on ${handoverDate}`,
       collectionPhotoUrl: driverCollectionPhoto || undefined,
       handoverPhotos: handoverPhotos.length > 0 ? handoverPhotos : undefined,
-      newVehicleToCreate: newVehicleObj,
+      newVehicleToCreate: undefined,
     });
   };
 
@@ -308,9 +275,9 @@ export const DeliverAndAssignModal: React.FC<DeliverAndAssignModalProps> = ({
             </div>
           </div>
 
-          {/* 2. IN-STOCK MOTORBIKE ASSIGNMENT */}
+          {/* 2. IN-STOCK MOTORBIKE ASSIGNMENT (STRICTLY FROM REGISTERED STOCK) */}
           <div className="bg-white rounded-2xl p-4 sm:p-5 border-2 border-indigo-200 shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <BikeIcon className="w-4 h-4 text-indigo-600" />
                 <label className="text-xs font-black text-slate-900 uppercase tracking-wider">
@@ -323,44 +290,46 @@ export const DeliverAndAssignModal: React.FC<DeliverAndAssignModalProps> = ({
                 </span>
               </div>
 
-              {/* Mode Toggle Tabs */}
-              <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setActiveMode('stock')}
-                  disabled={availableVehicles.length === 0}
-                  className={`px-3 py-1 rounded-lg transition-all ${
-                    activeMode === 'stock'
-                      ? 'bg-white text-indigo-900 shadow-2xs font-black'
-                      : 'text-slate-600 hover:text-slate-900 disabled:opacity-40'
-                  }`}
-                >
-                  Pick Available Stock ({availableVehicles.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveMode('register_new')}
-                  className={`px-3 py-1 rounded-lg transition-all ${
-                    activeMode === 'register_new'
-                      ? 'bg-indigo-600 text-white shadow-2xs font-black'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  + Stock & Register New Bike
-                </button>
+              {/* SEARCH BY NUMBER PLATE / VIN */}
+              <div className="relative w-full sm:w-72">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search by plate (e.g. GP), VIN, make..."
+                  value={bikeSearchQuery}
+                  onChange={(e) => setBikeSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-7 py-1.5 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                />
+                {bikeSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setBikeSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* OPTION A: PICK FROM AVAILABLE FLEET STOCK */}
-            {activeMode === 'stock' && (
-              <div className="space-y-3">
-                {availableVehicles.length > 0 ? (
-                  <div className="space-y-2">
+            {/* LIST OF AVAILABLE FLEET VEHICLES */}
+            <div className="space-y-3">
+              {availableVehicles.length > 0 ? (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
                     <label className="text-[11px] font-bold text-slate-600 block">
-                      Select specific motorcycle to allocate to {application.fullName}:
+                      Select motorcycle to allocate to <span className="text-slate-900 font-black">{application.fullName}</span>:
                     </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
-                      {availableVehicles.map((veh) => {
+                    {bikeSearchQuery && (
+                      <span className="text-[10px] text-slate-500 font-semibold">
+                        Showing {filteredAvailableVehicles.length} of {availableVehicles.length} available bikes
+                      </span>
+                    )}
+                  </div>
+
+                  {filteredAvailableVehicles.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-60 overflow-y-auto pr-1">
+                      {filteredAvailableVehicles.map((veh) => {
                         const isSelected = selectedVehicleId === veh.id;
                         return (
                           <div
@@ -368,147 +337,66 @@ export const DeliverAndAssignModal: React.FC<DeliverAndAssignModalProps> = ({
                             onClick={() => handleVehicleSelect(veh.id)}
                             className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
                               isSelected
-                                ? 'border-indigo-600 bg-indigo-50/60 shadow-xs ring-1 ring-indigo-500'
-                                : 'border-slate-200 hover:border-indigo-300 bg-white'
+                                ? 'border-indigo-600 bg-indigo-50/70 shadow-xs ring-2 ring-indigo-500/30'
+                                : 'border-slate-200 hover:border-indigo-300 bg-white hover:bg-slate-50/50'
                             }`}
                           >
-                            <div className="flex items-start justify-between">
+                            <div className="flex items-start justify-between gap-2">
                               <div>
-                                <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-slate-900 text-cyan-300">
-                                  {veh.registrationPlate || veh.vin}
-                                </span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-slate-900 text-cyan-300 tracking-wide">
+                                    {veh.registrationPlate || veh.registration_plate || veh.vin}
+                                  </span>
+                                  {veh.color && (
+                                    <span className="text-[10px] font-medium text-slate-500">
+                                      · {veh.color}
+                                    </span>
+                                  )}
+                                </div>
                                 <h4 className="text-xs font-black text-slate-900 mt-1">
-                                  {veh.make} {veh.model} ({veh.year})
+                                  {veh.make} {veh.model || veh.model_name} ({veh.year || 2025})
                                 </h4>
                               </div>
-                              <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                                {veh.condition}
+                              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
+                                {veh.condition === 'used' ? 'Recon / Used' : 'New / Showroom'}
                               </span>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-500 mt-2 pt-2 border-t border-slate-100">
-                              <span>Odo: <strong className="text-slate-800">{veh.odometerKm} KM</strong></span>
-                              <span>Tracker: <strong className="text-emerald-700">{veh.trackerDeviceId ? 'Online' : 'Fitted'}</strong></span>
+                            <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-500 mt-2.5 pt-2 border-t border-slate-100">
+                              <span>Odo: <strong className="text-slate-800 font-mono">{veh.odometerKm || 0} KM</strong></span>
+                              <span>GPS: <strong className="text-emerald-700 font-bold">{veh.trackerDeviceId || 'Fitted (Cartrack)'}</strong></span>
                             </div>
                           </div>
                         );
                       })}
                     </div>
-                  </div>
-                ) : (
-                  <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-center space-y-2">
-                    <AlertCircle className="w-6 h-6 text-amber-600 mx-auto" />
-                    <p className="text-xs font-bold text-amber-900">
-                      No motorbikes are currently marked as "Available" in stock.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setActiveMode('register_new')}
-                      className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-xs inline-flex items-center gap-1.5"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Register & Stock a Bike Now</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* OPTION B: STOCK & REGISTER NEW BIKE ON THE SPOT */}
-            {activeMode === 'register_new' && (
-              <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-200 space-y-3 animate-fadeIn">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-indigo-950 uppercase tracking-wider">
-                    New Fleet Motorcycle Intake Details:
-                  </span>
-                  <span className="text-[11px] text-indigo-700 font-semibold">
-                    Will be added to fleet database and assigned
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Make *</label>
-                    <input
-                      type="text"
-                      required
-                      value={newBikeMake}
-                      onChange={(e) => setNewBikeMake(e.target.value)}
-                      placeholder="Bajaj / Big Boy / Honda"
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Model *</label>
-                    <input
-                      type="text"
-                      required
-                      value={newBikeModel}
-                      onChange={(e) => setNewBikeModel(e.target.value)}
-                      placeholder="Boxer 150 HD / Velocity 150"
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Year & Condition</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        min={2020}
-                        max={2030}
-                        value={newBikeYear}
-                        onChange={(e) => setNewBikeYear(Number(e.target.value))}
-                        className="w-20 px-2 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold"
-                      />
-                      <select
-                        value={newBikeCondition}
-                        onChange={(e) => setNewBikeCondition(e.target.value as any)}
-                        className="flex-1 px-2 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold"
+                  ) : (
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center space-y-1">
+                      <p className="text-xs font-bold text-slate-700">
+                        No available bikes found matching "{bikeSearchQuery}".
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setBikeSearchQuery('')}
+                        className="text-xs text-indigo-600 font-bold hover:underline"
                       >
-                        <option value="new">Brand New</option>
-                        <option value="used">Used / Reconditioned</option>
-                      </select>
+                        Clear search filter
+                      </button>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Registration Plate *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. GP 49 RT GP"
-                      value={newBikePlate}
-                      onChange={(e) => setNewBikePlate(e.target.value.toUpperCase())}
-                      className="w-full px-3 py-2 bg-white border border-indigo-300 rounded-xl text-xs font-black font-mono uppercase"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-700 block mb-1">VIN / Chassis Number</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. MD2A24AX8NW123..."
-                      value={newBikeVin}
-                      onChange={(e) => setNewBikeVin(e.target.value.toUpperCase())}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono uppercase"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-700 block mb-1">GPS Tracker Device ID</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. CT-982412"
-                      value={newBikeTrackerId}
-                      onChange={(e) => setNewBikeTrackerId(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold"
-                    />
-                  </div>
+                  )}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="p-5 bg-amber-50 rounded-2xl border border-amber-200 text-center space-y-2">
+                  <AlertCircle className="w-7 h-7 text-amber-600 mx-auto" />
+                  <p className="text-xs font-bold text-amber-900">
+                    No motorbikes are currently marked as "Available" or "Showroom Stock".
+                  </p>
+                  <p className="text-[11px] text-amber-700 max-w-md mx-auto">
+                    Please register new motorcycles into the fleet inventory via the Vehicle Register before assigning.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 3. 📸 DRIVER & MOTORBIKE COLLECTION PHOTOS IN-TAKE */}
